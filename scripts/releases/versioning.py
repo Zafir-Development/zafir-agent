@@ -9,7 +9,9 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+import tomllib
 from functools import cmp_to_key
+from pathlib import Path
 from typing import Any
 
 from hermes_cli.update_channel import STABLE_TAG_RE
@@ -18,30 +20,6 @@ from scripts.releases.semver import compare
 # The legacy CalVer line published up to 0.21.5 (v2026.9.24); the pipeline continues it.
 SEED = "0.21.5"
 BUMPS = ("major", "minor", "patch")
-
-
-def published_channel_identity(repository: str, channel: str, *, base_url: str | None = None,
-                               reader_type=None) -> tuple[str, str] | None:
-    """Resolve one validated protected channel's payload version and commit."""
-    from hermes_cli.release_channels import ChannelNotFound, ChannelReader
-    from scripts.releases.r2 import public_base_url
-
-    if channel not in {"stable", "canary"}:
-        raise ValueError("Expected a protected release channel")
-    reader_type = reader_type or ChannelReader
-    try:
-        resolved = reader_type(base_url or public_base_url(), repository=repository).resolve(channel)
-    except ChannelNotFound:
-        return None
-    if resolved.manifest is None:
-        return None
-    if resolved.terminal.get("policy") != f"{channel}-release":
-        raise ValueError(f"{channel.title()} channel has the wrong publication policy")
-    request = resolved.manifest["request"]
-    version, commit = request.get("version"), request.get("commit")
-    if not isinstance(version, str) or not isinstance(commit, str) or not re.fullmatch(r"[a-f0-9]{40}", commit):
-        raise ValueError(f"{channel.title()} channel has an invalid published identity")
-    return version, commit
 
 
 def published_release_identity(repository: str, run=None) -> tuple[str, str] | None:
@@ -68,33 +46,44 @@ def published_release_identity(repository: str, run=None) -> tuple[str, str] | N
     return newest, commit
 
 
-def published_stable_identity(repository: str, *, base_url: str | None = None,
-                              reader_type=None, run=None) -> tuple[str, str | None]:
+def published_stable_identity(repository: str, run=None) -> tuple[str, str | None]:
     """The newest published stable ``(version, commit)``, or the seed before one exists.
 
-    The protected channel names the newest release that shipped bundles. The
-    GitHub releases also name one that skipped them. The newer of the two wins.
+    Stable IS the repository's newest published GitHub release. A bare
+    ``vX.Y.Z`` tag without a published release does not count.
     """
-    found = published_channel_identity(
-        repository, "stable", base_url=base_url, reader_type=reader_type,
-    )
-    if found is not None and version_from_tag("v" + found[0]) is None:
-        raise ValueError("Stable channel has an invalid source version")
-    candidates = [identity for identity in (found, published_release_identity(repository, run))
-                  if identity is not None]
-    if not candidates:
+    found = published_release_identity(repository, run)
+    if found is None:
         return SEED, None
-    return max(candidates, key=cmp_to_key(lambda a, b: compare(a[0], b[0])))
+    if version_from_tag("v" + found[0]) is None:
+        raise ValueError("Stable release has an invalid source version")
+    return found
 
 
-def published_stable_version(repository: str, *, base_url: str | None = None, reader_type=None,
-                             run=None) -> str:
-    return published_stable_identity(repository, base_url=base_url, reader_type=reader_type,
-                                     run=run)[0]
+def published_stable_version(repository: str, run=None) -> str:
+    return published_stable_identity(repository, run=run)[0]
 
 
-def _gh(argv: list[str]) -> str:
-    return subprocess.check_output(argv, text=True, encoding="utf-8")
+def _gh(argv: list[str], repo: Path | None = None) -> str:
+    return subprocess.check_output(argv, cwd=repo, text=True, encoding="utf-8", timeout=60)
+
+
+def require_commit(value: str) -> str:
+    """A commit identity that the release pipeline accepts: an exact full SHA."""
+    if not isinstance(value, str) or not re.fullmatch(r"[a-f0-9]{40}", value):
+        raise ValueError("Commit builds require an exact full 40-character SHA")
+    return value
+
+
+def version_at(repo: Path | None, commit: str, *, run=None) -> str:
+    """The ``X.Y.Z`` version file at ``commit`` (used by the Termux package build)."""
+    require_commit(commit)
+    run = run or _gh
+    document = tomllib.loads(run(["git", "show", f"{commit}:pyproject.toml"], repo))
+    version = document["project"]["version"]
+    if not isinstance(version, str) or not re.fullmatch(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)", version):
+        raise ValueError("Commit packaging requires project.version=X.Y.Z")
+    return version
 
 
 def version_from_tag(ref: str) -> str | None:

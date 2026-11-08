@@ -29,34 +29,22 @@ jobs:
         id: node
         uses: ./.github/actions/setup-pm
         with:
-          # Desktop checks also run Python payload and icon build helpers, and
-          # the electron contracts drive real hermes_cli/pm code through
+          # The workspace checks also run Python payload helpers through
           # HERMES_PYTHON, which needs the application dependencies.
           toolchain: all
           extras: '[]'
           test-environment: 'true'
 
-      - name: Install zsh and a virtual display for Electron
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get install -y zsh xvfb \
-            libgtk-3-0 libnotify4 libnss3 libxss1 libxtst6 \
-            xdg-utils libatspi2.0-0 libdrm2 libgbm1 libasound2t64
-
       # setup-pm caches pnpm's store, not the installed workspace tree.
       # The job then links the full workspace node_modules
-      # again and runs the native postinstalls again. Electron's binary is
-      # prepared explicitly below. This caches the installed tree itself, keyed on the
-      # lockfile, and skips ``pnpm install`` on an exact hit. There are no
-      # restore-keys: a partial hit leaves a stale tree, so anything other
-      # than an exact lockfile match reinstalls from the start.
+      # again and runs the native postinstalls again. This caches the installed
+      # tree itself, keyed on the lockfile, and skips ``pnpm install`` on an
+      # exact hit. There are no restore-keys: a partial hit leaves a stale
+      # tree, so anything other than an exact lockfile match reinstalls from
+      # the start.
       #
       # This install runs WITH scripts, so the tree holds native lifecycle
-      # artifacts and the explicitly prepared Electron dist, both inside the cached tree.
-      #
-      # The ~/.cache/electron download cache stays out of the key on purpose.
-      # ``pnpm install`` is skipped on a hit, so nothing reads that cache. It only
-      # makes the archive larger.
+      # artifacts inside the cached tree.
       - name: Restore node_modules
         id: node-modules-cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -100,9 +88,6 @@ jobs:
       - name: Check the install kept pnpm-workspace.yaml as committed
         run: git diff --exit-code -- pnpm-workspace.yaml
 
-      - name: Prepare locked Electron runtime before parallel checks
-        run: node scripts/build/electron-runtime.mjs --source .
-
       # The WhatsApp bridge is a standalone npm package, outside the root
       # workspaces, so run-workspace-checks never sees it. Two of its suites
       # import @whiskeysockets/baileys, so install its own lockfile first;
@@ -120,12 +105,12 @@ jobs:
       #   * ``-r`` stops at the first workspace that fails. A
       #     run then reports one failure, where the matrix this replaced
       #     reported every failure together.
-      #   * The unit of work is a CHECK, and not a workspace. apps/desktop is
-      #     most of the payload, and its own ``check`` is a serial && chain.
-      #     A spread across workspaces alone leaves that chain as the long
-      #     pole. This expands the ``check:*`` sub-scripts of a package, so
-      #     its lint, ui, electron and plugin suites all run together. That
-      #     is the same selection rule the old matrix job used.
+      #   * The unit of work is a CHECK, and not a workspace. A package's own
+      #     ``check`` is often a serial && chain. A spread across workspaces
+      #     alone leaves that chain as the long pole. This expands the
+      #     ``check:*`` sub-scripts of a package, so its lint, ui and plugin
+      #     suites all run together. That is the same selection rule the old
+      #     matrix job used.
       #
       # Discovery is ``pnpm ls -r --depth -1 --json``. A new package or a new
       # ``check:*`` script needs no change here. An empty list is an error and

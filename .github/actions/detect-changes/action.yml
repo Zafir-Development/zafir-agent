@@ -15,11 +15,8 @@ outputs:
   python:
     description: Run Python tests / ruff / ty / windows-footguns.
     value: ${{ steps.classify.outputs.python }}
-  python_prod:
-    description: Python changes outside tests/.
-    value: ${{ steps.classify.outputs.python_prod }}
   frontend:
-    description: Run the TypeScript testing matrix + desktop build.
+    description: Run the TypeScript testing matrix and the WhatsApp bridge suites.
     value: ${{ steps.classify.outputs.frontend }}
   docker_meta:
     description: Docker setup and meta files have changed.
@@ -36,12 +33,6 @@ outputs:
   e2e_upgrade:
     description: Run the N-1 to HEAD `hermes update` suites (tests/e2e/core/upgrade).
     value: ${{ steps.classify.outputs.e2e_upgrade }}
-  e2e_desktop_core:
-    description: Run the Desktop core Electron suite (apps/desktop/e2e/core).
-    value: ${{ steps.classify.outputs.e2e_desktop_core }}
-  e2e_desktop_update:
-    description: Run the Desktop install/update Electron suite (apps/desktop/e2e/update).
-    value: ${{ steps.classify.outputs.e2e_desktop_update }}
   site:
     description: Build the Docusaurus docs site.
     value: ${{ steps.classify.outputs.site }}
@@ -60,9 +51,6 @@ outputs:
   bootstrap:
     description: Run the install-script lane (install.sh/install.ps1 sandbox + stamp verification).
     value: ${{ steps.classify.outputs.bootstrap }}
-  desktop_updater:
-    description: Run the Windows desktop-update hand-off (windows.ps1) integration tests.
-    value: ${{ steps.classify.outputs.desktop_updater }}
   remote_backends:
     description: Run the SSH and Docker terminal backends against a real sshd and Docker daemon.
     value: ${{ steps.classify.outputs.remote_backends }}

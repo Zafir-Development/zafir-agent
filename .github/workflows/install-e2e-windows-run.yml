@@ -39,11 +39,11 @@ on:
         type: string
         default: ''
       install-method:
-        description: 'How OLD gets installed. Supported: installer-script (irm | iex install.ps1); packaged-app is the signed-bundle arm handled by the bundled-e2e job. Declared-but-TODO methods skip.'
+        description: 'How OLD gets installed. Supported: installer-script (irm | iex install.ps1). Declared-but-TODO methods skip.'
         required: true
         type: string
       update-method:
-        description: 'How the install updates to HEAD. Supported: hermes-desktop-app-update (Update button under Playwright, app launched via hermes desktop), hermes-update, installer-script; open-app-update runs only for the signed-bundle arm.'
+        description: 'How the install updates to HEAD. Supported: hermes-desktop-app-update (Update button under Playwright, app launched via hermes desktop), hermes-update, installer-script.'
         required: true
         type: string
       install-ref:
@@ -74,17 +74,6 @@ on:
         # one npm ci), and the app-update driver may wait 30 min. pty-run.py's deadline and the
         # per-step budgets bound real hangs, so the job cap only has to clear a slow runner.
         default: 90
-      bundle-manifest-url:
-        type: string
-        default: ''
-      bundle-manifest-sha256:
-        description: Pinned transition manifest digest for stable acceptance
-        type: string
-        default: ''
-      bundle-arch:
-        type: string
-        default: x64
-
 permissions:
   contents: read
 
@@ -93,72 +82,13 @@ env:
   HERMES_TESTED_COMMIT: ${{ inputs.commit || github.sha }}
 
 jobs:
-  bundled-e2e:
-    name: packaged bundle (open-app-update)
-    if: inputs.install-method == 'packaged-app' && inputs.update-method == 'open-app-update'
-    runs-on: ${{ inputs.bundle-arch == 'arm64' && 'windows-latest-32-arm-core' || 'windows-latest-32-core' }}
-    timeout-minutes: ${{ inputs.timeout-minutes }}
-    steps:
-      - uses: actions/checkout@f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a # v7.0.1
-        with:
-          ref: ${{ inputs.commit || github.sha }}
-      - name: Set up driver tools only
-        uses: ./.github/actions/setup-pm
-        with:
-          toolchain: all
-          packages: ffmpeg
-          cache: false
-          cache-python: false
-          cache-node: false
-      - name: Install locked chat driver dependencies
-        shell: bash
-        run: pnpm install --frozen-lockfile --filter "{./tests-js}..." --prod --ignore-scripts
-      - name: Verify native helpers
-        shell: pwsh
-        run: |
-          node --test tests/install/e2e-assets/windows-bundled-helpers.test.mjs
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          powershell -NoProfile -ExecutionPolicy Bypass -File tests/install/e2e-assets/windows-bundled-processes.test.ps1
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
-      - name: Start recording
-        uses: ./.github/actions/e2e-screen-record
-        with:
-          mode: start
-          output: ${{ runner.temp }}/hermes-bundled-update-recording.mkv
-      - name: Install, update and observe native relaunch
-        shell: pwsh
-        env:
-          BUNDLE_MANIFEST: ${{ inputs.bundle-manifest-url }}
-          BUNDLE_MANIFEST_SHA256: ${{ inputs.bundle-manifest-sha256 }}
-          BUNDLE_ARCH: ${{ inputs.bundle-arch }}
-        run: |
-          powershell -NoProfile -ExecutionPolicy Bypass -File tests/install/windows-bundled-e2e.ps1 -ManifestUrl $env:BUNDLE_MANIFEST -Arch $env:BUNDLE_ARCH
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
-      - name: Stop recording
-        if: always()
-        uses: ./.github/actions/e2e-screen-record
-        with:
-          mode: stop
-          output: ${{ runner.temp }}/hermes-bundled-update-recording.mkv
-      - name: Upload native acceptance evidence
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: install-e2e-logs-${{ inputs.leg-id }}-bundle-${{ inputs.bundle-arch }}
-          path: |
-            ${{ runner.temp }}/hermes-bundled-update/proof/
-            ${{ runner.temp }}/hermes-bundled-update/home/logs/
-            ${{ runner.temp }}/hermes-bundled-update-recording.mkv
-          if-no-files-found: error
-          retention-days: 14
   e2e:
     # Short static name on purpose: name expressions render UNEXPANDED on
     # skipped jobs.
     name: e2e
     # The implemented source {install x update} pairs. hermes-desktop-app-update
     # also needs the starting tag to ship apps/desktop (pre-desktop releases
-    # have no window to launch and no Update button to click). The signed-bundle
-    # pair runs in the bundled-e2e job.
+    # have no window to launch and no Update button to click).
     if: >-
       inputs.install-method == 'installer-script'
       && (contains(fromJSON('["hermes-update", "installer-script"]'), inputs.update-method)

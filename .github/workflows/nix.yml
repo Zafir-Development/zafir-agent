@@ -179,7 +179,7 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/release-source"
           git archive "$CANDIDATE_COMMIT" | tar -x -C "$RUNNER_TEMP/release-source"
-          python3 scripts/releases/stamping.py --tree "$RUNNER_TEMP/release-source" \
+          python3 scripts/releases/nix_stamp.py --tree "$RUNNER_TEMP/release-source" \
             --version "$RELEASE_VERSION"
 
       - name: nix flake check

@@ -156,17 +156,6 @@ test('one locked preparation retains the requested union without provisioning de
   expect(createRequire(join(source, 'web/package.json'))('web-only')).toBe('web-only')
 }, 30000)
 
-test('electron: false installs Desktop without preparing its Electron binary', () => {
-  const { source, env } = fixture()
-  json(join(source, 'vendor/electron/package.json'), { name: 'electron', version: '1.0.0' })
-  json(join(source, 'apps/desktop/package.json'), { name: 'desktop', version: '1.0.0', devDependencies: { electron: 'file:../../vendor/electron' } })
-  execFileSync(pnpmCommand(), ['install', '--lockfile-only'], { cwd: source, env, stdio: 'pipe' })
-  // Electron preparation runs after the install: this fake is not the version Desktop pins.
-  expect(() => prepareNodeDependencies({ source, workspaces: ['apps/desktop'], env })).toThrow(/lock-pinned/)
-  prepareNodeDependencies({ source, workspaces: ['apps/desktop'], env, electron: false })
-  expect(existsSync(join(source, 'apps/desktop/node_modules/electron/package.json'))).toBe(true)
-}, 30000)
-
 test('web-only selection excludes siblings and rejects stale locks without rewriting them', () => {
   const { source, env } = fixture()
   rmSync(join(source, 'apps/desktop'), { recursive: true })

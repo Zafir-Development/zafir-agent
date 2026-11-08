@@ -1,13 +1,10 @@
-"""Every verified R2 upload lands in the GitHub step summary, with its public URL."""
-import json
-
+"""Every verified upload lands in the GitHub step summary."""
 import pytest
 
 from scripts.releases import r2, upload_summary
 from scripts.releases.r2_scope import R2Scope
 
 
-BASE = "https://hermes-assets.nousresearch.com"
 KEY = "releases/commit/" + "a" * 40 + "/HermesBundled-1.2.3-win-x64.msix"
 
 
@@ -19,37 +16,25 @@ def clear_notes():
     upload_summary._KEYS.clear()
 
 
-def test_render_uses_the_public_asset_host(monkeypatch):
-    monkeypatch.delenv("CLOUDFLARE_R2_PUBLIC_URL", raising=False)
-    monkeypatch.delenv("R2_DISPOSABLE_RUN", raising=False)
+def test_render_lists_each_uploaded_object():
     text = upload_summary.render([KEY])
-    assert f"[download]({BASE}/{KEY})" in text
-    assert text.startswith("\n### R2 uploads\n")
+    assert text.startswith("\n### Uploads\n")
+    assert f"| `{KEY}` |" in text
     assert upload_summary.render([]) == ""
-
-
-def test_render_names_a_key_whose_url_cannot_be_built(monkeypatch):
-    monkeypatch.setattr(r2, "public_url_for",
-                        lambda base, key: (_ for _ in ()).throw(ValueError("bad key")))
-    text = upload_summary.render(["../escape"])
-    assert "`../escape`" in text
-    assert "| — |" in text
 
 
 def test_note_dedupes_and_flush_appends_once(tmp_path, monkeypatch):
     summary = tmp_path / "summary.md"
     summary.write_text("existing\n", encoding="utf-8")
     monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
-    monkeypatch.delenv("CLOUDFLARE_R2_PUBLIC_URL", raising=False)
-    monkeypatch.delenv("R2_DISPOSABLE_RUN", raising=False)
     upload_summary.note(KEY)
     upload_summary.note(KEY)
     upload_summary.flush()
     upload_summary.flush()
     text = summary.read_text(encoding="utf-8")
-    assert text.count("### R2 uploads") == 1
+    assert text.count("### Uploads") == 1
     assert text.startswith("existing\n")
-    assert f"{BASE}/{KEY}" in text
+    assert KEY in text
 
 
 def test_flush_without_a_summary_keeps_the_notes(monkeypatch):

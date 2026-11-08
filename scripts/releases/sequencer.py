@@ -1,20 +1,17 @@
 """Discover and reconcile stable releases in version order.
 
 The planner is pure. Production discovery reads only remote annotated tags,
-GitHub releases/runs, and the protected R2 head; execution flips exact release
-IDs before advancing each eligible head oldest-first.
+GitHub releases/runs, and the Docker ``stable`` alias; execution flips exact
+release IDs before advancing the alias oldest-first.
 """
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import subprocess
 import sys
-import tempfile
 import time
 from datetime import datetime, timedelta, timezone, UTC
-from pathlib import Path
 
 from scripts.releases import lanes as lane_set
 from scripts.releases.progress import error as log_error, group, log, logged_run, notice
@@ -34,7 +31,7 @@ def _key(version: str) -> tuple[int, int, int]:
 
 def plan(claims: list[dict], *, head: str | None,
          requested_version: str | None = None) -> list[dict]:
-    """Return each eligible draft flip immediately followed by its head advance."""
+    """Return each eligible draft flip immediately followed by its alias advance."""
     ordered = sorted(claims, key=lambda claim: _key(claim["version"]))
     head_key = _key(head) if head is not None else None
     steps: list[dict] = []
@@ -128,7 +125,7 @@ def classify_runs(runs: list[dict], *, claimed_at: datetime | None = None,
                   now: datetime | None = None, has_draft: bool = False) -> tuple[str, dict | None]:
     """Keep failed claims live until two failed-job retries are exhausted.
 
-    Success with a draft on the attempt ref is green: the final tag moves to
+    Success with a draft on the claim ref is green: the final tag moves to
     publish. A missing draft after success is an error, because the tool is
     the only thing that deletes drafts; abandonment is the marker ref.
     """
@@ -225,8 +222,27 @@ def _tag_message(tag: str, expected_object: str, run=output) -> dict:
     return message
 
 
+# Claims cut by the desktop-inclusive pipeline name lanes this pipeline does not have. Their tags
+# stay readable (nothing is rewritten), but they are not part of the source-only release graph.
+_DESKTOP_CLAIM_KEYS = frozenset({"skipBundles", "skipTests", "includeMacosIntel", "includeTermux"})
+
+
+def is_desktop_era_claim(metadata: object) -> bool:
+    """Whether a claim's metadata was written by the removed desktop pipeline."""
+    if not isinstance(metadata, dict):
+        return False
+    if _DESKTOP_CLAIM_KEYS & set(metadata):
+        return True
+    lanes = metadata.get("lanes")
+    return isinstance(lanes, list) and any(name not in lane_set.NAMES for name in lanes)
+
+
 def discover(repository: str, run=output) -> list[dict]:
-    """Derive every stable claim state from remote refs and GitHub objects."""
+    """Derive every stable claim state from remote refs and GitHub objects.
+
+    Desktop-era claims cannot validate under the source-only lanes; they are
+    skipped with a warning instead of failing the pass.
+    """
     from scripts.releases.stable import is_claim_run, tagger_epoch, validate_claim, validate_final
 
     log("Fetching stable receipt tags, attempt refs and abandon markers from origin")
@@ -240,18 +256,14 @@ def discover(repository: str, run=output) -> list[dict]:
     log(f"Found {len(refs)} remote stable refs: {len(attempts)} attempt refs, "
         f"{sum(1 for tag in refs if version_from_tag(tag))} receipt tags, "
         f"{sum(1 for tag in refs if parse_marker_ref(tag))} abandon markers")
-    outstanding = outstanding_attempts(list(refs), lambda v: f"v{v}" in refs)
-    if outstanding:
-        log(f"Outstanding attempts (no receipt tag, not abandoned): "
-            f"{', '.join(ref for *_rest, ref in outstanding)}")
-    if len(outstanding) > 1:
-        named = ", ".join(ref for *_rest, ref in outstanding)
-        raise ValueError(f"more than one outstanding attempt ({named})")
     releases = _release_rows(repository, run)
     log(f"Read {len(releases)} GitHub releases")
     workflow_runs = _workflow_runs(repository, run)
     log(f"Read {len(workflow_runs)} dispatched Stable Release runs")
     records = []
+    # Only a source-only claim counts as outstanding: desktop-era attempt refs stay readable but
+    # are not part of this release graph.
+    source_only_attempts: list[str] = []
 
     for claim_tag, claim_ref in refs.items():
         parsed = parse_attempt_ref(claim_tag)
@@ -262,12 +274,16 @@ def discover(repository: str, run=output) -> list[dict]:
             raise ValueError(f"{claim_tag} must be an annotated remote tag")
         tag = f"v{version}"
         commit = claim_ref["commit"]
-        claim = _tag_message(claim_tag, claim_ref["object"], run)
+        raw_claim = _tag_message(claim_tag, claim_ref["object"], run)
         try:
-            # Normalized: a claim cut before lanes existed reads as the lane set it gated.
-            claim = validate_claim(claim, version=version, attempt=attempt, commit=commit)
+            claim = validate_claim(raw_claim, version=version, attempt=attempt, commit=commit)
         except ValueError as error:
+            if is_desktop_era_claim(raw_claim):
+                log(f"  skipping {claim_tag} @ {commit[:10]}: desktop-era claim metadata "
+                    "is outside the source-only release graph")
+                continue
             raise ValueError(f"{claim_tag} metadata is invalid") from error
+        source_only_attempts.append(claim_tag)
         claim_epoch = claim["claimEpoch"]
         if tagger_epoch(claim_ref["object"], run) != claim_epoch:
             raise ValueError(f"{claim_tag} epoch differs from its annotated tagger timestamp")
@@ -343,68 +359,49 @@ def discover(repository: str, run=output) -> list[dict]:
             "commit": commit,
             "release_id": release.get("id") if release else None,
             "needs_retarget": needs_retarget,
-            "candidate_manifest_sha256": final["candidateManifestSha256"] if final else None,
+            "candidate_manifest_sha256": None,
             "docker_manifest_digest": final["dockerManifestDigest"] if final else None,
             "retry": retry if final_ref is None else None,
         })
+
+    source_only_refs = [*source_only_attempts,
+                        *(tag for tag in refs if parse_marker_ref(tag))]
+    outstanding = outstanding_attempts(source_only_refs, lambda v: f"v{v}" in refs)
+    if outstanding:
+        log(f"Outstanding attempts (no receipt tag, not abandoned): "
+            f"{', '.join(ref for *_rest, ref in outstanding)}")
+    if len(outstanding) > 1:
+        named = ", ".join(ref for *_rest, ref in outstanding)
+        raise ValueError(f"more than one outstanding attempt ({named})")
 
     # Attempt order inside a version: git lists refs by name (rc.10 before rc.2), and
     # reconcile indexes by version with the last record winning, i.e. the newest attempt.
     return sorted(records, key=lambda record: (_key(record["version"]), record["attempt"]))
 
 
-def channel_head(desktop_head: str | None, records: list[dict],
-                 stable_alias_digest: str | None) -> str | None:
+def channel_head(records: list[dict], stable_alias_digest: str | None) -> str | None:
     """The newest version whose publication pass finished.
 
-    A release that advances the desktop channel finishes when the protected R2
-    head names it. One that does not finishes when the Docker ``stable`` alias
-    carries the digest its final receipt binds, or, when it moves no channel at
-    all, as soon as it is public.
+    A release that built the Docker image finishes when the ``stable`` alias
+    carries the digest its final receipt binds; one that builds no image moves
+    no alias, so it is finished as soon as it is public.
     """
-    versions = [desktop_head] if desktop_head is not None else []
-    versions += [record["version"] for record in records
-                 if record["state"] == "published"
-                 and (not lane_set.moves_channels(record["lanes"])
-                      or (stable_alias_digest is not None
-                          and record["docker_manifest_digest"] == stable_alias_digest))]
+    versions = [record["version"] for record in records
+                if record["state"] == "published"
+                and (record["docker_manifest_digest"] is None
+                     or (stable_alias_digest is not None
+                         and record["docker_manifest_digest"] == stable_alias_digest))]
     return max(versions, key=_key, default=None)
 
 
-def _reconcile_store(env: dict, records: list[dict], read_archive) -> None:
-    from scripts.releases import store
-
-    # Channels are already durable; Store recovery must not depend on advancing them again.
-    for record in sorted(records, key=lambda row: _key(row["version"]), reverse=True):
-        if record["state"] != "published" or "windows-store" not in record["lanes"]:
-            continue
-        log(f"Reconciling the Microsoft Store submission for {record['tag']}")
-        try:
-            raw = read_archive(f"releases/tag/{record['claim_tag']}/release-candidates.json")
-            if hashlib.sha256(raw).hexdigest() != record["candidate_manifest_sha256"]:
-                raise store.StoreError("the archived candidate manifest differs from the receipt")
-            result = store.release_from_env(env, json.loads(raw))
-        except (store.StoreError, ValueError, OSError) as error:
-            print(f"::warning title=Microsoft Store::{error}. The release is published; "
-                  "check its Store submission in Partner Center.")
-            return
-        # A newer public release may have failed its advisory upload, leaving an older one held.
-        if result != "superseded":
-            return
-
-
-def reconcile(env: dict, *, run=output, read_head=None, advance_head=None,
-              read_archive=None) -> list[dict]:
-    """Converge GitHub publication and protected heads oldest-first."""
-    from scripts.releases import channel_releases, docker, stable
+def reconcile(env: dict, *, run=output, read_head=None, advance_head=None) -> list[dict]:
+    """Converge GitHub publication and the Docker aliases oldest-first."""
+    from scripts.releases import docker, stable
 
     repository = env["GITHUB_REPOSITORY"]
     run = logged_run(run)
     requested = env.get("REQUESTED_VERSION") or None
     log(f"Stable sequencer: repository={repository} requested={requested or '(none)'}")
-    # The archive copy is the only authority for the candidate manifest digest;
-    # nothing records it before the publication pass hashes it.
-    read_archive = read_archive or channel_releases.read_archive_bytes
     with group("Discover stable claims"):
         records = discover(repository, run)
     retries = retry_due(records)
@@ -447,9 +444,8 @@ def reconcile(env: dict, *, run=output, read_head=None, advance_head=None,
         with group("Rediscover after repair"):
             records = discover(repository, run)
 
-    read_head = read_head or (lambda: channel_head(
-        channel_releases.stable_head_version(env), discover(repository, run),
-        docker.stable_alias_digest()))
+    read_head = read_head or (lambda: channel_head(discover(repository, run),
+                                                   docker.stable_alias_digest()))
     with group("Read the stable channel head"):
         head = read_head()
         log(f"Channel head: {head or '(none)'}")
@@ -462,24 +458,16 @@ def reconcile(env: dict, *, run=output, read_head=None, advance_head=None,
     production = advance_head is None
     if production:
         def production_advance(record: dict) -> None:
-            if lane_set.advances_desktop(record["lanes"]):
-                log(f"Advancing the protected desktop channel to {record['version']} from "
-                    f"releases/tag/{record['claim_tag']}/ "
-                    f"(receipt manifest {record['candidate_manifest_sha256']})")
-                with tempfile.TemporaryDirectory() as directory:
-                    channel_releases.advance_stable(env, record, Path(directory))
-                log(f"Desktop channel head is now {record['version']}")
-            else:
-                log(f"{record['version']} did not build every desktop package the channel serves "
-                    "(windows, macos-arm64): the desktop channel stays on the previous release")
-            if "docker" in record["lanes"]:
-                log(f"Tagging Docker {record['tag']}/stable/latest onto {record['claim_tag']} "
-                    f"({record['docker_manifest_digest']})")
-                # The final vX.Y.Z and the stable/latest aliases move onto the attempt's image here, in
-                # the publication pass with the feed pointer, never in the green
-                # build that pushed the image under the attempt ref.
-                docker.promote_stable(record["claim_tag"], record["docker_manifest_digest"], record["tag"])
-                log("Docker aliases moved")
+            if "docker" not in record["lanes"]:
+                log(f"{record['version']} built no Docker image: the stable/latest "
+                    "aliases stay on the previous release")
+                return
+            log(f"Tagging Docker {record['tag']}/stable/latest onto {record['claim_tag']} "
+                f"({record['docker_manifest_digest']})")
+            # The final vX.Y.Z and the stable/latest aliases move onto the attempt's image here,
+            # in the publication pass, never in the green build that pushed the image.
+            docker.promote_stable(record["claim_tag"], record["docker_manifest_digest"], record["tag"])
+            log("Docker aliases moved")
         advance_head = production_advance
 
     for number, step in enumerate(steps, start=1):
@@ -488,11 +476,10 @@ def reconcile(env: dict, *, run=output, read_head=None, advance_head=None,
             with group(f"[{number}/{len(steps)}] Publish {record['version']}: write {record['tag']}, "
                        f"retarget release {record['release_id']} from {record['claim_tag']}, make it public"):
                 # discover() ran before the receipt tag existed, so the record has no
-                # receipt digests yet; the advance below must check the ones just written.
+                # receipt digest yet; the advance below must check the one just written.
                 record.update(stable.publish_attempt(
-                    record, repository=repository, run=run, read_archive=read_archive))
-                log(f"Receipt {record['tag']}: manifest {record['candidate_manifest_sha256']}, "
-                    f"docker {record['docker_manifest_digest']}")
+                    record, repository=repository, run=run))
+                log(f"Receipt {record['tag']}: docker {record['docker_manifest_digest']}")
             notice(f"{record['tag']} is public", title="Stable sequencer")
         else:
             record = by_version[step["advance"]]
@@ -513,8 +500,6 @@ def reconcile(env: dict, *, run=output, read_head=None, advance_head=None,
         log(f"Channel head after the pass: {reached} (planned {expected})")
         if reached != expected:
             raise ValueError("Stable protected head did not reach the planned version")
-    if production:
-        _reconcile_store(env, list(final.values()), read_archive)
     log("Stable sequencer finished: " + (", ".join(
         f"{kind} {version}" for step in steps for kind, version in step.items()) or "nothing to do"))
     return steps

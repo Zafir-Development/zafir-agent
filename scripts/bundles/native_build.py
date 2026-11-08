@@ -13,10 +13,21 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 
+def _git(source: Path, *args: str) -> str:
+    return subprocess.check_output(["git", *args], cwd=source, text=True, encoding="utf-8").rstrip("\r\n")
+
+
+def _require_source(source: Path, commit: str) -> None:
+    if _git(source, "rev-parse", "HEAD") != commit:
+        raise ValueError("preparation source checkout changed revision; prepare again")
+    status = _git(source, "status", "--porcelain", "--untracked-files=all")
+    if status:
+        raise ValueError(f"native builds require a clean source checkout at the admitted revision:\n{status}")
+
+
 def prepare(source: Path, work: Path, cache: Path, out: Path, ref: str) -> Path:
     from hermes_cli.runtime_state import _lock
-    from scripts.bundles.desktop_prepare import git, require_source
-    from scripts.bundles.desktop_toolchain import run_preparation
+    from scripts.bundles.toolchain import run_preparation
     from scripts.bundles.native_prepared import prepared_path
     from pm.lock import _write
 
@@ -24,8 +35,8 @@ def prepare(source: Path, work: Path, cache: Path, out: Path, ref: str) -> Path:
         if path.absolute() != path.resolve():
             raise ValueError("native build roots must not be symlinked")
     source, work, cache, out = (path.resolve() for path in (source, work, cache, out))
-    revision = git(source, "rev-parse", "--verify", f"{ref}^{{commit}}")
-    require_source(source, revision)
+    revision = _git(source, "rev-parse", "--verify", f"{ref}^{{commit}}")
+    _require_source(source, revision)
     for destination in (work, cache, out):
         if source.is_relative_to(destination):
             raise ValueError("native build output must not contain the source checkout")
@@ -57,12 +68,11 @@ def prepare(source: Path, work: Path, cache: Path, out: Path, ref: str) -> Path:
 
 
 def prepare_in_worker(request: dict) -> Path:
-    from scripts.bundles.desktop_prepare import require_source
-    from scripts.bundles.desktop_toolchain import prepare_tools
+    from scripts.bundles.toolchain import prepare_tools
     from scripts.bundles.native import prepare_native
 
     source, work, cache, out = (Path(request[name]) for name in ("source", "work", "cache", "out"))
-    require_source(source, request["ref"])
+    _require_source(source, request["ref"])
     _, _, env = prepare_tools(source, work, cache, os.environ)
     return prepare_native(out=out, ref=request["ref"], source=source,
                           cache=Path(env["UV_CACHE_DIR"]), tools=cache / "tools", env=env)
@@ -74,9 +84,7 @@ def main() -> int:
     parser.add_argument("--work", type=Path)
     parser.add_argument("--cache", type=Path)
     parser.add_argument("--out", type=Path)
-    selection = parser.add_mutually_exclusive_group()
-    selection.add_argument("--ref")
-    selection.add_argument("--commit")
+    parser.add_argument("--ref")
     parser.add_argument("--prepare-only", action="store_true")
     parser.add_argument("--prepared", type=Path)
     parser.add_argument("--request", type=Path, help=argparse.SUPPRESS)
@@ -91,16 +99,13 @@ def main() -> int:
         if args.request:
             parser.error("--request is worker-only")
         if args.prepared:
-            if any((args.source, args.work, args.cache, args.out, args.ref, args.commit, args.prepare_only)):
+            if any((args.source, args.work, args.cache, args.out, args.ref, args.prepare_only)):
                 parser.error("--prepared supplies the complete native build request")
             prepared = args.prepared.absolute()
         else:
             if not all((args.source, args.work, args.cache, args.out)):
                 parser.error("preparation requires --source, --work, --cache and --out")
-            if args.commit:
-                from scripts.releases.commit_build import require_commit
-                require_commit(args.commit)
-            prepared = prepare(args.source, args.work, args.cache, args.out, args.commit or args.ref or "HEAD")
+            prepared = prepare(args.source, args.work, args.cache, args.out, args.ref or "HEAD")
             if args.prepare_only:
                 print(prepared)
                 return 0

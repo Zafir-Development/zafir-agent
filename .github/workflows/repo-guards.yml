@@ -799,21 +799,18 @@ jobs:
       # The committed icon outputs must match what scripts/generate_icons.py renders from
       # assets/nous-girl-*.svg + assets/backgrounds/*.svg. Regular builds and user installs consume
       # the committed files and never render, so this is what keeps them honest. Fix a red run
-      # with `node scripts/generate-icons.mjs` on a Hermes runtime interpreter and commit.
+      # with `python -m scripts.generate_icons` on a Hermes runtime interpreter and commit.
       #
       # Byte-determinism note: resvg renders the same SVG to identical bytes on any host for
       # pure-shape artwork. If the master ever contains <text>, font rendering can differ across
       # OSes — pin fonts via resvg's font_files/font_dirs and commit a known font first.
       - name: Regenerate every icon target, verify structure, diff against committed
         if: ${{ !cancelled() && steps.setup-pm.outcome == 'success' }}
-        env:
-          HERMES_PAYLOAD_TAG: ''
-          HERMES_BUILD_COMMIT: ''
         run: |
-          node scripts/generate-icons.mjs
-          node scripts/generate-icons.mjs --check
+          "$HERMES_PYTHON" -m scripts.generate_icons
+          "$HERMES_PYTHON" -m scripts.generate_icons --check
           if ! git diff --exit-code --stat || [ -n "$(git status --porcelain --untracked-files=all)" ]; then
             git status --porcelain --untracked-files=all
-            echo "::error::Committed icons are stale. Run 'node scripts/generate-icons.mjs' and commit the result."
+            echo "::error::Committed icons are stale. Run 'python -m scripts.generate_icons' and commit the result."
             exit 1
           fi

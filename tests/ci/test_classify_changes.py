@@ -30,47 +30,36 @@ main = _mod.main
 
 DEFAULT = {
     "python": True,
-    "python_prod": True,
     "frontend": True,
     "docker": True,
     "docker_meta": True,
     "nix": True,
     "e2e": True,
     "e2e_upgrade": True,
-    "e2e_desktop_core": True,
-    "e2e_desktop_update": True,
     "site": True,
     "scan": True,
     "deps": True,
     "uv_lock": True,
     "npm_lock": True,
     "bootstrap": True,
-    "desktop_updater": True,
     "remote_backends": True,
     "catalog": True,
 }
 
-SLOW_LANES = {"docker", "nix", "e2e", "e2e_upgrade", "e2e_desktop_core", "e2e_desktop_update"}
+SLOW_LANES = {"docker", "nix", "e2e", "e2e_upgrade"}
 
 
-def _lanes(python=False, frontend=False, site=False, scan=False, deps=False, uv_lock=False, npm_lock=False, bootstrap=False, desktop_updater=False, docker_meta=False, python_prod=None, nix=False, docker=None, e2e=False, e2e_upgrade=False, e2e_desktop_core=False, e2e_desktop_update=False, remote_backends=False, catalog=False) -> dict[str, bool]:
-    # python_prod tracks python except for tests-only diffs; default it to
-    # python so the majority of cases don't need to spell it out.
-    #
+def _lanes(python=False, frontend=False, site=False, scan=False, deps=False, uv_lock=False, npm_lock=False, bootstrap=False, docker_meta=False, nix=False, docker=None, e2e=False, e2e_upgrade=False, remote_backends=False, catalog=False) -> dict[str, bool]:
     # The slow lanes (docker, nix, the E2E suites) are off unless the case
     # names them: an ordinary product change reaches them on main, not on
     # the PR. Docker meta files are docker-lane paths, so docker follows
     # docker_meta unless the case says otherwise.
-    _python_prod = python if python_prod is None else python_prod
     return {
         "python": python,
-        "python_prod": _python_prod,
         "docker": docker_meta if docker is None else docker,
         "nix": nix,
         "e2e": e2e,
         "e2e_upgrade": e2e_upgrade,
-        "e2e_desktop_core": e2e_desktop_core,
-        "e2e_desktop_update": e2e_desktop_update,
         "frontend": frontend,
         "docker_meta": docker_meta,
         "site": site,
@@ -79,23 +68,16 @@ def _lanes(python=False, frontend=False, site=False, scan=False, deps=False, uv_
         "uv_lock": uv_lock,
         "npm_lock": npm_lock,
         "bootstrap": bootstrap,
-        "desktop_updater": desktop_updater,
         "remote_backends": remote_backends,
         "catalog": catalog,
     }
 
 
 CASES = {
-    # source_build runs it on every source update, and the Desktop build steps
-    # through the same compilers (tests/ci/test_update_ci_routing.py).
-    "shared JS builder → frontend + both update suites": (
+    # source_build runs it on every source update (tests/ci/test_update_ci_routing.py).
+    "shared JS builder → frontend + update suite": (
         ["scripts/build/web.mjs"],
-        _lanes(python=True, frontend=True, e2e_upgrade=True, e2e_desktop_update=True, docker=True),
-    ),
-    # The image builds the Webapp through this recipe; Desktop sources do not route to docker.
-    "webapp build recipe → docker": (
-        ["apps/desktop/scripts/build-webapp.mjs"],
-        _lanes(frontend=True, e2e_upgrade=True, e2e_desktop_core=True, e2e_desktop_update=True, docker=True),
+        _lanes(python=True, frontend=True, e2e_upgrade=True, docker=True),
     ),
     "root JS tests → frontend": (["tests-js/product-builders.test.mjs"], _lanes(python=True, frontend=True)),
     # The bridge's node --test suites run in the JS & TS job (js-tests.yml).
@@ -107,13 +89,11 @@ CASES = {
     ),
     "docs-only → nothing heavy": (["README.md", "docs/guide.md"], _lanes()),
     "python source → python": (["run_agent.py"], _lanes(python=True, scan=True)),
-    # pyproject.toml declares the pytest markers the OS lanes select on, so it
-    # also re-arms the desktop_updater integration tests (fail-open).
     # The dependency manifests are inputs to the image, the flake and every
     # install, so they start those slow lanes on the PR itself.
     "dep manifest → python": (
         ["pyproject.toml"],
-        _lanes(python=True, scan=True, deps=True, uv_lock=True, desktop_updater=True, docker=True, nix=True, e2e_upgrade=True),
+        _lanes(python=True, scan=True, deps=True, uv_lock=True, docker=True, nix=True, e2e_upgrade=True),
     ),
     "uv.lock → python": (["uv.lock"], _lanes(python=True, uv_lock=True, docker=True, nix=True, e2e_upgrade=True)),
     "ts package → frontend": (["apps/desktop/src/app.tsx"], _lanes(frontend=True)),
@@ -137,15 +117,15 @@ CASES = {
     # the Python side must run even when nothing else in the PR is Python.
     "generated gateway contract → python + frontend": (
         ["apps/shared/src/gateway-contract.generated.ts"],
-        _lanes(python=True, frontend=True, e2e_desktop_core=True),
+        _lanes(python=True, frontend=True),
     ),
     "gateway OpenRPC document → python + frontend": (
         ["apps/shared/src/gateway-contract.openrpc.json"],
-        _lanes(python=True, frontend=True, e2e_desktop_core=True),
+        _lanes(python=True, frontend=True),
     ),
     "control-socket vectors → python + frontend": (
         ["apps/shared/src/node/control-socket.vectors.json"],
-        _lanes(python=True, frontend=True, e2e_desktop_core=True),
+        _lanes(python=True, frontend=True),
     ),
     "desktop slash-registry JSON → python + frontend": (
         ["apps/desktop/src/lib/desktop-slash-registry.json"],
@@ -189,7 +169,7 @@ CASES = {
     # tests/ is not packaged, so the built binary cannot change.
     "tests-only → no nix": (
         ["tests/agent/test_foo.py"],
-        _lanes(python=True, python_prod=False, scan=True),
+        _lanes(python=True, scan=True),
     ),
     # Prose cannot change the closure or the binary.
     "docs-only → no nix": (["README.md"], _lanes()),
@@ -198,56 +178,25 @@ CASES = {
     "install.ps1 → python + e2e_upgrade + bootstrap": (
         ["scripts/install.ps1"], _lanes(python=True, bootstrap=True, e2e_upgrade=True)),
     "installer suite → python": (["scripts/tests/test-install-ps1-longpath.ps1"], _lanes(python=True)),
-    # The Windows desktop-update hand-off is a PowerShell integration surface:
-    # its tests spawn the real script and poll its loopback server. They run
-    # when the script, the Electron side that launches it, or their own test
-    # files change — not on every hermes_state.py PR. The script runs a real
-    # `hermes update`, and the Windows crash cells that kill it mid-run live in
-    # the install + update journey, so it starts e2e_upgrade as well.
-    "windows.ps1 → desktop_updater": (
-        ["scripts/desktop-update/windows.ps1"],
-        _lanes(python=True, desktop_updater=True, e2e_upgrade=True, e2e_desktop_update=True),
-    ),
-    # The shipped updater page is exercised by the desktop Electron suite;
-    # a page-only change must run that suite as well as the server tests.
-    "updater ui.html → frontend + desktop_updater": (
-        ["scripts/desktop-update/ui.html"],
-        _lanes(python=True, frontend=True, desktop_updater=True, e2e_upgrade=True, e2e_desktop_update=True),
-    ),
-    # tests-js/desktop-build-cache-inputs.test.mjs checks the key owner against the Node graph.
-    "desktop cache key owner → python + frontend": (
-        ["scripts/ci/desktop_build_cache.py"], _lanes(python=True, frontend=True, scan=True),
-    ),
-    "desktop-update test → desktop_updater": (
-        ["tests/scripts/desktop_update/test_desktop_update_windows_progress.py"],
-        _lanes(python=True, python_prod=False, scan=True, desktop_updater=True),
-    ),
-    "updater-process.ts → desktop_updater": (
-        ["apps/desktop/electron/updater-process.ts"],
-        _lanes(frontend=True, desktop_updater=True, e2e_desktop_update=True),
-    ),
-    "python source alone → no desktop_updater lane": (["gateway/run.py"], _lanes(python=True, scan=True)),
-    # `.rs` lives under apps/, so it matches `frontend` too. That lane builds
+    "python source alone → no slow lane": (["gateway/run.py"], _lanes(python=True, scan=True)),
     # Unknown top-level file keeps Python on rather than risk a silent skip.
     "unknown toplevel → python": (["Makefile"], _lanes(python=True)),
     "mixed docs+python → python": (["README.md", "agent/x.py"], _lanes(python=True, scan=True)),
     "mixed docs+frontend → frontend": (["README.md", "apps/x.tsx"], _lanes(frontend=True)),
-    # tests-only diffs: pytest lanes stay ON, product jobs (Desktop E2E,
-    # Docker) gate on python_prod and skip.
-    "tests-only → python without python_prod": (
+    # tests-only diffs still run the pytest lanes.
+    "tests-only → python": (
         ["tests/agent/test_foo.py"],
-        _lanes(python=True, python_prod=False, scan=True),
+        _lanes(python=True, scan=True),
     ),
-    # conftest.py owns the _OS_MARKS skip logic, so it re-arms the
-    # desktop_updater integration tests too (fail-open).
-    # The shared harness can break every Python E2E suite.
-    "conftest → python + desktop_updater + python e2e": (
+    # conftest.py owns the _OS_MARKS skip logic and the shared harness can
+    # break every Python E2E suite.
+    "conftest → python + python e2e": (
         ["tests/conftest.py"],
-        _lanes(python=True, python_prod=False, scan=True, desktop_updater=True, e2e=True, e2e_upgrade=True),
+        _lanes(python=True, scan=True, e2e=True, e2e_upgrade=True),
     ),
-    "conftest fixture module → python + desktop_updater + python e2e": (
+    "conftest fixture module → python + python e2e": (
         ["tests/_fixtures/platform_gating.py"],
-        _lanes(python=True, python_prod=False, scan=True, desktop_updater=True, e2e=True, e2e_upgrade=True),
+        _lanes(python=True, scan=True, e2e=True, e2e_upgrade=True),
     ),
     "tests + prod source → both lanes": (
         ["tests/agent/test_foo.py", "agent/x.py"],
@@ -257,7 +206,7 @@ CASES = {
     # real failures, so it keeps the conservative full lane set. The .py
     # runner additionally trips the supply-chain scan lane (executable
     # .py/.pth payloads are what it scans for).
-    "test runner script → python_prod stays on": (
+    "test runner script → conservative full lane set": (
         ["scripts/run_tests_parallel.py"],
         _lanes(python=True, scan=True, e2e=True, e2e_upgrade=True),
     ),
@@ -313,11 +262,11 @@ CASES = {
     # and the Tauri app's non-Rust sources.
     "install.sh → bootstrap lane": (
         ["scripts/install.sh"],
-        _lanes(python=True, bootstrap=True, python_prod=True, e2e_upgrade=True, e2e_desktop_update=True),
+        _lanes(python=True, bootstrap=True, e2e_upgrade=True),
     ),
     "setup-hermes.sh → bootstrap lane": (
         ["setup-hermes.sh"],
-        _lanes(python=True, bootstrap=True, python_prod=True, e2e_upgrade=True),
+        _lanes(python=True, bootstrap=True, e2e_upgrade=True),
     ),
     "composite action → fail-open all": (
         [".github/actions/retry/action.yml"],
@@ -339,9 +288,9 @@ CASES = {
         ["tools/terminal_tool_backends.py"], _lanes(python=True, scan=True, remote_backends=True)),
     "real docker backend test → remote_backends": (
         ["tests/tools/test_docker_backend_real.py"],
-        _lanes(python=True, python_prod=False, scan=True, remote_backends=True)),
+        _lanes(python=True, scan=True, remote_backends=True)),
     "mocked docker unit test → no remote_backends": (
-        ["tests/tools/test_docker_environment.py"], _lanes(python=True, python_prod=False, scan=True)),
+        ["tests/tools/test_docker_environment.py"], _lanes(python=True, scan=True)),
     "sshd harness → remote_backends": (
         ["scripts/ci/start_test_sshd.sh"], _lanes(python=True, remote_backends=True)),
     "sshd container setup → remote_backends": (
@@ -351,69 +300,39 @@ CASES = {
     "desktop renderer → no slow lane": (["apps/desktop/src/app/chat/composer.tsx"], _lanes(frontend=True)),
     "python e2e suite → e2e only": (
         ["tests/e2e/core/sqlite/test_torture.py"],
-        _lanes(python=True, python_prod=False, scan=True, e2e=True),
+        _lanes(python=True, scan=True, e2e=True),
     ),
     "state db → e2e": (["hermes_state_wal.py"], _lanes(python=True, scan=True, e2e=True)),
     "upgrade suite → e2e_upgrade, not e2e": (
         ["tests/e2e/core/upgrade/pm/test_pm_lifecycle.py"],
-        _lanes(python=True, python_prod=False, scan=True, e2e_upgrade=True),
+        _lanes(python=True, scan=True, e2e_upgrade=True),
     ),
-    "updater → e2e_upgrade + desktop update": (
+    "updater → e2e_upgrade": (
         ["hermes_cli/update_cmd_git.py"],
-        _lanes(python=True, scan=True, e2e_upgrade=True, e2e_desktop_update=True),
+        _lanes(python=True, scan=True, e2e_upgrade=True),
     ),
     "PM → e2e_upgrade + docker": (["pm/environments.py"], _lanes(python=True, scan=True, e2e_upgrade=True, docker=True)),
     # The update pipeline lives beyond the update_* family too: the entry
     # point, launch-time recovery, the gateway restart/pause surface.
-    # main.py is also `hermes desktop --build-only`, the update's Desktop rebuild.
-    "cmd_update entry → both update suites": (
-        ["hermes_cli/main.py"], _lanes(python=True, scan=True, e2e_upgrade=True, e2e_desktop_update=True),
+    "cmd_update entry → e2e_upgrade": (
+        ["hermes_cli/main.py"], _lanes(python=True, scan=True, e2e_upgrade=True),
     ),
     "gateway status stamp → e2e_upgrade": (["gateway/status.py"], _lanes(python=True, scan=True, e2e_upgrade=True)),
-    "desktop verify → desktop_updater + both update suites": (
-        ["hermes_cli/desktop_update_verify.py"],
-        _lanes(python=True, scan=True, desktop_updater=True, e2e_upgrade=True, e2e_desktop_update=True),
-    ),
-    "electron main → desktop update": (
+    "electron main → frontend only": (
         ["apps/desktop/electron/main.ts"],
-        _lanes(frontend=True, e2e_desktop_update=True),
+        _lanes(frontend=True),
     ),
-    "handoff result reader → desktop_updater + desktop update": (
-        ["apps/desktop/electron/handoff-result.ts"],
-        _lanes(frontend=True, desktop_updater=True, e2e_desktop_update=True),
-    ),
-    "desktop backend spawn → desktop core": (
-        ["apps/desktop/electron/backend-child.ts"],
-        _lanes(frontend=True, e2e_desktop_core=True),
-    ),
-    "desktop session resume → desktop core": (
+    "desktop session resume → frontend only": (
         ["apps/desktop/src/app/session/hooks/use-session-actions/index.ts"],
-        _lanes(frontend=True, e2e_desktop_core=True),
+        _lanes(frontend=True),
     ),
-    "desktop core spec → desktop core": (
-        ["apps/desktop/e2e/core/transcript-integrity.spec.ts"],
-        _lanes(frontend=True, e2e_desktop_core=True),
-    ),
-    "desktop queue panel (lost-turn card) → desktop core": (
+    "desktop queue panel → frontend only": (
         ["apps/desktop/src/app/chat/composer/queue-panel.tsx"],
-        _lanes(frontend=True, e2e_desktop_core=True),
-    ),
-    "desktop profile rail → desktop core": (
-        ["apps/desktop/src/app/chat/sidebar/profile-switcher.tsx"],
-        _lanes(frontend=True, e2e_desktop_core=True),
-    ),
-    "desktop update spec → desktop update, not core": (
-        ["apps/desktop/e2e/update/app-update.spec.ts"],
-        _lanes(frontend=True, e2e_desktop_update=True),
-    ),
-    # The update suite runs on the core suite's harness.
-    "desktop core harness → both desktop suites": (
-        ["apps/desktop/e2e/core/harness.ts"],
-        _lanes(frontend=True, e2e_desktop_core=True, e2e_desktop_update=True),
+        _lanes(frontend=True),
     ),
     "image tests → docker": (
         ["tests/docker/test_image_smoke.py"],
-        _lanes(python=True, python_prod=False, scan=True, docker=True),
+        _lanes(python=True, scan=True, docker=True),
     ),
     # Catalog entry data runs the catalog tests INSTEAD of the Python suite.
     "catalog entry → catalog only": (["plugin-catalog/foo.yaml"], _lanes(catalog=True)),
@@ -508,23 +427,6 @@ _UPDATE_PATH_FILES = (
     "gateway/status.py",
     "gateway/control_socket.py",
     "gateway/code_skew.py",
-    "scripts/desktop-update/windows.ps1",
-    "scripts/desktop-update/posix.sh",
-)
-_DESKTOP_UPDATE_PATH_FILES = (
-    "apps/desktop/electron/main.ts",
-    "apps/desktop/electron/update-marker.ts",
-    "apps/desktop/electron/update-gate.ts",
-    "apps/desktop/electron/updater-process.ts",
-    "apps/desktop/electron/updater/checkout.ts",
-    "apps/desktop/electron/handoff-result.ts",
-    "apps/desktop/electron/desktop-installation.ts",
-    "apps/desktop/electron/backend-discovery.ts",
-    "apps/desktop/electron/local-gateway.ts",
-    "scripts/desktop-update/windows.ps1",
-    "scripts/desktop-update/posix.sh",
-    "hermes_cli/desktop_update_verify.py",
-    "hermes_cli/main_desktop.py",
 )
 
 
@@ -532,12 +434,6 @@ _DESKTOP_UPDATE_PATH_FILES = (
 def test_every_update_path_file_starts_the_real_update_suite(path):
     assert (_REPO / path).is_file(), f"{path} moved: update the classifier and this table"
     assert classify([path])["e2e_upgrade"], path
-
-
-@pytest.mark.parametrize("path", _DESKTOP_UPDATE_PATH_FILES)
-def test_every_desktop_update_path_file_starts_the_desktop_update_suite(path):
-    assert (_REPO / path).is_file(), f"{path} moved: update the classifier and this table"
-    assert classify([path])["e2e_desktop_update"], path
 
 
 _REPO = Path(__file__).resolve().parents[2]
@@ -598,7 +494,6 @@ def _iter_if_expressions(job: object):
 _REAL_UPDATE_LANES = (
     ("ci.yaml", "tests", "tests.yml", "e2e_upgrade"),
     ("ci.yaml", "tests-os", "tests-os.yml", "e2e_upgrade"),
-    ("ci.yaml", "e2e-desktop-update", "e2e-desktop-update.yml", "e2e_desktop_update"),
     ("tests-os.yml", "install-update-e2e", "windows-install-update-e2e.yml", "e2e_upgrade"),
     # Not an update suite, but the same contract: the real SSH/Docker backend lane.
     ("ci.yaml", "remote-backends", "remote-backends.yml", "remote_backends"),
@@ -715,7 +610,6 @@ def test_main_recovers_pr_files_instead_of_fail_open(monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "frontend=false" in out
     assert "python=true" in out
-    assert "python_prod=true" in out
 
 
 def test_main_still_fail_opens_when_recovery_is_empty(monkeypatch, capsys):

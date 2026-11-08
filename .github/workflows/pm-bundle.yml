@@ -36,8 +36,6 @@ on:
       - 'pm/**'
       - '!pm/**/*.md'
       - 'scripts/bundles/**'
-      - 'scripts/ci/desktop_build_cache.py'
-      - '.github/actions/desktop-build-cache/**'
       - 'scripts/windows-build-deps.ps1'
       - 'scripts/build/windows-deps.ps1'
       - '.github/actions/setup-windows-build-deps/**'
@@ -58,7 +56,7 @@ jobs:
   bundle:
     name: bundle ${{ matrix.target.label }}
     runs-on: ${{ matrix.target.runner }}
-    # Leave time for setup, cache saves and smoke tests around the wheel build.
+    # Leave time for setup, dependency preparation and smoke tests around the wheel build.
     timeout-minutes: 180
     strategy:
       fail-fast: false
@@ -94,16 +92,6 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Restore native dependency candidates
-        id: native-cache
-        uses: ./.github/actions/desktop-build-cache
-        with:
-          phase: restore
-          source: ${{ github.workspace }}
-          work: ${{ runner.temp }}/payload-job
-          cache: ${{ runner.temp }}/payload-inputs
-          producer: payload-test
-
       - name: Prepare native payload dependencies
         id: prepare
         shell: bash
@@ -116,18 +104,6 @@ jobs:
           "$bootstrap" -S -B scripts/bundles/native_build.py --prepare-only \
             --source "$GITHUB_WORKSPACE" --work "$PAYLOAD_WORK" --cache "$PAYLOAD_CACHE" \
             --out "$GITHUB_WORKSPACE/build/agent-payload" --ref HEAD
-
-      # PRs can restore candidates but never gain a cache-writing lane here.
-      - name: Save native dependency candidates before assembly
-        if: ${{ !cancelled() && steps.prepare.outcome == 'success' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && (inputs.ref == '' || inputs.ref == github.sha) }}
-        uses: ./.github/actions/desktop-build-cache
-        with:
-          phase: save
-          source: ${{ github.workspace }}
-          work: ${{ runner.temp }}/payload-job
-          cache: ${{ runner.temp }}/payload-inputs
-          producer: payload-test
-          key: ${{ steps.native-cache.outputs.cache-key }}
 
       - name: Assemble the prepared payload without dependency acquisition
         shell: bash
