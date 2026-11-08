@@ -1,7 +1,7 @@
 # Trimming Hermes to its core: CLI + TUI + gateway
 
 **Status:** planning. Nothing in this branch has been deleted yet.
-**Branch:** `trim-core-surfaces`, based on `main` (`b309d5015f`). Baseline measurements were taken at
+**Branch:** `trim-core-surfaces`, based on `master` (`b309d5015f`). Baseline measurements were taken at
 `8d7061f1a7`, the last code commit; `b309d5015f` adds only `history/` docs.
 **Purpose:** remove every product surface we do not intend to ship and keep only the agent core,
 the classic CLI, the TUI, and the messaging gateway (Telegram first).
