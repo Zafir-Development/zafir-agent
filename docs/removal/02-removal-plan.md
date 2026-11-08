@@ -12,6 +12,17 @@ depends on code deleted by a later one. Do not batch steps: each has its own ver
 - Record the metric snapshot from [03-optimization.md](03-optimization.md#measurement) before
   Step 1 and after Step 12.
 - Keep this directory (`docs/removal/`) in the branch; it is not published.
+- **Every step ends with a `history/` entry** (see [history/README.md](../../history/README.md)):
+  a new append-only snapshot `history/YYYY-MM-DD-<slug>/` (copy the previous snapshot, update
+  `diagram.json`/`diagram.html` only where the runtime architecture actually changed, fill
+  `NOTES.md` with the branch revision, verified facts with paths/lines, spec/artifact sha256 and
+  known simplifications) plus a new top row in `history/CHANGELOG.md`. Commit it separately as
+  `docs(history): snapshot <slug>` in the same branch. A step with no runtime-architecture change
+  (e.g. Step 1) still gets a snapshot whose `NOTES.md` states why the diagram is unchanged.
+- Archify is required for history artifacts: `~/.agents/skills/archify/bin/archify.mjs`
+  (validate/deliver/visual-check with `--quality showcase`) - the acceptance bar is in
+  `history/README.md` (9/9 checks, 0 errors, 0 warnings; `visual-check` pass on 1440x900,
+  1600x1000, 1920x1080, 2048x1320).
 
 Suggested PR sequence (13 steps, ~25–40 developer-days):
 
@@ -80,7 +91,13 @@ Edit:
 Verify: `bash scripts/install.sh --manifest` lists the 9 source stages and no `desktop`;
 `tests/scripts/install/`; `python scripts/check`.
 
-**Done:** a fresh source install on Linux/macOS/Windows (smoke) needs no desktop code path.
+**History:** add `history/<YYYY-MM-DD>-removal-step-1-installer/` (slug example:
+`2026-11-08-removal-step-1-installer`): copy the current snapshot, keep the diagram unchanged
+(the installer is not part of the runtime diagram) and state that in `NOTES.md`; add the
+`history/CHANGELOG.md` row; commit as `docs(history): snapshot <slug>` after the code commit.
+
+**Done:** a fresh source install on Linux/macOS/Windows (smoke) needs no desktop code path; the
+history snapshot is committed in the same branch and `history/CHANGELOG.md` has the new row.
 
 ---
 
