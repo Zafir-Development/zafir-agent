@@ -89,10 +89,8 @@ def test_write_status_includes_every_target(tmp_path, monkeypatch, capsys, failu
     assert ("FAILED" in output) is (failure is not None)
 
 
-@pytest.mark.parametrize("platform", ["", "mac-"])
 @pytest.mark.parametrize("appearance,girl", [("light", "black"), ("dark", "white")])
-@pytest.mark.parametrize("colors", [None, ("#f5cc32", "#443808"), ("#e34850", "#4a1117")])
-def test_icon_portrait_sits_on_the_plain_tile_inside_the_outer_silhouette(monkeypatch, platform, appearance, girl, colors):
+def test_icon_portrait_sits_on_the_plain_tile_inside_the_outer_silhouette(monkeypatch, appearance, girl):
     """The tile keeps the background's own geometry and fill with no stroke
     (the ring is disabled), the portrait is clipped to that outline and its
     lowest nodes are dragged past the bottom edge so the clip crops her."""
@@ -104,10 +102,10 @@ def test_icon_portrait_sits_on_the_plain_tile_inside_the_outer_silhouette(monkey
     spec.loader.exec_module(module)
     assert module.BORDER_ENABLED is False
     art = SimpleNamespace(
-        backgrounds=source / "assets/backgrounds", colors=colors, commit="0123456",
+        backgrounds=source / "assets/backgrounds",
         bboxes={girl: (0, 0, 100, 90)}, paths={girl: '<path d="M 0 0 L 100 0 L 100 90 L 0 90 z"/>'},
     )
-    name = f"squircle-{platform}{appearance}.svg"
+    name = f"squircle-{appearance}.svg"
     ns = {"svg": "http://www.w3.org/2000/svg"}
     original = ET.parse(art.backgrounds / name).find("svg:rect", ns)
     result = ET.fromstring(module.compose_svg(art, girl, name))
@@ -116,25 +114,21 @@ def test_icon_portrait_sits_on_the_plain_tile_inside_the_outer_silhouette(monkey
     geometry = tuple(float(original.attrib[key]) for key in ("x", "y", "width", "height", "rx"))
     assert tuple(float(tile.attrib[key]) for key in ("x", "y", "width", "height", "rx")) == geometry
     assert tile.get("stroke") is None and tile.get("stroke-width") is None
-    expected_fill = (colors or ("#ffffff", module.DARK_HEX))[appearance == "dark"]
-    assert tile.get("fill") == expected_fill
+    assert tile.get("fill") == original.attrib["fill"]
     clip = result.find("svg:defs/svg:clipPath/svg:rect", ns)
     assert clip is not None
     assert tuple(float(clip.attrib[key]) for key in ("x", "y", "width", "height", "rx")) == geometry
     group = result[-1]
-    portrait = group[-1]
     portraits = [child for child in group if child.tag == f"{{{ns['svg']}}}svg"]
-    assert portraits == [portrait], "extend the existing contour, not a duplicate strip"
-    # The commit badge rides inside the same clip, so its anti-aliased edge can
-    # never add alpha outside the plate (visible at targetsize-16..30).
-    assert [child.tag for child in group[:-1]] == [f"{{{ns['svg']}}}g"]
+    assert len(portraits) == 1, "extend the existing contour, not a duplicate strip"
+    portrait = portraits[0]
     assert portrait.get("preserveAspectRatio") == "xMidYMax meet"
     assert tuple(float(portrait.attrib[key]) for key in ("x", "y", "width", "height")) == module.GIRL_BOXES[name]
     clip_path = result.find("svg:defs/svg:clipPath", ns)
     assert clip_path is not None
     assert group.get("clip-path") == f"url(#{clip_path.attrib['id']})"
     assert portrait.get("overflow") == "visible"
-    assert len(result.findall(".//svg:path", ns)) == 2  # one badge and one portrait
+    assert len(result.findall(".//svg:path", ns)) == 1
     # The dragged bottom node lands below the tile: the clip, not a gap, ends her.
     _x, y, width, height, _ = geometry
     _, by, bw, bh = art.bboxes[girl]

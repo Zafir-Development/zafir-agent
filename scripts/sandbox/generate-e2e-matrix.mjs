@@ -35,29 +35,20 @@ import { fileURLToPath } from 'node:url';
  * The closed method/version vocabulary. Workflows key off these exact
  * strings, so they are types, not conventions.
  *
- * @typedef {'latest'} InstallerVersion
- *   A published artifact version. The GUI installer this union described was
- *   removed with Hermes-Setup; the union remains for the packaged-bundle legs.
- * @typedef {'installer-script' | 'packaged-app'} InstallMethod
- *   installer-script is the platform's one-liner (curl | bash on
- *   linux/macos, irm | iex on windows); packaged-app installs a signed
- *   bundle. The desktop-stage opt-in and the GUI installer were removed, so
- *   the plain one-liner is the only source install method. The signed
- *   bundle's native in-app update pair is
- *   declared separately, not crossed with source-checkout update methods.
- * @typedef {InstallMethod | 'hermes-update' | 'open-app-update' | 'hermes-desktop-app-update'} UpdateMethod
+ * @typedef {'installer-script'} InstallMethod
+ *   The platform's one-liner (curl | bash on linux/macos, irm | iex on
+ *   windows). Packaged installs (signed bundle, GUI installer) were removed,
+ *   so the source one-liner is the only install method.
+ * @typedef {InstallMethod | 'hermes-update' | 'hermes-desktop-app-update'} UpdateMethod
  *   Every install method doubles as an update method (re-run it over the
- *   existing install), plus the updater CLI and the two app-update
- *   variants. The variants differ by launch surface: open-app-update
- *   starts the app from the OS entry point a packaged install registers;
- *   hermes-desktop-app-update starts the app via `hermes desktop`, which
- *   every install method provides on every OS that ships the desktop app.
- *   Both then update through the app's own Update button.
+ *   existing install), plus the updater CLI and the source app-update
+ *   variant. hermes-desktop-app-update starts the app via `hermes desktop`,
+ *   which a source install provides on every OS that ships the desktop app,
+ *   and then updates through the app's own Update button.
  * @typedef {'linux' | 'windows' | 'macos'} Os
  *
- * @typedef {{method: InstallMethod, versions?: InstallerVersion[]}} InstallEntry
- * @typedef {{method: UpdateMethod, versions?: InstallerVersion[]}} UpdateEntry
- *   `versions` expands the entry into one combination per version.
+ * @typedef {{method: InstallMethod}} InstallEntry
+ * @typedef {{method: UpdateMethod}} UpdateEntry
  * @typedef {{install: InstallEntry[], update: UpdateEntry[], secondUpdate?: never[]}} OsSpec
  *   secondUpdate (install -> update -> update again) is a real future axis
  *   -- the updater that RESULTS from an update must itself update -- typed
@@ -91,17 +82,6 @@ import { fileURLToPath } from 'node:url';
  */
 export function legId(name) {
   return name.replace(/[^A-Za-z0-9._-]+/g, '-');
-}
-
-/** One pinned package transition; source-release sampling does not apply.
- * @param {'windows' | 'macos'} os
- * @param {string} oldTag
- * @returns {{include: MatrixEntry[]}}
- */
-export function bundledMatrix(os, oldTag) {
-  const name = `${os}: packaged-app -> open-app-update (${oldTag} -> HEAD)`;
-  return { include: [{ name, leg_id: legId(name), install_method: 'packaged-app',
-    update_method: 'open-app-update', install_ref: oldTag, update_ref: 'HEAD', tag_has_desktop: true }] };
 }
 
 /**
@@ -170,16 +150,6 @@ export const SPEC = {
 };
 
 /**
- * Expand one method entry into concrete ids ("<method>@<version>").
- * @param {InstallEntry | UpdateEntry} entry
- * @returns {string[]}
- */
-export function expandMethod(entry) {
-  if (!entry.versions) return [entry.method];
-  return entry.versions.map((v) => `${entry.method}@${v}`);
-}
-
-/**
  * Every {os, install, update} combination in SPEC.
  * @param {Record<Os, OsSpec>} spec
  * @returns {{os: Os, install: string, update: string}[]}
@@ -188,9 +158,9 @@ export function generateEnvironments(spec) {
   /** @type {{os: Os, install: string, update: string}[]} */
   const envs = [];
   for (const [os, osSpec] of /** @type {[Os, OsSpec][]} */ (Object.entries(spec))) {
-    for (const install of osSpec.install.flatMap(expandMethod)) {
-      for (const update of osSpec.update.flatMap(expandMethod)) {
-        envs.push({ os, install, update });
+    for (const install of osSpec.install) {
+      for (const update of osSpec.update) {
+        envs.push({ os, install: install.method, update: update.method });
       }
     }
   }
@@ -245,10 +215,6 @@ const ROUTE_OSES = /** @type {Record<string, Os[]>} */ ({
   installer: ['linux'],
   'windows-desktop': ['windows'],
   'macos-desktop': ['macos'],
-  // Bundled legs come from bundle-plan.mjs, not this matrix.
-  bundled: [],
-  'windows-bundled': [],
-  'macos-bundled': [],
 });
 
 /**
@@ -304,12 +270,13 @@ export function selectRoute(matrices, route) {
 /**
  * Does this method id need the starting tag to ship the desktop app?
  * Shared by the plan chart (pre-desktop cells) and the results chart
- * (labeling WHY a skipped leg skipped).
+ * (labeling WHY a skipped leg skipped). Only the source app-update route
+ * launches the desktop app; the packaged-app route is gone.
  * @param {string} m
  * @returns {boolean}
  */
 export function methodNeedsDesktop(m) {
-  return m === 'open-app-update' || m === 'hermes-desktop-app-update';
+  return m === 'hermes-desktop-app-update';
 }
 
 /**

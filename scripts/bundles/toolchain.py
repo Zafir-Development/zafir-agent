@@ -1,4 +1,4 @@
-"""Child-scoped desktop build tools, independent of the invoking Hermes install.
+"""Child-scoped native build tools, independent of the invoking Hermes install.
 
 This module is stdlib-only until preparation runs inside the isolated child.
 """
@@ -91,7 +91,7 @@ def run_preparation(source: Path, work: Path, cache: Path, request_file: Path,
     return subprocess.run(
         [sys.executable, "-I", "-S", "-B", "-c", launcher,
          str(source), str(cache), str(request_file.resolve()), str(Path(__file__).resolve()),
-         str(worker or source / "scripts/bundles/desktop_prepare.py")],
+         str(worker or source / "scripts/bundles/native_build.py")],
         cwd=source, env=environment, stdin=subprocess.DEVNULL,
         check=False,
     ).returncode
@@ -109,7 +109,7 @@ def prepare_tools(source: Path, work: Path, cache: Path,
 
     source, work, cache = source.resolve(), work.resolve(), cache.resolve()
     if store_root() != cache / "tools":
-        raise ValueError("desktop tools require the isolated preparation worker")
+        raise ValueError("native tools require the isolated preparation worker")
     prepared = dict(env)
     if pm.current_target() == "win32-arm64":
         from pm.native_build import prepare_windows_environment

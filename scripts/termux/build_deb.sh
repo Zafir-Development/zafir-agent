@@ -79,7 +79,7 @@ if [ -n "$COMMIT_MODE" ] || [ -n "$RELEASE_COMMIT" ]; then
 import sys
 from pathlib import Path
 sys.path.insert(0, sys.argv[1])
-from scripts.releases.commit_build import version_at
+from scripts.releases.versioning import version_at
 version = sys.argv[4][1:] if sys.argv[4] else version_at(Path(sys.argv[2]), sys.argv[3])
 print(version)
 PY

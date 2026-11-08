@@ -5,7 +5,6 @@
  * Generated icons are NOT committed (see scripts/generate_icons.py) — every
  * consuming pipeline regenerates them before building:
  *   - website:  website/scripts/prebuild.mjs (docusaurus prebuild)
- *   - desktop:  apps/desktop/package.json prebuild + predev
  *   - web:       web/package.json prebuild
  *
  * The renderer runs on the Hermes runtime interpreter (HERMES_PYTHON, else

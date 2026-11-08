@@ -499,12 +499,8 @@ def abandon(version: str, *, repo: Path, remote: str, repository: str, execute, 
             for _version, attempt, tag in matching]
 
 
-def next_steps(result: dict, *, bold: bool = False) -> str:
-    """Say what was attempted, where its CI runs, and the one command that publishes it.
-
-    ``bold`` wraps the skipped-tests warning in ANSI bold; the caller decides
-    from the terminal, so piped output stays plain.
-    """
+def next_steps(result: dict) -> str:
+    """Say what was attempted, where its CI runs, and the one command that publishes it."""
     version, tag = result["version"], result["tag"]
     actions_url = f"https://github.com/{result['repository']}/actions/workflows/{WORKFLOW}"
     lines = [
@@ -513,19 +509,9 @@ def next_steps(result: dict, *, bold: bool = False) -> str:
                           or f"the run is not listed yet. Find {tag} at {actions_url}"),
     ]
     lanes = result["lanes"]
-    left_out = [name for name in lane_set.LEFT_OUT if name not in lanes]
+    left_out = [name for name in lane_set.NAMES if name not in lanes]
     if left_out:
-        effects = "; ".join(lane_set.LEFT_OUT[name] for name in left_out)
-        lines.append(f"Not built: {', '.join(left_out)}. {effects[0].upper()}{effects[1:]}.")
-    if lane_set.has_bundles(lanes) and not lane_set.advances_desktop(lanes):
-        lines.append("This is a partial desktop release: its packages are verified, but the desktop "
-                     "update channel and feeds stay on the previous release (they move only when "
-                     "windows and macos-arm64 are both built).")
-    untested = [name for name in lane_set.NAMES if name not in lanes and name not in lane_set.LEFT_OUT
-                and not (name == "termux-checks" and "termux" not in lanes)]
-    if untested:
-        warning = f"Not tested: {', '.join(untested)}"
-        lines.append(f"\033[1m{warning}\033[0m" if bold else warning)
+        lines.append(f"Not run: {', '.join(left_out)}.")
     lines.append(f"Draft release: {result['url']}")
     if result["autopublish"]:
         lines.append("Edit the notes in the draft release. Autopublish is on: "
@@ -586,7 +572,7 @@ def cmd_release(args) -> None:
         published=published_stable_identity(repository), run_wait=RUN_WAIT_SECONDS,
         confirm_abandon=_abandon_prompt(), inspect=lambda command: _inspect(repo, command),
     )
-    print(next_steps(result, bold=sys.stdout.isatty() and "NO_COLOR" not in os.environ))
+    print(next_steps(result))
 
 
 def cmd_changelog(args) -> None:
