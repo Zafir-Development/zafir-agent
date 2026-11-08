@@ -22,7 +22,7 @@ function legNames(matrices: Matrices): string[] {
 
 test('a leg name, or the job name GitHub shows for it, runs exactly that leg', () => {
   const leg: Leg | undefined = generate('all').windows.include.find(l =>
-    l.name.includes('installer-script+desktop -> desktop-installer@latest')
+    l.name.includes('installer-script -> hermes-update')
   )
 
   expect(leg).toBeDefined()

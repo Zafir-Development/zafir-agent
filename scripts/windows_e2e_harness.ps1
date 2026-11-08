@@ -21,23 +21,23 @@ foreach ($required in @("Phase", "InstallMethod", "Route", "InstallRef")) {
     if (-not $byName.ContainsKey($required)) { Write-Host "missing param: $required"; exit 1 }
 }
 $imSet = ($byName["InstallMethod"].Attributes | Where-Object { $_.TypeName.Name -eq "ValidateSet" }).PositionalArguments.Value
-foreach ($m in @("desktop-installer@latest", "installer-script", "installer-script+desktop")) {
+foreach ($m in @("desktop-installer@latest", "installer-script")) {
     if ($imSet -notcontains $m) { Write-Host "InstallMethod ValidateSet missing $m"; exit 1 }
 }
 $rSet = ($byName["Route"].Attributes | Where-Object { $_.TypeName.Name -eq "ValidateSet" }).PositionalArguments.Value
-foreach ($m in @("open-app-update", "hermes-desktop-app-update", "hermes-update", "installer-script", "installer-script+desktop", "desktop-installer@latest")) {
+foreach ($m in @("open-app-update", "hermes-desktop-app-update", "hermes-update", "installer-script", "desktop-installer@latest")) {
     if ($rSet -notcontains $m) { Write-Host "Route ValidateSet missing $m"; exit 1 }
 }
 Write-Host "parameter surface: OK"
 
 # 3. Dispatch bodies reference the right arms (AST-level: the switch on
-# InstallMethod contains the three arms; the switch on Route contains all
-# six, with desktop-installer@latest re-running the GUI installer).
+# InstallMethod contains both source/GUI arms; the switch on Route contains
+# all of them, with desktop-installer@latest re-running the GUI installer).
 $text = Get-Content -LiteralPath $driver -Raw
 foreach ($needle in @(
     'function Invoke-PhaseInstall',
     'function Invoke-PhaseUpdate',
-    'Invoke-RefInstaller $state.old "old" -IncludeDesktop',
+    'Invoke-RefInstaller $state.old "old"',
     'Invoke-HermesDesktopAppUpdate $state.current',
     'Invoke-HermesUpdate',
     'Invoke-PhaseInstallGui -Mode "update"'

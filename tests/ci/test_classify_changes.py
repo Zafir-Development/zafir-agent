@@ -46,7 +46,6 @@ DEFAULT = {
     "npm_lock": True,
     "bootstrap": True,
     "desktop_updater": True,
-    "rust": True,
     "remote_backends": True,
     "catalog": True,
 }
@@ -54,7 +53,7 @@ DEFAULT = {
 SLOW_LANES = {"docker", "nix", "e2e", "e2e_upgrade", "e2e_desktop_core", "e2e_desktop_update"}
 
 
-def _lanes(python=False, frontend=False, site=False, scan=False, deps=False, uv_lock=False, npm_lock=False, bootstrap=False, desktop_updater=False, rust=False, docker_meta=False, python_prod=None, nix=False, docker=None, e2e=False, e2e_upgrade=False, e2e_desktop_core=False, e2e_desktop_update=False, remote_backends=False, catalog=False) -> dict[str, bool]:
+def _lanes(python=False, frontend=False, site=False, scan=False, deps=False, uv_lock=False, npm_lock=False, bootstrap=False, desktop_updater=False, docker_meta=False, python_prod=None, nix=False, docker=None, e2e=False, e2e_upgrade=False, e2e_desktop_core=False, e2e_desktop_update=False, remote_backends=False, catalog=False) -> dict[str, bool]:
     # python_prod tracks python except for tests-only diffs; default it to
     # python so the majority of cases don't need to spell it out.
     #
@@ -81,7 +80,6 @@ def _lanes(python=False, frontend=False, site=False, scan=False, deps=False, uv_
         "npm_lock": npm_lock,
         "bootstrap": bootstrap,
         "desktop_updater": desktop_updater,
-        "rust": rust,
         "remote_backends": remote_backends,
         "catalog": catalog,
     }
@@ -197,7 +195,8 @@ CASES = {
     "docs-only → no nix": (["README.md"], _lanes()),
     # install.ps1 and its PowerShell suites are exercised by platforms("windows")
     # pytest files, so they must turn on python (which gates tests-os).
-    "install.ps1 → python + e2e_upgrade": (["scripts/install.ps1"], _lanes(python=True, e2e_upgrade=True)),
+    "install.ps1 → python + e2e_upgrade + bootstrap": (
+        ["scripts/install.ps1"], _lanes(python=True, bootstrap=True, e2e_upgrade=True)),
     "installer suite → python": (["scripts/tests/test-install-ps1-longpath.ps1"], _lanes(python=True)),
     # The Windows desktop-update hand-off is a PowerShell integration surface:
     # its tests spawn the real script and poll its loopback server. They run
@@ -229,25 +228,6 @@ CASES = {
     ),
     "python source alone → no desktop_updater lane": (["gateway/run.py"], _lanes(python=True, scan=True)),
     # `.rs` lives under apps/, so it matches `frontend` too. That lane builds
-    # TypeScript and cannot notice a Rust error — before `rust` existed it was
-    # the ONLY lane a Rust change ran, and the crate's tests never executed.
-    "rust source → rust": (
-        ["apps/bootstrap-installer/src-tauri/src/powershell.rs"],
-        _lanes(frontend=True, bootstrap=True, rust=True),
-    ),
-    "cargo lockfile → rust": (
-        ["apps/bootstrap-installer/src-tauri/Cargo.lock"],
-        _lanes(frontend=True, bootstrap=True, rust=True),
-    ),
-    # Non-.rs files in the crate still change what cargo builds.
-    "tauri config → rust": (
-        ["apps/bootstrap-installer/src-tauri/tauri.conf.json"],
-        _lanes(frontend=True, bootstrap=True, rust=True),
-    ),
-    "ts source alone → no rust lane": (
-        ["apps/bootstrap-installer/src/main.tsx"],
-        _lanes(frontend=True, bootstrap=True),
-    ),
     # Unknown top-level file keeps Python on rather than risk a silent skip.
     "unknown toplevel → python": (["Makefile"], _lanes(python=True)),
     "mixed docs+python → python": (["README.md", "agent/x.py"], _lanes(python=True, scan=True)),
@@ -321,10 +301,6 @@ CASES = {
         ["apps/shared/eslint.config.mjs"],
         _lanes(frontend=True),
     ),
-    "bootstrap-installer eslint config → frontend + bootstrap": (
-        ["apps/bootstrap-installer/eslint.config.mjs"],
-        _lanes(frontend=True, bootstrap=True),
-    ),
     "prettier config → python": (
         [".prettierrc"],
         _lanes(python=True),
@@ -342,10 +318,6 @@ CASES = {
     "setup-hermes.sh → bootstrap lane": (
         ["setup-hermes.sh"],
         _lanes(python=True, bootstrap=True, python_prod=True, e2e_upgrade=True),
-    ),
-    "tauri installer source → bootstrap + rust": (
-        ["apps/bootstrap-installer/src-tauri/src/lib.rs"],
-        _lanes(frontend=True, bootstrap=True, rust=True),
     ),
     "composite action → fail-open all": (
         [".github/actions/retry/action.yml"],
@@ -589,10 +561,9 @@ def test_ci_jobs_only_gate_on_detect_outputs_that_detect_actually_declares():
     """An ``if`` that reads an undeclared output resolves to the empty string.
 
     The lane then reports "skipping" on every PR, forever, and nothing goes red
-    — there is no error for referencing an output a job never declared. That is
-    exactly how the ``rust`` lane shipped dead: the classifier emitted it and
-    the composite action re-exported it, but ci.yaml's ``detect`` job did not,
-    so ``needs.detect.outputs.rust`` was never anything but "".
+    — there is no error for referencing an output a job never declared. A lane
+    the classifier emits, the composite action re-exports, and ``detect`` never
+    declares silently never runs.
     """
     ci = _yaml(".github/workflows/ci.yaml")
     declared = set(ci["jobs"]["detect"]["outputs"])

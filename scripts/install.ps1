@@ -1,12 +1,11 @@
 # Hermes Agent bootstrap: git checkout + venv + hermes command on PATH.
 # Heavy dependencies (tool binaries, browsers, node) are pm's job after
-# this: `hermes pm install`. Stage protocol kept for Hermes-Setup:
+# this: `hermes pm install`. Stage protocol kept for the install-script CI
+# lane:
 #   -Manifest             print the stage list as JSON
 #   -Stage NAME [-Json]   run one stage
 #   -NonInteractive       skip stages that need input
 #   -SkipSetup            deprecated alias for -NonInteractive
-#   -IncludeDesktop       add the desktop build stage
-#   -ProtocolVersion      print the stage protocol version
 #   -SkipBrowser          do not install the browser (Chromium); remembered by
 #                         later installs and `hermes update`, undone by
 #                         `hermes pm install chromium`
@@ -29,13 +28,11 @@ param(
     [string]$InstallDir = $(if ($env:HERMES_HOME) { "$env:HERMES_HOME\hermes-agent" } else { "$env:LOCALAPPDATA\hermes\hermes-agent" }),
     [switch]$Manifest,
     [string]$Stage,
-    [switch]$ProtocolVersion,
     [switch]$NonInteractive,
     # Pre-rework spelling of -NonInteractive, still accepted so install
     # wrappers written against the old switch keep binding (#125350).
     [switch]$SkipSetup,
     [switch]$Json,
-    [switch]$IncludeDesktop,
     # Same opt-out as install.sh --skip-browser: PM records it, so later
     # installs and `hermes update` keep the browser off until
     # `hermes pm install chromium` opts back in.
@@ -285,8 +282,8 @@ public static extern int GetLongPathNameW(string lpszShortPath, System.Text.Stri
 
 function Set-LongProfileEnvVars {
     # Normalize every profile-rooted variable the install reads, not just
-    # %TEMP%: the desktop stage derives InstallDir from %LOCALAPPDATA%, and a
-    # short root there fails the post-build probe after a successful build.
+    # %TEMP%: InstallDir is derived from %LOCALAPPDATA%, and a short root
+    # there fails the post-build probe after a successful build.
     # Returns $true when anything was rewritten.
     $rewrote = $false
     $script:NormalizedPathRewrites = @{}
@@ -312,8 +309,8 @@ $script:NormalizedPathRewrites = @{}
 
 # (Dot-source guard, prologue side: a dot-source must not rewrite the
 # caller's process env, so the normalization prologue runs only on real
-# entry. Called from the entry dispatch below, before -ProtocolVersion and
-# every other switch, so the resolved paths are always the install's own.)
+# entry. Called from the entry dispatch below, before every other switch, so
+# the resolved paths are always the install's own.)
 function Initialize-ResolvedPaths {
     $script:NormalizedProfilePaths = Set-LongProfileEnvVars
 
@@ -713,9 +710,8 @@ function Invoke-Native([scriptblock]$Command, [switch]$Utf8Output) {
 }
 
 # Interactive runs collapse child-process output (git, uv, pm, the builds)
-# into one status line. CI, -Verbose and redirected output -- the
-# Hermes-Setup -Json driver, E2E transcripts -- keep the full stream those
-# readers parse.
+# into one status line. CI, -Verbose and redirected output -- the -Json
+# protocol and E2E transcripts -- keep the full stream those readers parse.
 function Test-QuietOutput {
     if ($env:CI -or $env:GITHUB_ACTIONS -or $env:HERMES_INSTALL_VERBOSE) { return $false }
     if ($VerbosePreference -ne 'SilentlyContinue') { return $false }
@@ -729,7 +725,7 @@ function Write-StatusLine([string]$Text, [int]$Width) {
 }
 
 # The error line of a failed command's output: the first fatal:/error: line (git's
-# cause; later ones are generic), else the last non-empty one. Fail reasons carry it, and Hermes-Setup shows the reason
+# cause; later ones are generic), else the last non-empty one. Fail reasons carry it, and CI shows the reason
 # as-is, so the screen names the cause (git's "fatal: ...") and not just the step.
 $script:NativeError = $null
 function Select-ErrorLine($Lines) {
@@ -773,7 +769,7 @@ function Invoke-Logged {
     }
     if (-not $logWriter) {
         Log $StatusLabel
-        # stderr stays on stderr (Hermes-Setup logs it); the lines are kept so a
+        # stderr stays on stderr (CI logs it); the lines are kept so a
         # failure reason can name the cause.
         # Named -TypeName: a positional New-Object binds to callers' New-Object shims.
         $outputLines = New-Object -TypeName 'System.Collections.Generic.Queue[string]'
@@ -876,7 +872,6 @@ function Emit-Frame([bool]$ok, [string]$name, [bool]$skipped, [string]$reason = 
     $frame | ConvertTo-Json -Compress | Write-Output
 }
 
-$ProductTitle = if ($IncludeDesktop) { "Install command and app + desktop" } else { "Install command and app" }
 $Stages = @(
     @{ name = "prerequisites"; title = "System prerequisites"; category = "runtime"; needs_user_input = $false },
     @{ name = "repository"; title = "Download Hermes Agent"; category = "runtime"; needs_user_input = $false },
@@ -884,9 +879,8 @@ $Stages = @(
     @{ name = "python-deps"; title = "Install Python dependencies"; category = "runtime"; needs_user_input = $false },
     @{ name = "config"; title = "Prepare config and skills"; category = "configuration"; needs_user_input = $false },
     # The shared completion tail -- the same call `hermes update` makes -- so
-    # the manifest and the run cannot disagree. -IncludeDesktop selects the
-    # desktop product inside this stage instead of adding a second build stage.
-    @{ name = "products"; title = $ProductTitle; category = "runtime"; needs_user_input = $false },
+    # the manifest and the run cannot disagree.
+    @{ name = "products"; title = "Install command and app"; category = "runtime"; needs_user_input = $false },
     @{ name = "setup"; title = "Configure API keys and settings"; category = "configuration"; needs_user_input = $true },
     @{ name = "gateway"; title = "Configure gateway service"; category = "configuration"; needs_user_input = $true }
 )
@@ -1171,7 +1165,7 @@ function Stage-Repository {
         }
         if ($LASTEXITCODE) { Fail "git checkout failed$(Get-NativeDetail)" git_checkout_failed }
         # --no-stat: across a large gap (v2026.7.1 -> today is ~27k lines) the
-        # diffstat arrives as one burst. Hermes-Setup.exe forwards every line
+        # diffstat arrives as one burst. The GUI installer forwarded every line
         # to its window as a separate event; the burst overflows the Windows
         # posted-message queue (10k), events drop, and the installer's Launch
         # button can then hang on "Launching" forever.
@@ -1361,16 +1355,15 @@ function Stage-PythonDeps {
     Invoke-BootstrapPm
 }
 
-function Invoke-SourceCompletion([bool]$Desktop) {
+function Invoke-SourceCompletion {
     # The whole tail in one place, by calling the completion an update calls:
-    # publish the commands, build the products (tui/web, plus the desktop app
-    # when asked), then run the post-build maintenance that syncs bundled
-    # skills and migrates config. Node, browsers and the frontend build tools
-    # arrive through pm as the build asks for them; the bootstrap interpreter
-    # itself only re-enters the tree on PM's selected Python.
+    # publish the commands, build the products (tui/web), then run the
+    # post-build maintenance that syncs bundled skills and migrates config.
+    # Node, browsers and the frontend build tools arrive through pm as the
+    # build asks for them; the bootstrap interpreter itself only re-enters the
+    # tree on PM's selected Python.
     $bootPy = Get-BootstrapPython
     $completionArgs = @('-I', '-B', '-X', 'utf8', 'hermes_cli/source_completion.py', '--source', $InstallDir)
-    if ($Desktop) { $completionArgs += '--desktop' }
     Push-Location $InstallDir
     try {
         Invoke-Logged "Building the hermes command and apps" { & $bootPy @completionArgs }
@@ -1400,27 +1393,9 @@ function Publish-UserCommand {
     Write-Ok "hermes command installed at $binDir"
 }
 
-function Test-DesktopProductPresent {
-    # Does this checkout already carry a built desktop app? A plain repair or
-    # upgrade rerun on a desktop install must REBUILD it rather than leave a
-    # bundle built by the previous code: the app is part of that install and its
-    # artifacts live inside the tree, so an update makes them stale, not gone.
-    # electron-builder suffixes the output dir with the arch on every non-x64
-    # target (win-arm64-unpacked, linux-arm64-unpacked, mac-arm64), so the x64
-    # names alone miss a desktop build on ARM64 (#94703).
-    $release = Join-Path $InstallDir "apps/desktop/release"
-    foreach ($candidate in @("win-unpacked", "win-ia32-unpacked", "win-arm64-unpacked",
-                             "linux-unpacked", "linux-arm64-unpacked", "mac", "mac-arm64")) {
-        if (Test-Path (Join-Path $release $candidate)) { return $true }
-    }
-    return $false
-}
-
 function Stage-Products {
-    $desktop = [bool]$IncludeDesktop -or [bool](Test-DesktopProductPresent)
-    Invoke-SourceCompletion $desktop
+    Invoke-SourceCompletion
     Publish-UserCommand
-    if ($desktop) { Confirm-DesktopArtifact }
 }
 
 function Set-LauncherUserPath([string]$binDir) {
@@ -1433,8 +1408,8 @@ function Set-LauncherUserPath([string]$binDir) {
     # process-wide, so prepending it here makes `hermes` resolve in the
     # caller's own window whenever this code runs in the caller's process
     # (`irm | iex`, `& .\install.ps1`); a -File child just discards it.
-    # Recorded before the first prepend only (the -IncludeDesktop ladder
-    # publishes twice): it is what the caller's shell inherited.
+    # Recorded before the first prepend only: it is what the caller's shell
+    # inherited.
     $sessionEntries = @($env:Path -split ';' | ForEach-Object { $_.TrimEnd('\') })
     $onPath = $sessionEntries -contains $binDir.TrimEnd('\')
     if ($null -eq $script:BinDirOnCallerPath) { $script:BinDirOnCallerPath = $onPath }
@@ -1466,17 +1441,23 @@ function Stage-Config {
 }
 
 function Invoke-InstalledHermes([string[]]$CommandArgs) {
-    # Load the helper from its text, not its path. Under `irm | iex` this
-    # installer runs as a string that execution policy never checks, but
-    # dot-sourcing a .ps1 from disk is a file load. The default Restricted
-    # policy (Windows Sandbox, fresh machines) refuses that load.
-    $runtimeHelper = Join-Path $InstallDir 'scripts/desktop-update/runtime.ps1'
-    . ([ScriptBlock]::Create([IO.File]::ReadAllText($runtimeHelper)))
-    # Not `$command`: Invoke-Native's `$Command` parameter shadows it
-    # (names are case-insensitive) and the block would invoke itself.
-    $runtimeCommand = @(Get-HermesRuntimeCommand -InstallRoot $InstallDir)
-    $runtimeArgs = @($runtimeCommand | Select-Object -Skip 1) + $CommandArgs
-    Invoke-Native { & $runtimeCommand[0] @runtimeArgs }
+    # Run the published launcher directly. Under `irm | iex` this installer
+    # runs as a string that execution policy never checks, but dot-sourcing a
+    # helper .ps1 from disk is a file load the default Restricted policy
+    # (Windows Sandbox, fresh machines) refuses. The launcher is an executable
+    # or a batch file, which execution policy does not gate, so it can be
+    # invoked without any helper script on disk.
+    $launcher = $null
+    foreach ($name in @('hermes.exe', 'hermes.cmd')) {
+        $candidate = Join-Path $InstallDir ".hermes\bin\$name"
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) { $launcher = $candidate; break }
+    }
+    if (-not $launcher) {
+        Fail "Installation launcher is missing under $InstallDir\.hermes\bin. Repair this installation." products_build_failed
+    }
+    # Not `$command`: Invoke-Native's `$Command` parameter shadows it (names are
+    # case-insensitive) and the block would invoke itself.
+    Invoke-Native { & $launcher @CommandArgs }
     if ($LASTEXITCODE) {
         $class = @{ setup = 'setup_failed'; gateway = 'gateway_failed' }[$CommandArgs[0]]
         Fail "hermes $($CommandArgs -join ' ') failed (exit $LASTEXITCODE)" $(if ($class) { $class } else { 'other' })
@@ -1494,140 +1475,6 @@ function Stage-Gateway {
     Invoke-InstalledHermes @('gateway', 'install', '--if-missing')
 }
 
-function Stage-Desktop {
-    # External-caller contract: -Stage desktop stays dispatchable on its own
-    # (see Invoke-StageByName). The work is the same completion call with the
-    # desktop product selected. Voice and wake extras are not synced here: pm
-    # lazy-installs them at first use (policy: Teknium, July 2026, #70509).
-    Invoke-SourceCompletion $true
-    Publish-UserCommand
-    Confirm-DesktopArtifact
-}
-
-function Confirm-DesktopArtifact {
-    # Probe the packaged artifact the completion just built -- the same
-    # candidates hermes_cli/main_desktop._desktop_packaged_executable resolves.
-    Push-Location $InstallDir
-    try {
-        $desktopDir = Join-Path $InstallDir "apps\desktop"
-        $candidates = @(
-            (Join-Path $desktopDir "release\win-unpacked\Hermes.exe"),
-            (Join-Path $desktopDir "release\win-ia32-unpacked\Hermes.exe"),
-            (Join-Path $desktopDir "release\win-arm64-unpacked\Hermes.exe")
-        )
-        $desktopExe = $null
-        foreach ($cand in $candidates) {
-            if (Test-Path $cand) { $desktopExe = $cand; break }
-        }
-        if (-not $desktopExe) {
-            Fail "desktop build produced no Hermes.exe under $desktopDir\release\*-unpacked" products_build_failed
-        }
-        Write-Ok "Desktop ready: $desktopExe"
-
-        # Grant ALL APPLICATION PACKAGES (S-1-15-2-2) RX on the unpacked
-        # app directory: Chromium's GPU/renderer sandboxes CHECK-fail with
-        # 0x80000003 without this ACE beside orphan AppContainer SIDs under
-        # %LOCALAPPDATA% (electron/electron#51761, hermes-agent#38216).
-        # Best-effort -- never fail an otherwise-good install over ACL.
-        try {
-            $appDir = Split-Path -Parent $desktopExe
-            Invoke-Native { & icacls $appDir /grant "*S-1-15-2-2:(OI)(CI)(RX)" /T /C /Q } | Out-Null
-            if ($LASTEXITCODE -eq 0) {
-                Log "Granted AppContainer read access on $appDir"
-            } else {
-                Write-Warn "icacls AppContainer grant returned exit $LASTEXITCODE for $appDir"
-            }
-        } catch {
-            Write-Warn "Could not grant AppContainer ACL: $($_.Exception.Message)"
-        }
-    } finally {
-        Pop-Location
-    }
-    New-DesktopShortcuts -TargetExe $desktopExe
-}
-
-function Stage-Complete {
-    $commit = $Commit
-    if (-not $commit) {
-        if (-not (Ensure-Git)) { Fail "no pinned Git artifact for this Windows architecture" unsupported_platform }
-        $commit = Invoke-Native { git -C $InstallDir rev-parse HEAD 2>$null }
-    }
-    if ($commit) {
-        $marker = [ordered]@{
-            schemaVersion = 1
-            pinnedCommit = "$commit"
-            pinnedBranch = $Branch
-            completedAt = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
-        }
-        $marker | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $InstallDir ".hermes-bootstrap-complete") -Encoding UTF8
-    }
-    if ($Channel) { Invoke-InstalledHermes @('update', '--set-channel', $Channel) }
-    if ($commit) { Write-Ok "Hermes Agent install complete (pinned $commit). Run: hermes" }
-}
-
-function New-DesktopShortcuts {
-    param([Parameter(Mandatory = $true)][string]$TargetExe)
-
-    # Best-effort: a shortcut failure must never fail an otherwise-good install.
-    try {
-        $shell = New-Object -ComObject WScript.Shell
-        $workDir = Split-Path -Parent $TargetExe
-
-        # Prefer the standalone icon.ico (shipped beside the exe via
-        # electron-builder extraResources -> resources/icon.ico) over the exe's
-        # embedded resource. An explicit .ico path is more stable across update
-        # cycles: pointing at "$TargetExe,0" makes Windows cache the icon it
-        # extracted from the exe at shortcut-creation time, and that cached
-        # bitmap can persist (showing the OLD/Electron icon) even after the exe
-        # is re-stamped on update. A dedicated .ico sidesteps that extraction.
-        $iconIco = Join-Path $workDir 'resources\icon.ico'
-        if (Test-Path $iconIco) {
-            $iconLocation = "$iconIco,0"
-        } else {
-            $iconLocation = "$TargetExe,0"
-        }
-
-        $targets = @(
-            (Join-Path ([Environment]::GetFolderPath('Programs')) 'Hermes.lnk'),
-            (Join-Path ([Environment]::GetFolderPath('Desktop')) 'Hermes.lnk')
-        )
-
-        foreach ($lnkPath in $targets) {
-            try {
-                $parent = Split-Path -Parent $lnkPath
-                if (-not (Test-Path $parent)) {
-                    New-Item -ItemType Directory -Force -Path $parent | Out-Null
-        }
-                $sc = $shell.CreateShortcut($lnkPath)
-                $sc.TargetPath = $TargetExe
-                # Not the exe's folder: the Desktop's children inherit it, and a helper
-                # that outlives the app then blocks the next update's swap (#101789).
-                $sc.WorkingDirectory = $env:USERPROFILE
-                $sc.IconLocation = $iconLocation
-                $sc.Description = 'Hermes Agent'
-                $sc.Save()
-                Write-Ok "Shortcut created: $lnkPath"
-            } catch {
-                Write-Warn "Could not create shortcut $lnkPath : $($_.Exception.Message)"
-            }
-        }
-
-        # Bust the Windows shell icon cache so the desktop/Start-Menu shortcut
-        # repaints with the (possibly newly-stamped) icon instead of a stale
-        # cached bitmap. Critical on the --update path: the exe was re-stamped
-        # with the Hermes icon, but without this the shortcut can keep drawing
-        # the old Electron icon until the user manually refreshes / reboots.
-        # Best-effort and silent -- never fail the install over a cosmetic cache.
-        try {
-            Invoke-Native { & ie4uinit.exe -show 2>$null }
-        } catch {
-            # ie4uinit may be absent/renamed on some SKUs -- ignore.
-        }
-    } catch {
-        Write-Warn "Skipping shortcut creation: $($_.Exception.Message)"
-    }
-}
-
 function Invoke-StageByName([string]$name) {
     switch ($name) {
         "prerequisites" { Stage-Prerequisites }
@@ -1638,7 +1485,6 @@ function Invoke-StageByName([string]$name) {
         "config" { Stage-Config }
         "setup" { Stage-Setup }
         "gateway" { Stage-Gateway }
-        "desktop" { Stage-Desktop }
         "complete" { Stage-Complete }
         default { Write-Error "unknown stage: $name"; exit 2 }
     }
@@ -1662,8 +1508,6 @@ $env:UV_NO_CONFIG = "1"
 # when its stdout is still the console) stream too once -Verbose asked for it.
 if ($VerbosePreference -ne 'SilentlyContinue') { $env:HERMES_INSTALL_VERBOSE = "1" }
 
-if ($ProtocolVersion) { Write-Output 1; exit 0 }
-
 if ($ShowResolvedPaths) {
     # Side-effect-free contract: by this point every mutation the prologue
     # performs (process-env 8.3 normalization) has already happened, and no
@@ -1681,12 +1525,10 @@ if ($Manifest) {
 
 if ($Stage) {
     # The $Stages table is the single authoritative list: it drives the
-    # -Manifest output AND the no-flag ladder, so -IncludeDesktop affects
-    # the real run exactly as the manifest advertises. "desktop" stays
-    # directly dispatchable via -Stage even though it is never listed
-    # (long-standing external-caller contract).
+    # -Manifest output AND the no-flag ladder, so the manifest and the run
+    # cannot disagree.
     $known = @($Stages | ForEach-Object { $_.name })
-    if ($known -notcontains $Stage -and $Stage -ne "desktop") {
+    if ($known -notcontains $Stage) {
         if ($Json) { Emit-Frame $false $Stage $false "unknown stage: $Stage" }
         else { [Console]::Error.WriteLine("unknown stage: $Stage") }
         exit 2
@@ -1709,7 +1551,7 @@ if ($Stage) {
 }
 
 # No -Stage: run the whole ladder — the same authoritative list the
-# manifest prints, so -IncludeDesktop inserts desktop here too.
+# manifest prints.
 $script:InstallStarted = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
 $script:InstallStage = "prerequisites"
 $script:InstallReceiptWritten = $false

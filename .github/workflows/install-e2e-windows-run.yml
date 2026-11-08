@@ -6,24 +6,13 @@
 # new job. The driver's phases share state via the workroot, and every leg
 # runs the REAL user surface for its methods:
 #
-#   desktop-installer@latest    the website's Hermes-Setup.exe, downloaded and
-#                               run headed, AutoHotkey clicks Install ->
-#                               Launch, the real Electron window must appear.
 #   installer-script            the irm | iex one-liner: the install.ps1
 #                               shipped AT the OLD ref, headless.
-#   installer-script+desktop    the same one-liner with -IncludeDesktop:
-#                               builds Hermes.exe AND registers Start Menu /
-#                               Desktop shortcuts.
 #   hermes-update               venv hermes.exe update.
-#   open-app-update             the app's own Update button, app launched
-#                               from the installed exe under Playwright's
-#                               Electron driver (Settings -> About ->
-#                               "Update now"); the production hand-off chain
-#                               runs untouched.
-#   hermes-desktop-app-update   the same button, app launched via `hermes
-#                               desktop`: the driver captures the product's
-#                               own spawn (argv/cwd/env) and re-executes it
-#                               under Playwright.
+#   hermes-desktop-app-update   the app's own Update button, app launched via
+#                               `hermes desktop`: the driver captures the
+#                               product's own spawn (argv/cwd/env) and
+#                               re-executes it under Playwright.
 #
 # Method pairs without a driver arm yet NATIVELY SKIP (grey check, no
 # runner): the capability knowledge lives here, next to the driver, so the
@@ -36,8 +25,8 @@
 #     windows:
 #       uses: ./.github/workflows/install-e2e-windows-run.yml
 #       with:
-#         install-method: desktop-installer@latest
-#         update-method: open-app-update
+#         install-method: installer-script
+#         update-method: hermes-update
 #         install-ref: v2026.8.3
 
 name: install-e2e windows leg
@@ -50,11 +39,11 @@ on:
         type: string
         default: ''
       install-method:
-        description: 'How OLD gets installed. Supported: desktop-installer@latest (website exe, AHK-clicked), installer-script (irm | iex install.ps1) and installer-script+desktop (the same with -IncludeDesktop). Declared-but-TODO methods skip.'
+        description: 'How OLD gets installed. Supported: installer-script (irm | iex install.ps1); packaged-app is the signed-bundle arm handled by the bundled-e2e job. Declared-but-TODO methods skip.'
         required: true
         type: string
       update-method:
-        description: 'How the install updates to HEAD. Supported: open-app-update (Update button under Playwright, from a desktop-bearing install), hermes-desktop-app-update (same button, app launched via hermes desktop), hermes-update, installer-script, installer-script+desktop, desktop-installer@latest (re-download Hermes-Setup.exe, AHK clicks Install over the existing install).'
+        description: 'How the install updates to HEAD. Supported: hermes-desktop-app-update (Update button under Playwright, app launched via hermes desktop), hermes-update, installer-script; open-app-update runs only for the signed-bundle arm.'
         required: true
         type: string
       install-ref:
@@ -68,7 +57,7 @@ on:
         type: string
         default: HEAD
       tag-has-desktop:
-        description: "Whether install-ref ships the desktop app (apps/desktop). The caller annotates this from the tag's own tree; desktop-method legs from pre-desktop releases natively skip."
+        description: "Whether install-ref ships the desktop app (apps/desktop). The caller annotates this from the tag's own tree; the app-update leg from a pre-desktop release natively skips."
         required: false
         type: boolean
         default: true
@@ -76,11 +65,6 @@ on:
         description: "Artifact-safe matrix leg id (from generate-e2e-matrix.mjs legId). Names this leg's logs + player artifacts so the report job can link a row to its zip."
         required: true
         type: string
-      setup-exe-url:
-        description: 'Bootstrap installer to install OLD with. Default: the latest published one — what a user downloads today.'
-        required: false
-        type: string
-        default: https://hermes-assets.nousresearch.com/Hermes-Setup.exe
       timeout-minutes:
         description: 'Job timeout. The install leg does real toolchain work and the update leg a full Electron rebuild.'
         required: false
@@ -171,19 +155,14 @@ jobs:
     # Short static name on purpose: name expressions render UNEXPANDED on
     # skipped jobs.
     name: e2e
-    # The implemented {install x update} pairs. Two rules feed the table:
-    #   * every desktop-surface method needs the starting tag to ship
-    #     apps/desktop (pre-desktop releases have no window to launch, no
-    #     Update button to click, no -IncludeDesktop to pass);
-    #   * open-app-update needs an OS entry point, which only the
-    #     desktop-bearing installs create.
+    # The implemented source {install x update} pairs. hermes-desktop-app-update
+    # also needs the starting tag to ship apps/desktop (pre-desktop releases
+    # have no window to launch and no Update button to click). The signed-bundle
+    # pair runs in the bundled-e2e job.
     if: >-
-      (inputs.install-method == 'installer-script'
-        || (contains(fromJSON('["installer-script+desktop", "desktop-installer@latest"]'), inputs.install-method) && inputs.tag-has-desktop))
+      inputs.install-method == 'installer-script'
       && (contains(fromJSON('["hermes-update", "installer-script"]'), inputs.update-method)
-        || (contains(fromJSON('["installer-script+desktop", "hermes-desktop-app-update", "desktop-installer@latest"]'), inputs.update-method) && inputs.tag-has-desktop)
-        || (inputs.update-method == 'open-app-update' && inputs.tag-has-desktop
-            && contains(fromJSON('["desktop-installer@latest", "installer-script+desktop"]'), inputs.install-method)))
+        || (inputs.update-method == 'hermes-desktop-app-update' && inputs.tag-has-desktop))
     runs-on: windows-latest-32-core
     timeout-minutes: ${{ inputs.timeout-minutes }}
 
@@ -259,16 +238,16 @@ jobs:
       # installers' uv/ripgrep).
       - name: Stage serve repo (main -> ${{ inputs.install-ref }})
         shell: powershell
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File tests\install\windows-e2e.ps1 -Phase stage -InstallMethod "${{ inputs.install-method }}" -Route "${{ inputs.update-method }}" -InstallRef "${{ inputs.install-ref }}" -UpdateRef "${{ inputs.update-ref }}" -SetupExeUrl ${{ inputs.setup-exe-url }}
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File tests\install\windows-e2e.ps1 -Phase stage -InstallMethod "${{ inputs.install-method }}" -Route "${{ inputs.update-method }}" -InstallRef "${{ inputs.install-ref }}" -UpdateRef "${{ inputs.update-ref }}"
 
       - name: Install ${{ inputs.install-ref }} (${{ inputs.install-method }})
         shell: powershell
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File tests\install\windows-e2e.ps1 -Phase install -InstallMethod "${{ inputs.install-method }}" -Route "${{ inputs.update-method }}" -InstallRef "${{ inputs.install-ref }}" -SetupExeUrl ${{ inputs.setup-exe-url }}
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File tests\install\windows-e2e.ps1 -Phase install -InstallMethod "${{ inputs.install-method }}" -Route "${{ inputs.update-method }}" -InstallRef "${{ inputs.install-ref }}"
 
       - name: Update ${{ inputs.install-ref }} -> ${{ inputs.update-ref }} (${{ inputs.update-method }})
         id: update
         shell: powershell
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File tests\install\windows-e2e.ps1 -Phase update -InstallMethod "${{ inputs.install-method }}" -Route "${{ inputs.update-method }}" -InstallRef "${{ inputs.install-ref }}" -SetupExeUrl ${{ inputs.setup-exe-url }}
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File tests\install\windows-e2e.ps1 -Phase update -InstallMethod "${{ inputs.install-method }}" -Route "${{ inputs.update-method }}" -InstallRef "${{ inputs.install-ref }}"
 
       # After everything, including the new runtime's launch and its smoke
       # checks: the bootstrap marker can complete on a later run than the
@@ -277,7 +256,7 @@ jobs:
       - name: Verify install stamps describe the updated checkout
         if: steps.update.outputs.known_failure == ''
         shell: powershell
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File tests\install\windows-e2e.ps1 -Phase verify-stamp -InstallMethod "${{ inputs.install-method }}" -Route "${{ inputs.update-method }}" -InstallRef "${{ inputs.install-ref }}" -SetupExeUrl ${{ inputs.setup-exe-url }}
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File tests\install\windows-e2e.ps1 -Phase verify-stamp -InstallMethod "${{ inputs.install-method }}" -Route "${{ inputs.update-method }}" -InstallRef "${{ inputs.install-ref }}"
 
       - name: Stage known-failure receipt
         if: steps.update.outputs.known_failure != ''

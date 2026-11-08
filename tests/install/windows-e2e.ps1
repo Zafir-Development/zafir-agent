@@ -77,15 +77,14 @@ param(
 
     # How OLD gets installed, named by the same ids the combination
     # generator (scripts/sandbox/generate-e2e-matrix.mjs) declares.
-    [ValidateSet("desktop-installer@latest", "installer-script", "installer-script+desktop")]
+    [ValidateSet("desktop-installer@latest", "installer-script")]
     [string]$InstallMethod = "desktop-installer@latest",
 
     # Update method to exercise in the update phase, same id namespace.
     # open-app-update (from a desktop-installer install) and hermes-update /
-    # installer-script / installer-script+desktop (from script installs) are
-    # implemented; the rest are declared arms so the surface is stable when
-    # they land.
-    [ValidateSet("open-app-update", "hermes-desktop-app-update", "hermes-update", "desktop-installer@latest", "installer-script", "installer-script+desktop")]
+    # installer-script (from script installs) are implemented; the rest are
+    # declared arms so the surface is stable when they land.
+    [ValidateSet("open-app-update", "hermes-desktop-app-update", "hermes-update", "desktop-installer@latest", "installer-script")]
     [string]$Route = "open-app-update",
 
     # The OLD version: the ref served as `main` while the installer runs,
@@ -467,7 +466,7 @@ function Write-LogGroup([string]$Title, [string]$LogPath) {
 }
 
 function Invoke-RefInstaller {
-    param([string]$Ref, [string]$Label, [switch]$IncludeDesktop)
+    param([string]$Ref, [string]$Label)
     $script = Join-Path $WorkRoot "install-$Label.ps1"
     (Invoke-Git @("-C", $RepoRoot, "show", "$Ref`:scripts/install.ps1")) -join "`n" |
         Set-Content -LiteralPath $script -Encoding UTF8
@@ -475,14 +474,6 @@ function Invoke-RefInstaller {
     $text = Get-Content -LiteralPath $script -Raw
     if ($text -match '\$NonInteractive') { $flags += "-NonInteractive" }
     else { $flags += "-SkipSetup" }
-    if ($IncludeDesktop) {
-        # The desktop stage is the point of this leg: a ref without the
-        # parameter is a hard failure, not a silent plain install.
-        if ($text -notmatch '\$IncludeDesktop') {
-            throw "E2E ASSERTION FAILED: ref $Ref does not support -IncludeDesktop; this leg cannot mean what it claims"
-        }
-        $flags += "-IncludeDesktop"
-    }
     New-Item -ItemType Directory -Path (Join-Path $WorkRoot "logs") -Force | Out-Null
     $log = Join-Path $WorkRoot "logs\install-$Label.log"
     # uv reads the CURRENT DIRECTORY's project metadata. Run from inside this
@@ -550,7 +541,7 @@ function Invoke-HermesUpdate {
     Assert-True ($updateExit -eq 0) "hermes update exited $updateExit (expected 0)"
 }
 
-# install.ps1 (with -IncludeDesktop) and `hermes update` normally finish in
+# install.ps1 and `hermes update` normally finish in
 # under 25 minutes. Past these deadlines the watchdog records every process
 # (pid, parent, start time, command line) plus a py-spy stack of each Python
 # process, then stops this leg's processes, so a hang fails with evidence --
@@ -1549,13 +1540,6 @@ function Invoke-PhaseInstall {
             Assert-True ((Get-InstalledHead) -eq $state.old) "installed checkout is at OLD"
             Test-HermesRuns "post-install-script"
         }
-        "installer-script+desktop" {
-            Write-Step "INSTALL (script+desktop): OLD's own install.ps1 -IncludeDesktop, headless"
-            Invoke-RefInstaller $state.old "old" -IncludeDesktop
-            Assert-True ((Get-InstalledHead) -eq $state.old) "installed checkout is at OLD"
-            Test-HermesRuns "post-install-script-desktop"
-            Assert-DesktopArtifact "OLD"
-        }
     }
     if ($InstallMethod -ne 'desktop-installer@latest') {
         Invoke-DesktopCheckpoint 'old' $state.old $InstallMethod
@@ -1567,7 +1551,7 @@ function Invoke-PhaseInstall {
 function Invoke-PhaseUpdate {
     $state = Read-State
     $script:ExpectedDesktop = if ($InstallMethod -ne 'installer-script' -or $Route -in @(
-        'installer-script+desktop', 'desktop-installer@latest', 'open-app-update', 'hermes-desktop-app-update'
+        'desktop-installer@latest', 'open-app-update', 'hermes-desktop-app-update'
     )) { 'present' } else { 'absent' }
     $env:HERMES_HOME = $HermesHome
     # Match the POSIX driver's explicit opt-out when a detached updater bypasses
@@ -1594,9 +1578,8 @@ function Invoke-PhaseUpdate {
 
     switch ($Route) {
         "open-app-update" {
-            # Meaningful only where an OS entry point exists - install.ps1
-            # -IncludeDesktop registers shortcuts too, so both desktop-
-            # bearing installs qualify; the workflow gate enforces which
+            # Meaningful only where an OS entry point exists: the desktop
+            # installer registers one, and the workflow gate enforces which
             # pairs are dispatched.
             Invoke-GuiUpdateDesktopRoute $state.current
         }
@@ -1609,10 +1592,6 @@ function Invoke-PhaseUpdate {
         "installer-script" {
             # A user re-running the one-liner today gets the CURRENT script.
             Invoke-RefInstaller $state.current "head"
-        }
-        "installer-script+desktop" {
-            Invoke-RefInstaller $state.current "head" -IncludeDesktop
-            Assert-DesktopArtifact "HEAD"
         }
         "desktop-installer@latest" {
             # A user re-downloading Hermes-Setup.exe and clicking Install over

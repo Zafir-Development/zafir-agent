@@ -58,14 +58,11 @@ outputs:
     description: Post/update the semantic JS lockfile (pnpm-lock.yaml / package-lock.json) diff PR comment.
     value: ${{ steps.classify.outputs.npm_lock }}
   bootstrap:
-    description: Run the bootstrap installer lane (install.sh sandbox + stamp verification).
+    description: Run the install-script lane (install.sh/install.ps1 sandbox + stamp verification).
     value: ${{ steps.classify.outputs.bootstrap }}
   desktop_updater:
     description: Run the Windows desktop-update hand-off (windows.ps1) integration tests.
     value: ${{ steps.classify.outputs.desktop_updater }}
-  rust:
-    description: Run `cargo test` for the Tauri bootstrap installer.
-    value: ${{ steps.classify.outputs.rust }}
   remote_backends:
     description: Run the SSH and Docker terminal backends against a real sshd and Docker daemon.
     value: ${{ steps.classify.outputs.remote_backends }}

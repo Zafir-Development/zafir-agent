@@ -28,8 +28,8 @@ def test_redirect_and_historical_installer_keep_transport_flags_and_exit(tmp_pat
     git("commit", "-qm", "old")
     old = git("rev-parse", "HEAD")
     source_body = script.read_text(encoding="utf-8")
-    script.write_text('case "$1" in --help) printf "%s\\n" "--skip-browser --include-desktop"; exit 0;; esac\n'
-                      '# --skip-browser --include-desktop\n' + source_body, encoding="utf-8")
+    script.write_text('case "$1" in --help) printf "%s\\n" "--skip-browser"; exit 0;; esac\n'
+                      '# --skip-browser\n' + source_body, encoding="utf-8")
     git("commit", "-qam", "new")
     new = git("rev-parse", "HEAD")
     subprocess.run(["git", "clone", "--bare", "-q", str(repo), str(serve)], env=env, check=True)
@@ -50,30 +50,27 @@ arm_source_redirect "$2" "$3" "$4"
 git clone -q https://github.com/NousResearch/hermes-agent.git "$3/clone"
 [ "$(git -C "$3/clone" rev-parse HEAD)" = "$6" ]
 run_source_installer "$2" "$3" "$3" "$5" old
-run_source_installer "$2" "$3" "$3" "$6" new desktop
+run_source_installer "$2" "$3" "$3" "$6" new
 ''')
     assert result.returncode == 0, result.stderr
     assert (work / "install-old.log").read_text(encoding="utf-8").splitlines() == ["--skip-setup"]
-    assert (work / "install-new.log").read_text(encoding="utf-8").splitlines() == ["--skip-setup", "--skip-browser", "--include-desktop"]
+    assert (work / "install-new.log").read_text(encoding="utf-8").splitlines() == ["--skip-setup", "--skip-browser"]
     assert (work / "install-new.sh").read_bytes() == script.read_bytes()
-    refused = run('run_source_installer "$2" "$3" "$3" "$5" unavailable desktop')
-    assert refused.returncode != 0 and "does not support --include-desktop" in refused.stderr
-    assert not (work / "install-unavailable.log").exists()
     script.write_text('case "$1" in\n'
-                      '  --help) printf "%s\\n" "--include-desktop"; exit 0;;\n'
+                      '  --help) printf "%s\\n" ""; exit 0;;\n'
                       '  --skip-browser) exit 23;;\n'
                       'esac\n'
-                      '# --skip-browser no longer skips browser installation; --include-desktop stays supported\n'
+                      '# --skip-browser no longer skips browser installation\n'
                       + source_body, encoding="utf-8")
     git("commit", "-qam", "reject retired browser flag")
-    current = run('run_source_installer "$2" "$3" "$3" HEAD current desktop')
+    current = run('run_source_installer "$2" "$3" "$3" HEAD current')
     assert current.returncode == 0, current.stderr
     assert (work / "install-current.log").read_text(encoding="utf-8").splitlines() == [
-        "--skip-setup", "--include-desktop",
+        "--skip-setup",
     ]
     # A PM installer supports --skip-browser as a real opt-out; the leg must
     # still install what users get by default, so the driver withholds it.
-    script.write_text('case "$1" in --help) printf "%s\\n" "--skip-browser --include-desktop"; exit 0;; esac\n'
+    script.write_text('case "$1" in --help) printf "%s\\n" "--skip-browser"; exit 0;; esac\n'
                       '# "$boot_py" -m pm.cli install\n' + source_body, encoding="utf-8")
     git("commit", "-qam", "pm installer")
     pm_installer = run('run_source_installer "$2" "$3" "$3" HEAD pm')

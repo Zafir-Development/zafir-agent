@@ -32,17 +32,14 @@ Lanes:
   must not run it.
 * ``npm_lock``    — semantic JS lockfile diff PR comment (pnpm-lock.yaml and
   the standalone npm projects' package-lock.json).
-* ``bootstrap``   — the bootstrap installer lane: install.sh sandbox install,
-  pin-fragment drift check, and shipped version-stamp verification.
+* ``bootstrap``   — the install-script lane: install.sh/install.ps1 sandbox
+  install, pin-fragment drift check, and shipped version-stamp verification.
 * ``desktop_updater`` — the Windows desktop-update hand-off script and the
   tests that drive the REAL ``windows.ps1`` (``-SelfTestUi`` / pipe drain /
   retry policy). These are integration tests of a PowerShell process on a
   shared runner; running them on every Python PR made their timing noise
   everyone's problem. They still run on push (fail-open) and whenever the
   script, its siblings, or their tests change.
-* ``rust``        — ``cargo test`` for the Tauri bootstrap installer. ``.rs``
-  lives under ``apps/``, so without this lane a Rust change matched ``frontend``
-  and only the TypeScript matrix ran.
 * ``catalog``     — the plugin-catalog tests (catalog-tests.yml). A diff made
   only of catalog entry data (``plugin-catalog/*.yaml``, ``contributors/emails/``)
   runs this lane INSTEAD of the Python suite: those files are data that a known
@@ -153,12 +150,17 @@ _CATALOG_DATA = ("plugin-catalog/", "contributors/emails/")
 _SCAN_EXTS = (".py", ".pth")
 _SCAN_FILES = {"setup.cfg", "pyproject.toml"}
 
-# Bootstrap installer: the POSIX shell installer, the dev-checkout wrapper
-# that carries the same pin fragment, and the Tauri app's non-Rust sources
-# (the .rs/Cargo files are the ``rust`` lane's job). Changes here get the
-# bootstrap-installer.yml lane — a real sandboxed install + stamp check.
-_BOOTSTRAP_PATHS = ("apps/bootstrap-installer/",)
-_BOOTSTRAP_FILES = {"scripts/install.sh", "setup-hermes.sh"}
+# Install scripts: the POSIX and PowerShell installers, the generated pin
+# fragments they carry, the dev-checkout wrapper, and the install-script CI
+# lane itself. Changes here get the install-script.yml lane — a real sandboxed
+# install + stamp check.
+_BOOTSTRAP_FILES = {
+    "scripts/install.sh",
+    "scripts/install.ps1",
+    "scripts/gen-bootstrap-pins.py",
+    "setup-hermes.sh",
+    ".github/workflows/install-script.yml",
+}
 # Windows desktop-update hand-off (scripts/desktop-update/windows.ps1 + the
 # Electron side that launches it) and the pytest files that spawn it.
 # tests/_fixtures/ holds the conftest's platform gating, so it re-arms the lane too.
@@ -193,7 +195,6 @@ _SHARED_FIXTURE_CONSUMERS: dict[str, tuple[str, ...]] = {
     # A7 rule 7: the update-marker parse / judge / release corpus.
     "tests/fixtures/update_marker_corpus.json": (
         "tests/hermes_cli/test_update_marker_corpus.py",  # Python: update_lock
-        "apps/bootstrap-installer/src-tauri/src/marker_tests.rs",  # Rust: cargo test
         "apps/desktop/electron/update-marker-corpus.test.ts",  # Electron: vitest
         "tests/scripts/desktop_update/test_desktop_update_posix_marker_corpus.py",  # marker.sh
         "tests/scripts/desktop_update/test_desktop_update_windows_marker_corpus.py",  # marker.ps1
@@ -209,14 +210,7 @@ _SHARED_FIXTURE_CONSUMERS: dict[str, tuple[str, ...]] = {
 # What a fixture inherits from its consumers: the lanes that run them as tests.
 # Not the slow suites a consumer's path also matches (an Electron test file under
 # electron/update-* starts the Desktop update E2E, which never reads the corpus).
-_FIXTURE_CONSUMER_LANES = ("python", "rust", "frontend", "desktop_updater")
-
-# Rust crates — currently just the Tauri bootstrap installer (Hermes-Setup).
-# These live under ``apps/``, so before this lane existed a ``.rs`` edit matched
-# ``frontend`` and nothing more: the TypeScript matrix built, cargo never ran,
-# and the crate's unit tests had never executed in CI at all.
-_RUST_PATHS = ("apps/bootstrap-installer/src-tauri/",)
-_RUST_FILENAMES = {"Cargo.toml", "Cargo.lock"}
+_FIXTURE_CONSUMER_LANES = ("python", "frontend", "desktop_updater")
 
 # The real SSH/Docker backend lane: the backends, the terminal tool that drives
 # them, the tests it runs, the sshd it starts, and the runner's env allowlist
@@ -261,9 +255,6 @@ _DESKTOP_E2E_SHARED = (
     "apps/desktop/e2e/fix-electron-tracing",
     "apps/desktop/e2e/run-tmp",
 )
-# The Tauri updater (update.rs, its marker claim marker.rs, the paths.rs both resolve) is
-# compiled and tested by ``cargo test`` alone (the ``rust`` lane, via ``.rs``): no slow lane
-# builds the bootstrap installer, so none of the three starts one.
 # What `hermes update` runs outside the update_* module family: the steps of the
 # pipeline (entry, lock, early recovery, completion tail, launchers, fleet
 # restart/verify, Windows pause/resume) and the lock / marker / recovery state
@@ -612,14 +603,6 @@ def _is_desktop_updater(p: str) -> bool:
     )
 
 
-def _is_rust(p: str) -> bool:
-    return (
-        p.endswith(".rs")
-        or p.startswith(_RUST_PATHS)
-        or os.path.basename(p) in _RUST_FILENAMES
-    )
-
-
 def _slow_lanes(files: list[str]) -> dict[str, bool]:
     """The slow lanes a pull request with this diff runs; see ``_E2E_LANES``."""
     lanes = {
@@ -665,11 +648,8 @@ def classify(files: list[str], run_e2e: bool = False) -> dict[str, bool]:
         "deps": deps,
         "uv_lock": any(f in ("pyproject.toml", "uv.lock") for f in files),
         "npm_lock": npm_lock,
-        "bootstrap": any(
-            f.startswith(_BOOTSTRAP_PATHS) or f in _BOOTSTRAP_FILES for f in files
-        ),
+        "bootstrap": any(f in _BOOTSTRAP_FILES for f in files),
         "desktop_updater": any(_is_desktop_updater(f) for f in files),
-        "rust": any(_is_rust(f) for f in files),
         "remote_backends": any(f.startswith(_REMOTE_BACKEND_PATHS) for f in files),
         "catalog": catalog,
         **{lane: run_e2e or on for lane, on in _slow_lanes(files).items()},
@@ -691,7 +671,6 @@ def classify(files: list[str], run_e2e: bool = False) -> dict[str, bool]:
         ret["npm_lock"] = True
         ret["bootstrap"] = True
         ret["desktop_updater"] = True
-        ret["rust"] = True
         ret["remote_backends"] = True
         ret["catalog"] = True
         ret.update(dict.fromkeys(_slow_lanes([]), True))

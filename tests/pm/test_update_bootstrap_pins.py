@@ -4,7 +4,7 @@ The curl|sh and irm|iex installers bootstrap uv (and Windows git) before any
 checkout exists, so they carry those pins as fragments generated from
 pm/lock.json. `pm update` and `pm lock --bump` rewrote only the lock: a uv bump
 left the installers on the old uv until someone ran scripts/gen-bootstrap-pins.py
-by hand, and the bootstrap-installer drift check failed.
+by hand, and the install-script drift check failed.
 """
 
 import shutil

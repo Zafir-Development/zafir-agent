@@ -36,35 +36,28 @@ import { fileURLToPath } from 'node:url';
  * strings, so they are types, not conventions.
  *
  * @typedef {'latest'} InstallerVersion
- *   The artifact published on the website right now -- Hermes-Setup.exe has
- *   no versioned archive yet. Widen this union when one exists.
- * @typedef {'installer-script' | 'installer-script+desktop' | 'desktop-installer' | 'packaged-app'} InstallMethod
+ *   A published artifact version. The GUI installer this union described was
+ *   removed with Hermes-Setup; the union remains for the packaged-bundle legs.
+ * @typedef {'installer-script' | 'packaged-app'} InstallMethod
  *   installer-script is the platform's one-liner (curl | bash on
- *   linux/macos, irm | iex on windows); installer-script+desktop is the
- *   same one-liner with its desktop stage opted in (--include-desktop /
- *   -IncludeDesktop), which also builds the desktop app -- on windows it
- *   registers Start Menu / Desktop shortcuts too, on linux/macos it
- *   builds into the checkout without registering an OS entry point;
- *   packaged-app installs a signed bundle. Its native in-app update pair
- *   is declared separately, not crossed with source-checkout update methods.
+ *   linux/macos, irm | iex on windows); packaged-app installs a signed
+ *   bundle. The desktop-stage opt-in and the GUI installer were removed, so
+ *   the plain one-liner is the only source install method. The signed
+ *   bundle's native in-app update pair is
+ *   declared separately, not crossed with source-checkout update methods.
  * @typedef {InstallMethod | 'hermes-update' | 'open-app-update' | 'hermes-desktop-app-update'} UpdateMethod
  *   Every install method doubles as an update method (re-run it over the
  *   existing install), plus the updater CLI and the two app-update
  *   variants. The variants differ by launch surface: open-app-update
- *   starts the app from the OS entry point the install registered
- *   (Start Menu / Desktop shortcuts) -- today only the windows desktop
- *   installer's stage registers one (install.sh --include-desktop
- *   builds the app but registers nothing), so these legs pair with a
- *   desktop-installer install; hermes-desktop-app-update starts the app
- *   via `hermes desktop`, which every install method provides on every
- *   OS that ships the desktop app. Both then update through the app's
- *   own Update button.
+ *   starts the app from the OS entry point a packaged install registers;
+ *   hermes-desktop-app-update starts the app via `hermes desktop`, which
+ *   every install method provides on every OS that ships the desktop app.
+ *   Both then update through the app's own Update button.
  * @typedef {'linux' | 'windows' | 'macos'} Os
  *
  * @typedef {{method: InstallMethod, versions?: InstallerVersion[]}} InstallEntry
  * @typedef {{method: UpdateMethod, versions?: InstallerVersion[]}} UpdateEntry
- *   `versions` expands the entry into one combination per version
- *   ("desktop-installer@latest").
+ *   `versions` expands the entry into one combination per version.
  * @typedef {{install: InstallEntry[], update: UpdateEntry[], secondUpdate?: never[]}} OsSpec
  *   secondUpdate (install -> update -> update again) is a real future axis
  *   -- the updater that RESULTS from an update must itself update -- typed
@@ -143,22 +136,10 @@ export const SPEC = {
     install: [
       // irm https://hermes.nousresearch.com/install.ps1 | iex
       { method: 'installer-script' },
-      // The same one-liner with -IncludeDesktop: builds Hermes.exe AND
-      // registers Start Menu / Desktop shortcuts, so it is a second real
-      // path to a hand-launchable app.
-      { method: 'installer-script+desktop' },
-      // Website Hermes-Setup.exe, clicked through the GUI.
-      { method: 'desktop-installer', versions: ['latest'] },
     ],
     update: [
       { method: 'installer-script' },
-      { method: 'installer-script+desktop' },
-      // Run the bootstrap exe again over an existing install (--update flow).
-      { method: 'desktop-installer', versions: ['latest'] },
       { method: 'hermes-update' },
-      // Settings -> About -> "Update now", app launched from the installed
-      // exe (the entry point the desktop installer created).
-      { method: 'open-app-update' },
       // Same button, app launched via `hermes desktop`.
       { method: 'hermes-desktop-app-update' },
     ],
@@ -166,41 +147,30 @@ export const SPEC = {
   macos: {
     install: [
       { method: 'installer-script' },
-      { method: 'installer-script+desktop' },
-      // The published Hermes-Setup.dmg from the website, mounted and run.
-      { method: 'desktop-installer', versions: ['latest'] },
     ],
     update: [
       { method: 'installer-script' },
-      { method: 'installer-script+desktop' },
       { method: 'hermes-update' },
-      // install.sh --include-desktop builds the .app inside the checkout
-      // but registers no OS entry point, so open-app-update legs pair
-      // with a desktop-installer install (the published dmg).
-      { method: 'open-app-update' },
       { method: 'hermes-desktop-app-update' },
     ],
   },
   linux: {
     install: [
       { method: 'installer-script' },
-      { method: 'installer-script+desktop' },
     ],
     update: [
       { method: 'installer-script' },
-      { method: 'installer-script+desktop' },
       { method: 'hermes-update' },
-      // No desktop installer and no packaged desktop artifact exist for
-      // linux, so there is no open-app-update; `hermes desktop` is always
-      // the source-mode path (build apps/desktop from the checkout, launch
-      // electron) and is the one app surface a linux install has.
+      // `hermes desktop` is the source-mode path (build apps/desktop from
+      // the checkout, launch electron) and the one app surface a linux
+      // install has.
       { method: 'hermes-desktop-app-update' },
     ],
   },
 };
 
 /**
- * Expand one method entry into concrete ids ("desktop-installer@latest").
+ * Expand one method entry into concrete ids ("<method>@<version>").
  * @param {InstallEntry | UpdateEntry} entry
  * @returns {string[]}
  */
@@ -339,8 +309,7 @@ export function selectRoute(matrices, route) {
  * @returns {boolean}
  */
 export function methodNeedsDesktop(m) {
-  return m.startsWith('desktop-installer') || m === 'installer-script+desktop' ||
-    m === 'open-app-update' || m === 'hermes-desktop-app-update';
+  return m === 'open-app-update' || m === 'hermes-desktop-app-update';
 }
 
 /**

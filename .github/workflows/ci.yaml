@@ -83,7 +83,6 @@ jobs:
       npm_lock: ${{ steps.gate-lanes.outputs.npm_lock }}
       bootstrap: ${{ steps.gate-lanes.outputs.bootstrap }}
       desktop_updater: ${{ steps.gate-lanes.outputs.desktop_updater }}
-      rust: ${{ steps.gate-lanes.outputs.rust }}
       remote_backends: ${{ steps.gate-lanes.outputs.remote_backends }}
       catalog: ${{ steps.gate-lanes.outputs.catalog }}
       docker_meta: ${{ steps.gate-lanes.outputs.docker_meta }}
@@ -194,16 +193,6 @@ jobs:
     with:
       commit: ${{ inputs.commit }}
 
-  rust-tests:
-    name: Rust tests
-    needs: detect
-    # Only for PRs that touch a Rust crate. `.rs` is under apps/, so these
-    # changes used to run the TypeScript matrix and nothing that compiles them.
-    if: needs.detect.outputs.rust == 'true'
-    uses: ./.github/workflows/rust-tests.yml
-    with:
-      commit: ${{ inputs.commit }}
-
   catalog-tests:
     name: Catalog tests
     needs: detect
@@ -227,14 +216,14 @@ jobs:
     with:
       commit: ${{ inputs.commit }}
 
-  bootstrap-installer:
-    name: Bootstrap installer
+  install-script:
+    name: Install script protocol
     needs: detect
-    # The bootstrap-installer path: install.sh, the pin fragments it embeds,
-    # and the version stamp it ships. The PowerShell installer's native tests
-    # are platforms("windows") pytest files and run in tests-os.
+    # The install-script path: install.sh/install.ps1, the pin fragments they
+    # embed, and the version stamp they ship. The PowerShell installer's native
+    # tests are platforms("windows") pytest files and run in tests-os.
     if: needs.detect.outputs.bootstrap == 'true'
-    uses: ./.github/workflows/bootstrap-installer.yml
+    uses: ./.github/workflows/install-script.yml
     with:
       commit: ${{ inputs.commit }}
 
@@ -344,10 +333,9 @@ jobs:
       - tests-os
       - lint
       - js-tests
-      - rust-tests
       - remote-backends
       - catalog-tests
-      - bootstrap-installer
+      - install-script
       - e2e-desktop
       - e2e-desktop-core
       - e2e-desktop-update

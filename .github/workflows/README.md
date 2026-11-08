@@ -1,6 +1,6 @@
 # GitHub Actions workflows
 
-This directory has 57 workflow files. Most of them are **reusable workflows**
+This directory has 43 workflow files. Most of them are **reusable workflows**
 (`on: workflow_call`). They never start on their own; an entry-point workflow
 calls them. This README covers what starts each workflow, which jobs it skips
 and why, how to run it by hand, and how a regular CI run differs from a
@@ -29,8 +29,8 @@ workflow wins. Fix this file in the same PR.
 pull_request / push main
  ├─ ci.yaml  (CI)  ── detect ──┬─ tests.yml ─────────────── (e2e jobs: release/dispatch only)
  │                             ├─ tests-os.yml ──────────── windows-install-update-e2e.yml
- │                             ├─ lint.yml, js-tests.yml, rust-tests.yml, catalog-tests.yml
- │                             ├─ remote-backends.yml, bootstrap-installer.yml, docs-site-checks.yml
+ │                             ├─ lint.yml, js-tests.yml, catalog-tests.yml
+ │                             ├─ remote-backends.yml, install-script.yml, docs-site-checks.yml
  │                             ├─ e2e-desktop-core.yml, e2e-desktop-update.yml (release/dispatch only)
  │                             ├─ e2e-desktop.yml (disabled: `if: false`)
  │                             ├─ repo-guards.yml (one job: every cheap guard as a lane-gated step)
@@ -185,10 +185,9 @@ Then a gate step in `ci.yaml` rewrites the result:
 | `python` | anything not provably irrelevant to Python (includes `skills/`, `website/docs/`, `website/scripts/`, `website/static/oauth/`) |
 | `python_prod` | as `python`, excluding `tests/` |
 | `frontend` | `ui-tui/`, `web/`, `apps/`, `tests-js/`, root pnpm manifests (`package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`), the WhatsApp bridge, JS under `scripts/build/` |
-| `rust` | `.rs`, Cargo files, bootstrap-installer crate paths |
 | `catalog` | `plugin-catalog/*.yaml`, `contributors/emails/` (a diff with only these runs catalog tests **instead of** the Python suite) |
 | `site` | the Docusaurus site |
-| `bootstrap` | `install.sh` and its pin fragments and stamp |
+| `bootstrap` | `install.sh`/`install.ps1` and their pin fragments and stamp |
 | `desktop_updater` | `scripts/desktop-update/` and its Windows hand-off tests |
 | `remote_backends` | the SSH/Docker terminal backends, the terminal tool, their real-backend tests |
 | `uv_lock` | `pyproject.toml` or `uv.lock` |
@@ -220,10 +219,9 @@ of every suite that reads it.
 | ↳ code health ratchet (step) | | PR (Python and TS) | push / dispatch / release |
 | ↳ ruff + ty diff (advisory steps) | | PR and `python` | push, or frontend-only |
 | JS & TS checks | `js-tests.yml` | `frontend` | no frontend change |
-| Rust tests | `rust-tests.yml` | `rust` | no Rust change |
 | Catalog tests | `catalog-tests.yml` | `catalog` | no catalog data change |
 | Remote terminal backends | `remote-backends.yml` | `remote_backends` | no backend change |
-| Bootstrap installer | `bootstrap-installer.yml` | `bootstrap` | no installer change |
+| Install script protocol | `install-script.yml` | `bootstrap` | no install-script change |
 | Desktop E2E | `e2e-desktop.yml` | **never** (`if: false`, deferred as flaky) | always |
 | Desktop core E2E | `e2e-desktop-core.yml` | `e2e_desktop_core` (release or dispatch) | PRs and pushes |
 | Desktop update E2E | `e2e-desktop-update.yml` | `e2e_desktop_update` (release or dispatch) | PRs and pushes |
@@ -484,10 +482,10 @@ gh workflow run desktop-bundle-smoke.yml --ref <test-branch> \
 
 | Workflow | Triggers | Notes |
 |---|---|---|
-| `install-e2e.yml`, **Install & Update E2E** | `workflow_dispatch`; `workflow_call` from stable (`route=all`) | "Can a user on a released version get to this commit?" `pick-releases` samples release tags (newest, oldest, spread; `tag-count` or `install-ref`). `generate-matrix` expands `scripts/sandbox/generate-e2e-matrix.mjs` into linux/windows/macos legs. The bundled legs need `windows-bundle-manifest` / `macos-bundle-manifest` and a matching `route`. **Never runs on PRs, pushes, or a schedule.** |
+| `install-e2e.yml`, **Install & Update E2E** | `workflow_dispatch`; `workflow_call` from stable (`route=all`) | "Can a user on a released version get to this commit?" `pick-releases` samples release tags (newest, oldest, spread; `tag-count` or `install-ref`). `generate-matrix` expands `scripts/sandbox/generate-e2e-matrix.mjs` into linux/windows/macos legs. **Never runs on PRs, pushes, or a schedule.** |
 | `install-e2e-run.yml` | `workflow_call` | Linux/OS-agnostic leg: real `curl \| bash` install, then update. Unsupported method pairs skip (grey). |
-| `install-e2e-windows-run.yml` | `workflow_call` | Windows leg (Hermes-Setup.exe via AutoHotkey, `install.ps1`, app "Update now" under Playwright). Packaged-bundle arm only with `install-method=packaged-app`. Also called by stable for signed acceptance. |
-| `install-e2e-macos-run.yml` | `workflow_call` | macOS leg (script installs, Hermes-Setup.dmg, packaged-bundle arm). Also called by stable. |
+| `install-e2e-windows-run.yml` | `workflow_call` | Windows leg (`install.ps1` one-liner, then `hermes update` / re-run). Also called by stable for signed acceptance. |
+| `install-e2e-macos-run.yml` | `workflow_call` | macOS leg (script installs; the shared OS-agnostic driver). Also called by stable. |
 | `install-e2e-red.yml`, **Install & Update E2E red tracker** | `workflow_run` of Install & Update E2E; `workflow_dispatch` (`run-id`, `dry-run` default true) | Keeps one `install-e2e-red` issue in sync. The automatic path runs only when the watched run was a `schedule` event (see [dormant paths](#known-dormant-or-inert-paths)). |
 
 ```sh
@@ -500,7 +498,6 @@ gh workflow run install-e2e-red.yml -f run-id=<id> -f dry-run=false
 
 | Workflow | Triggers | Notes |
 |---|---|---|
-| `bootstrap-installer-build.yml`, **Bootstrap installer build** | `workflow_dispatch` (`ref`, `pin_branch`, `pin_commit`) | Signed Hermes-Setup.exe (Azure Trusted Signing) and notarized Hermes-Setup.dmg. Uploaded as run artifacts only, never published. No caches. |
 | `live-providers.yml`, **Live provider canaries** | `push: tags v*`; `workflow_dispatch` (`filter`) | Live calls to real provider APIs, upstream only. Each case skips when its `LIVE_*_API_KEY` secret is missing. Tags pushed by `GITHUB_TOKEN` do not start it, and stable attempt refs (`rc.*`) do not match `v*`. In practice it runs on dispatch or on a `v*` tag a person pushes. `gh workflow run live-providers.yml -f filter='openrouter-anthropic'` |
 | `sandbox-image.yml` | see [standalone](#standalone-pr--main-checks) | Publishes `:desktop` on `release: published` or dispatch. |
 | `deploy-site.yml` | see [post-merge](#post-merge-automation-on-main) | The Vercel deploy runs on `release: published` or dispatch. |
@@ -531,8 +528,7 @@ gh workflow run windows-install-update-e2e.yml --ref <branch> -f strict_acceptan
 | File | Name | Triggers | Called by |
 |---|---|---|---|
 | `archive-inputs.yml` | Archive pinned PM inputs | main (paths), dispatch, call | none |
-| `bootstrap-installer-build.yml` | Bootstrap installer build | dispatch | none |
-| `bootstrap-installer.yml` | Bootstrap installer | R | ci |
+| `install-script.yml` | Install script protocol | R | ci |
 | `canary-release.yml` | Canary Release | cron daily 06:41, dispatch | none |
 | `catalog-tests.yml` | Catalog tests | R | ci |
 | `ci-review-comment.yml` | CI review comment | workflow_run(CI in_progress) | none |
@@ -562,7 +558,6 @@ gh workflow run windows-install-update-e2e.yml --ref <branch> -f strict_acceptan
 | `pm-bundle.yml` | PM Bundle | PR (paths), dispatch, call | stable |
 | `remote-backends.yml` | Remote terminal backends | R | ci |
 | `repo-guards.yml` | Repository guards | R | ci |
-| `rust-tests.yml` | Rust tests | R | ci |
 | `sandbox-image.yml` | Sandbox desktop image | PR (paths), release published, dispatch | none |
 | `skills-index-freshness.yml` | Skills Index Freshness Check | cron 4 h, dispatch | none |
 | `skills-index.yml` | Build Skills Index | cron 06:00/18:00, main (paths), dispatch | none |
