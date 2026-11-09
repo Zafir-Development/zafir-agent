@@ -318,8 +318,6 @@ _R6_CASES = {
     "apps/desktop/electron/update-marker-gate.ts": ("desktop_updater", "e2e_desktop_update"),
     # Stops the backend before a remote update: typecheck/vitest and the hand-off script tests.
     "apps/desktop/electron/remote-lifecycle.ts": ("frontend", "desktop_updater"),
-    # The Tauri updater's marker claim: cargo, the only CI that builds it (review CI3).
-    "apps/bootstrap-installer/src-tauri/src/marker.rs": ("rust",),
     # The launchers reach the launch repair: the Desktop update relaunches through them too.
     "hermes_cli/_launchers.py": ("e2e_upgrade", "e2e_desktop_update"),
 }
@@ -353,19 +351,6 @@ def test_update_path_change_reaches_the_suites_that_consume_it(path, lanes):
     test_update_path_change_selects_every_suite_that_exercises_it(path, lanes)
 
 
-_TAURI_UPDATER = tuple(f"apps/bootstrap-installer/src-tauri/src/{name}.rs" for name in ("marker", "update", "paths"))
-
-
-@pytest.mark.parametrize("path", _TAURI_UPDATER)
-def test_tauri_updater_routes_as_one_unit_to_the_lane_that_builds_it(path):
-    """No slow lane builds the bootstrap installer: starting one for its updater runs nothing of it."""
-    assert (_REPO / path).is_file(), f"{path} moved: update this table"
-    classified = _real_classifier([path])
-    assert classified["rust"], f"{path}: cargo test never runs"
-    started = [lane for lane in ("e2e", "e2e_upgrade", "e2e_desktop_update", "e2e_desktop_core") if classified[lane]]
-    assert not started, f"{path}: starts {started}, which never build the Tauri installer"
-
-
 def test_gateway_status_routing_names_the_stamp_not_its_prefix_siblings():
     assert _real_classifier(["gateway/status.py"])["e2e_upgrade"]
     assert not _real_classifier(["gateway/status_phrases.py"])["e2e_upgrade"], \
@@ -387,7 +372,6 @@ def test_every_detect_output_a_lane_sets_is_consumed_by_some_job():
 # The job (path from ci.yaml down) that runs each lane's consumers of a shared fixture.
 _FIXTURE_LANE_JOBS: dict[str, tuple[str, ...]] = {
     "python": ("tests", "test"),  # pytest on Linux (marker.sh corpus included)
-    "rust": ("rust-tests", "bootstrap-installer"),  # cargo test of the Tauri crate
     "frontend": ("js-tests", "check"),  # apps/desktop `check` -> vitest --project electron
 }
 _CORPUS = "tests/fixtures/update_marker_corpus.json"

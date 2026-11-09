@@ -134,7 +134,7 @@ lists every lane.
 | `windows-store` | on | the unsigned Microsoft Store bundle, submitted to Partner Center (needs no Azure signing) |
 | `macos-arm64` | on | macOS Apple Silicon DMG and ZIP |
 | `termux` | off | Termux (Android aarch64) APT package |
-| `ci`, `nix`, `docker-tests`, `pm-bundle`, `windows-live`, `install-e2e`, `bootstrap-version` | on | the standalone suites |
+| `ci`, `nix`, `docker-tests`, `pm-bundle`, `windows-live`, `install-e2e` | on | the standalone suites |
 | `termux-checks` | on | Termux verification; runs only with `termux` |
 | `smoke` | on | native install and chat smoke of each built desktop package |
 | `upgrade` | on | signed-package upgrade acceptance (OLD to NEW) of each built desktop package |
@@ -260,10 +260,9 @@ The candidate manifest binds the admitted claim epoch. Admission recomputes the
 stable Windows quad from that epoch and rejects a merely well-formed but incorrect
 MSIX, executable VERSIONINFO, or App Installer version. Native admission also
 reads the Electron artifact filename and macOS plist from the built packages. The
-acceptance graph stamps an isolated bootstrap-installer tree, asks Cargo to read
-the resulting Tauri package version, builds and inspects Python wheel/sdist
-metadata and filenames, and checks the Nix and Docker runtime identities. Any
-consumer-facing `0.0.0` or mismatched version fails the gate.
+acceptance graph builds and inspects Python wheel/sdist metadata and filenames,
+and checks the Nix and Docker runtime identities. Any consumer-facing `0.0.0` or
+mismatched version fails the gate.
 
 The draft stays on the attempt ref until publish. Deleting it is `abandon`, and
 it does not burn the version. The annotated final tag binds the GitHub release

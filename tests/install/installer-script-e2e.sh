@@ -25,16 +25,13 @@
 #              the checkout landed on HEAD with a working `hermes`
 #
 # Usage:
-#   tests/install/installer-script-e2e.sh --update-method hermes-update|installer-script|installer-script+desktop
-#                                         [--install-method installer-script|installer-script+desktop]
+#   tests/install/installer-script-e2e.sh --update-method hermes-update|installer-script
+#                                         [--install-method installer-script]
 #                                         [--install-ref REF]
 #
-#   --install-method installer-script          the plain one-liner (default)
-#                    installer-script+desktop  the one-liner with its desktop
-#                                              stage opted in (--include-desktop)
+#   --install-method installer-script  the plain one-liner (default)
 #   --update-method  hermes-update      `hermes update`
 #                    installer-script   re-run install.sh (HEAD's copy)
-#                    installer-script+desktop  re-run with --include-desktop
 #                    hermes-desktop-app-update  launch the app via `hermes
 #                                       desktop` (spawn captured, Playwright
 #                                       drives it) and click Update now
@@ -79,12 +76,12 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 case "$INSTALL_METHOD" in
-  installer-script|installer-script+desktop) ;;
-  *) echo "error: --install-method must be installer-script or installer-script+desktop, got '$INSTALL_METHOD'" >&2; exit 1 ;;
+  installer-script) ;;
+  *) echo "error: --install-method must be installer-script, got '$INSTALL_METHOD'" >&2; exit 1 ;;
 esac
 case "$UPDATE_METHOD" in
-  hermes-update|installer-script|installer-script+desktop|hermes-desktop-app-update) ;;
-  *) echo "error: --update-method must be hermes-update, installer-script, installer-script+desktop or hermes-desktop-app-update, got '$UPDATE_METHOD'" >&2; exit 1 ;;
+  hermes-update|installer-script|hermes-desktop-app-update) ;;
+  *) echo "error: --update-method must be hermes-update, installer-script or hermes-desktop-app-update, got '$UPDATE_METHOD'" >&2; exit 1 ;;
 esac
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -200,26 +197,6 @@ env_key_names() { # label
     "$(grep -oE '^[A-Za-z_][A-Za-z0-9_]*=' "$HERMES_HOME/.env" | tr -d '=' | sort | tr '\n' ' ')"
 }
 
-assert_desktop_artifact() {
-  # $1: label. After a +desktop install the built app must exist under the
-  # checkout -- install.sh builds it there and registers no OS entry point.
-  local release_dir="$INSTALL_DIR/apps/desktop/release"
-  local found=""
-  local cand
-  for cand in \
-    "$release_dir/linux-unpacked/Hermes" \
-    "$release_dir/linux-unpacked/hermes" \
-    "$release_dir/mac-arm64/Hermes.app" \
-    "$release_dir/mac/Hermes.app"; do
-    if [ -x "$cand" ] || [ -d "$cand" ]; then
-      found="$cand"
-      break
-    fi
-  done
-  [ -n "$found" ] || fail "no desktop app under $release_dir after $1 (+desktop install)"
-  ok "desktop app built by installer at $1: $found"
-}
-
 assert_checkout() {
   # $1: expected sha, $2: label
   local got
@@ -327,15 +304,8 @@ assert_user_shims() {
 
 step "installing OLD ($INSTALL_REF) via its own scripts/install.sh ($INSTALL_METHOD)"
 EXPECT_DESKTOP=absent
-if [ "$INSTALL_METHOD" = "installer-script+desktop" ]; then
-  EXPECT_DESKTOP=present
-  source_build_env run_source_installer "$REPO_ROOT" "$WORK_ROOT" "$LOG_DIR" "$OLD_SHA" old desktop
-  assert_checkout "$OLD_SHA" OLD
-  assert_desktop_artifact OLD
-else
-  source_build_env run_source_installer "$REPO_ROOT" "$WORK_ROOT" "$LOG_DIR" "$OLD_SHA" old
-  assert_checkout "$OLD_SHA" OLD
-fi
+source_build_env run_source_installer "$REPO_ROOT" "$WORK_ROOT" "$LOG_DIR" "$OLD_SHA" old
+assert_checkout "$OLD_SHA" OLD
 
 # A real, chat-capable provider, started BEFORE the first desktop checkpoint. An
 # existing user HAS one configured, the durability check needs a real turn (not a
@@ -437,11 +407,6 @@ case "$UPDATE_METHOD" in
   installer-script)
     # A user re-running the one-liner today gets the CURRENT script.
     source_build_env run_source_installer "$REPO_ROOT" "$WORK_ROOT" "$LOG_DIR" "$TARGET_SHA" "$TARGET_LABEL"
-    ;;
-  installer-script+desktop)
-    EXPECT_DESKTOP=present
-    source_build_env run_source_installer "$REPO_ROOT" "$WORK_ROOT" "$LOG_DIR" "$TARGET_SHA" "$TARGET_LABEL" desktop
-    assert_desktop_artifact "$TARGET_LABEL"
     ;;
   hermes-desktop-app-update)
     # The real user surface: `hermes desktop` launches the app, the user

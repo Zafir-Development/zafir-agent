@@ -62,45 +62,37 @@ def test_installer_post_pm_stages(tmp_path: Path, stage: str, expected: list[str
 
 
 @pytest.mark.platforms('posix')
-@pytest.mark.parametrize('stage, include_desktop, expected_desktop', [
-    ('products', False, False), ('products', True, True), ('desktop', False, True),
-])
-def test_products_and_desktop_stages_share_the_completion_tail(tmp_path: Path, stage: str,
-                                                                include_desktop: bool, expected_desktop: bool) -> None:
-    """Both stages hand the checkout to hermes_cli/source_completion.py; --include-desktop
-    (or the external `desktop` stage) only adds --desktop to that one call."""
+def test_products_stage_runs_the_completion_tail(tmp_path: Path) -> None:
+    """The products stage hands the checkout to hermes_cli/source_completion.py;
+    the desktop stage and its --desktop flag were removed with Hermes-Setup."""
     install = tmp_path / 'source tree'
     calls = tmp_path / 'calls.json'
     (install / 'hermes_cli').mkdir(parents=True)
     (install / 'hermes_cli' / 'source_completion.py').write_text(
         "import json, os, sys\nfrom pathlib import Path\n"
         "Path(os.environ['CALLS']).write_text(json.dumps(sys.argv[1:]))\n", encoding='utf-8')
-    flag = 'true' if include_desktop else 'false'
     command = ['bash', '-c',
-               f'source "$1" --manifest >/dev/null; INSTALL_DIR="$2"; INCLUDE_DESKTOP={flag}; '
-               'bootstrap_python() { boot_py="$PYTHON_FOR_TEST"; }; "stage_$3"',
-               'test', str(ROOT / 'scripts/install.sh'), str(install), stage]
+               'source "$1" --manifest >/dev/null; INSTALL_DIR="$2"; '
+               'bootstrap_python() { boot_py="$PYTHON_FOR_TEST"; }; "stage_products"',
+               'test', str(ROOT / 'scripts/install.sh'), str(install)]
     env = {**os.environ, 'HOME': str(tmp_path), 'HERMES_HOME': str(tmp_path / 'home'),
            'HERMES_RUNTIME_DIR': str(tmp_path / 'store'), 'CALLS': str(calls), 'PYTHON_FOR_TEST': sys.executable}
     result = subprocess.run(command, cwd=tmp_path, env=env, capture_output=True, text=True, timeout=20, check=False)
     assert result.returncode == 0, result.stdout + result.stderr
     argv = json.loads(calls.read_text())
-    assert argv[:2] == ['--source', str(install)]
-    assert ('--desktop' in argv) is expected_desktop
+    assert argv == ['--source', str(install)]
 
 
 @pytest.mark.platforms("posix")
-def test_desktop_flag_does_not_add_a_stage(tmp_path):
-    """--include-desktop selects the desktop product inside `products`; the manifest is one ladder."""
-    def manifest(*flags):
-        result = subprocess.run(
-            ["bash", str(ROOT / "scripts/install.sh"), "--manifest", *flags],
-            cwd=tmp_path, capture_output=True, text=True, timeout=30, check=True,
-        )
-        return [row["name"] for row in json.loads(result.stdout)["stages"]]
-
-    plain = manifest()
-    assert "desktop" not in plain
-    assert "products" in plain
-    assert plain[-1] == "complete"
-    assert manifest("--include-desktop") == plain
+def test_manifest_lists_the_nine_source_stages(tmp_path):
+    """The source ladder has no desktop stage; the desktop product was removed."""
+    result = subprocess.run(
+        ["bash", str(ROOT / "scripts/install.sh"), "--manifest"],
+        cwd=tmp_path, capture_output=True, text=True, timeout=30, check=True,
+    )
+    stages = [row["name"] for row in json.loads(result.stdout)["stages"]]
+    assert stages == [
+        "prerequisites", "repository", "venv", "python-deps", "config",
+        "products", "setup", "gateway", "complete",
+    ]
+    assert "desktop" not in stages
