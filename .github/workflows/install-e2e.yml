@@ -17,13 +17,9 @@ name: Install & Update E2E
 #
 # Every combination is dispatched to its OS's run workflow; the run
 # workflow natively skips (grey) what its driver cannot run yet -- an
-# unimplemented method pair, or a starting tag that predates the surface
-# under test (pick-releases annotates each tag with what its tree ships,
-# e.g. whether the desktop app exists yet). Capability knowledge lives
-# next to each driver, never here and never in the generator: declaring a
-# method is a spec edit, implementing one is flipping the run workflow's
-# gate. The signed-bundle legs are generated separately by
-# tests/install/e2e-assets/bundle-plan.mjs and use the same run workflows.
+# unimplemented method pair. Capability knowledge lives next to each
+# driver, never here and never in the generator: declaring a method is a
+# spec edit, implementing one is flipping the run workflow's gate.
 #
 # The starting versions are chosen at runtime from the repo's release tags
 # (scripts/sandbox/pick-release-tags.sh): newest, oldest, and a spread
@@ -39,18 +35,10 @@ on:
   workflow_dispatch:
     inputs:
       route:
-        description: 'Which legs to run: all = every OS; both/update/installer = the linux legs; windows-desktop / macos-desktop = that OS; bundled / windows-bundled / macos-bundled = the signed-bundle legs. Anything else selects legs by name (a leg or job name, or a fragment of one).'
+        description: 'Which legs to run: all = every OS; both/update/installer = the linux legs. Anything else selects legs by name (a leg or job name, or a fragment of one).'
         required: false
         type: string
         default: all
-      windows-bundle-manifest:
-        description: 'HTTPS manifest pinning signed Windows OLD/NEW msixbundles; NEW must match this ref.'
-        type: string
-        default: ''
-      macos-bundle-manifest:
-        description: 'HTTPS manifest pinning signed macOS OLD/NEW app ZIPs; NEW must match this ref.'
-        type: string
-        default: ''
       tag-count:
         description: 'How many release tags to sample (newest, oldest, and a spread between).'
         required: false
@@ -66,35 +54,22 @@ on:
     # workflow_dispatch; on a release run the caller dispatches on the exact
     # candidate tag, so github.sha is the candidate commit throughout.
     #
-    # route: which combinations to run (same choices as dispatch). The
-    # bundled routes require the matching bundle manifests, exactly like a
-    # manual dispatch — a source (non-bundle) release run passes route=all
-    # with empty manifests and gets the source install/update matrix only.
+    # route: which combinations to run (same choices as dispatch).
     inputs:
       commit:
         description: Commit to test and build. Empty keeps the triggering commit.
         type: string
         default: ''
       release:
-        description: 'Stable-release candidate run (informational; jobs behave as route=all with empty manifests).'
+        description: 'Stable-release candidate run (informational; the run covers the source install/update matrix for route=all).'
         required: false
         type: boolean
         default: false
       route:
-        description: 'Which legs to run: all = every OS; both/update/installer = the linux legs; windows-desktop / macos-desktop = that OS; bundled / windows-bundled / macos-bundled = the signed-bundle legs. Anything else selects legs by name (a leg or job name, or a fragment of one).'
+        description: 'Which legs to run: all = every OS; both/update/installer = the linux legs. Anything else selects legs by name (a leg or job name, or a fragment of one).'
         required: false
         type: string
         default: all
-      windows-bundle-manifest:
-        description: 'HTTPS manifest pinning signed Windows OLD/NEW msixbundles; NEW must match this ref.'
-        required: false
-        type: string
-        default: ''
-      macos-bundle-manifest:
-        description: 'HTTPS manifest pinning signed macOS OLD/NEW app ZIPs; NEW must match this ref.'
-        required: false
-        type: string
-        default: ''
       tag-count:
         description: 'How many release tags to sample (newest, oldest, and a spread between).'
         required: false
@@ -133,10 +108,9 @@ jobs:
     outputs:
       tags: ${{ steps.pick.outputs.tags }}
     steps:
-      # This job only reads tag names and trees, so take the cheap
-      # checkout: no blobs (filter), no other files (sparse), but DO fetch
-      # tags -- they are the whole input, and the default shallow checkout
-      # has none.
+      # This job only reads tag names, so take the cheap checkout: no blobs
+      # (filter), no other files (sparse), but DO fetch tags -- they are the
+      # whole input, and the default shallow checkout has none.
       - uses: actions/checkout@f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a # v7.0.1
         with:
           ref: ${{ inputs.commit }}
@@ -176,17 +150,7 @@ jobs:
             tags="$(scripts/sandbox/pick-release-tags.sh --count "$TAG_COUNT")"
           fi
           echo "Testing updates from: $tags"
-          # Annotate each tag with what its own tree supports, so run
-          # workflows can natively skip surfaces the starting version does
-          # not have. Today: does the release ship the desktop app
-          # (apps/desktop, #20059)? Cheaper here -- the tags are already
-          # fetched -- than a probe job per leg.
-          enriched="$(for t in $(echo "$tags" | jq -r '.[]'); do
-            if git ls-tree -d "$t" apps/desktop | grep -q .; then d=true; else d=false; fi
-            echo "{\"ref\":\"$t\",\"desktop\":$d}"
-          done | jq -sc .)"
-          echo "Annotated: $enriched"
-          echo "tags=$enriched" >> "$GITHUB_OUTPUT"
+          echo "tags=$tags" >> "$GITHUB_OUTPUT"
 
   # Expand the support matrix against the picked tags: one leg per
   # {os, install-method, update-method, tag}, split into a matrix per OS.
@@ -227,70 +191,6 @@ jobs:
             --tags '${{ needs.pick-releases.outputs.tags }}' \
             --format markdown >> "$GITHUB_STEP_SUMMARY"
 
-  bundle-inputs:
-    name: Validate pinned bundle transitions
-    # Bundled legs need dispatch-only manifests.
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    outputs:
-      windows: ${{ steps.inputs.outputs.windows }}
-      macos: ${{ steps.inputs.outputs.macos }}
-      windows-arch: ${{ steps.inputs.outputs.windows-arch }}
-      macos-arch: ${{ steps.inputs.outputs.macos-arch }}
-    steps:
-      - uses: actions/checkout@f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a # v7.0.1
-        with:
-          ref: ${{ inputs.commit }}
-      # The repo's engines require the locked Node (>=26); the runner's system Node is older.
-      - uses: ./.github/actions/setup-pm
-        with:
-          toolchain: node
-          cache: false
-          cache-python: false
-          cache-node: false
-      - id: inputs
-        env:
-          BUNDLE_WINDOWS_MANIFEST: ${{ inputs.windows-bundle-manifest }}
-          BUNDLE_MACOS_MANIFEST: ${{ inputs.macos-bundle-manifest }}
-          BUNDLE_ROUTE: ${{ inputs.route }}
-        run: |
-          pnpm install --frozen-lockfile --ignore-scripts
-          node tests/install/e2e-assets/bundle-plan.mjs
-
-  windows-bundled:
-    name: ${{ matrix.name }}
-    if: inputs.windows-bundle-manifest != '' && contains(fromJSON('["all", "bundled", "windows-bundled"]'), inputs.route)
-    needs: bundle-inputs
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.bundle-inputs.outputs.windows) }}
-    uses: ./.github/workflows/install-e2e-windows-run.yml
-    with:
-      commit: ${{ inputs.commit }}
-      install-method: packaged-app
-      update-method: open-app-update
-      install-ref: ${{ matrix.install_ref }}
-      leg-id: ${{ matrix.leg_id }}
-      bundle-manifest-url: ${{ inputs.windows-bundle-manifest }}
-      bundle-arch: ${{ needs.bundle-inputs.outputs.windows-arch }}
-
-  macos-bundled:
-    name: ${{ matrix.name }}
-    if: inputs.macos-bundle-manifest != '' && contains(fromJSON('["all", "bundled", "macos-bundled"]'), inputs.route)
-    needs: bundle-inputs
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.bundle-inputs.outputs.macos) }}
-    uses: ./.github/workflows/install-e2e-macos-run.yml
-    with:
-      commit: ${{ inputs.commit }}
-      install-method: packaged-app
-      update-method: open-app-update
-      install-ref: ${{ matrix.install_ref }}
-      leg-id: ${{ matrix.leg_id }}
-      bundle-manifest-url: ${{ inputs.macos-bundle-manifest }}
-      bundle-arch: ${{ needs.bundle-inputs.outputs.macos-arch }}
-
   linux:
     name: ${{ matrix.name }}
     # The generator applies the route; an OS it selected no legs for is skipped
@@ -309,7 +209,6 @@ jobs:
       update-method: ${{ matrix.update_method }}
       install-ref: ${{ matrix.install_ref }}
       update-ref: ${{ matrix.update_ref }}
-      tag-has-desktop: ${{ matrix.tag_has_desktop }}
       leg-id: ${{ matrix.leg_id }}
 
   windows:
@@ -326,7 +225,6 @@ jobs:
       update-method: ${{ matrix.update_method }}
       install-ref: ${{ matrix.install_ref }}
       update-ref: ${{ matrix.update_ref }}
-      tag-has-desktop: ${{ matrix.tag_has_desktop }}
       leg-id: ${{ matrix.leg_id }}
 
   macos:
@@ -336,8 +234,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.generate-matrix.outputs.macos) }}
-    # Two driver arms: the OS-agnostic script driver (shared with linux)
-    # and the published-dmg GUI driver; the run workflow routes.
+    # The OS-agnostic script driver (shared with linux); the run workflow
+    # routes the leg to it.
     uses: ./.github/workflows/install-e2e-macos-run.yml
     with:
       commit: ${{ inputs.commit }}
@@ -345,7 +243,6 @@ jobs:
       update-method: ${{ matrix.update_method }}
       install-ref: ${{ matrix.install_ref }}
       update-ref: ${{ matrix.update_ref }}
-      tag-has-desktop: ${{ matrix.tag_has_desktop }}
       leg-id: ${{ matrix.leg_id }}
 
   # The leg player: one static HTML for the whole run. Uploaded BEFORE the
@@ -375,10 +272,9 @@ jobs:
 
   # Strict source-matrix gate (release runs). needs collapses each matrix to
   # one aggregate, so the three source parents are the required check here.
-  # Every source leg must succeed — a skip is a failure EXCEPT when it is the
-  # native, declared capability skip (a starting tag predating the desktop
-  # app reports tag-has-desktop=false and its GUI leg legitimately cannot
-  # run); those are honest skips, counted and listed. A no-legs-at-all
+  # Every source leg must succeed — a skip is a failure EXCEPT when it is a
+  # native, declared capability skip (no driver arm for the declared pair);
+  # those are honest skips, counted and listed. A no-legs-at-all
   # generation (empty matrix) also fails: a release run must actually test
   # the source install/update paths.
   source-gate:
@@ -426,7 +322,7 @@ jobs:
   report:
     name: Result chart
     if: always()
-    needs: [leg-player, pick-releases, linux, windows, macos, bundle-inputs, windows-bundled, macos-bundled]
+    needs: [leg-player, pick-releases, linux, windows, macos]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -464,11 +360,10 @@ jobs:
           {
             echo "OS jobs: linux ${{ needs.linux.result }}, windows ${{ needs.windows.result }}, macos ${{ needs.macos.result }}"
             echo
-            # The tag annotations let the chart say WHY a cell skipped
-            # (pre-desktop vs declared TODO) instead of a flat "skip".
-            echo 'Legend: ✅ upgrade passed · known [n] = exact historical failure, see footnote · ❌ unexpected failure · pre-desktop / TODO = why a leg skipped · 📼 opens the leg player (recording + synced logs)'
+            # A skipped cell says WHY (declared TODO: no driver arm yet)
+            # instead of a flat "skip".
+            echo 'Legend: ✅ upgrade passed · known [n] = exact historical failure, see footnote · ❌ unexpected failure · TODO = why a leg skipped · 📼 opens the leg player (recording + synced logs)'
             echo
             node scripts/sandbox/generate-e2e-matrix.mjs --format results \
-              --tags '${{ needs.pick-releases.outputs.tags }}' \
               --artifacts /tmp/e2e-artifacts.ndjson < /tmp/e2e-jobs.ndjson
           } >> "$GITHUB_STEP_SUMMARY"

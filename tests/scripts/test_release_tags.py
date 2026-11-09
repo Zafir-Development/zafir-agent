@@ -31,10 +31,13 @@ def test_every_stable_selector_rejects_legacy_calver_tags():
         compare("1.0.0", "2026.9.21")
 
 
+def git(repo, *args):
+    return subprocess.run(['git', *args], cwd=repo, check=True, capture_output=True,
+                          text=True, encoding='utf-8', timeout=30).stdout.strip()
+
+
 @pytest.fixture
 def release_repo(tmp_path, monkeypatch):
-    from tests.scripts.test_release_build_commit import git
-
     monkeypatch.setenv('GIT_CONFIG_GLOBAL', str(tmp_path / 'absent-config'))
     monkeypatch.setenv('GIT_CONFIG_NOSYSTEM', '1')
     git(tmp_path, 'init', '-q', '-b', 'main')

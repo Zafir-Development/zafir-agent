@@ -83,18 +83,6 @@ source_build_env "$PROBE_PYTHON" -I -S "$PROBE_SCRIPT"
 if source_build_env "$PROBE_PYTHON" -I -S -c 'raise SystemExit(23)'; then exit 99; else test "$?" = 23; fi
 "$PROBE_PYTHON" -I -S -c 'import json, os; print(json.dumps(dict(os.environ)))'
 ''']
-    elif shell == "node":
-        env["HERMES_DESKTOP_USER_DATA_DIR"] = str(tmp_path / "user-data")
-        env["HERMES_PYTHON_SRC_ROOT"] = str(repo)
-        command = [shell, "--input-type=module", "-e", '''
-import { pathToFileURL } from 'node:url';
-import { spawnSync } from 'node:child_process';
-const { updateWindowEnvironment } = await import(pathToFileURL(process.env.ASSETS + '/smoke-env.mjs'));
-const env = updateWindowEnvironment(process.env, process.env.PROBE_ROOT, 'source');
-const result = spawnSync(process.env.PROBE_PYTHON, ['-I', '-S', process.env.PROBE_SCRIPT], { env, stdio: 'inherit' });
-if (result.error || result.status !== 0) throw new Error(`stamp child failed: ${result.error || result.status}`);
-console.log(JSON.stringify(process.env));
-''']
     else:
         # -File, not -Command: Windows PowerShell 5.1 reads a multi-line -Command argument as
         # far as the first line break and exits 0 having run only the preference line.
@@ -162,7 +150,7 @@ if ($LASTEXITCODE) { exit $LASTEXITCODE }
 
 
 @pytest.mark.platforms("posix")
-@pytest.mark.parametrize("shell", ["bash", "node"])
+@pytest.mark.parametrize("shell", ["bash"])
 def test_posix_build_children_stamp_old_and_new_without_changing_parent(tmp_path, shell):
     _stamp_probe(tmp_path, shell)
 

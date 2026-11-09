@@ -168,15 +168,11 @@ def _failure_text(exc: BaseException) -> str:
     return f"{type(exc).__name__}: {exc}" if str(exc) else type(exc).__name__
 
 
-def _headless_linux() -> bool:
-    return sys.platform.startswith("linux") and not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
-
-
 def build_update_products(project_root: Path, *, desktop: bool, after_dependencies=None) -> None:
     """Prepare the selected union once, attempting every independent product.
 
-    A failed product never skips the next one (a broken web build must not leave the TUI or the
-    desktop app stale); the failures are raised together at the end as ``ProductBuildError``.
+    A failed product never skips the next one; the failures are raised together at the end as
+    ``ProductBuildError``.
     ``after_dependencies`` (it must not raise) runs once the Python and Node dependencies are
     prepared, whether or not they succeeded, and before the first product build.
     """
@@ -202,9 +198,8 @@ def build_update_products(project_root: Path, *, desktop: bool, after_dependenci
     if not frontends and after_dependencies is not None:
         after_dependencies()
     if frontends:
-        desktop_built = False
         env: dict = {}
-        workspaces = frontends + (("apps/desktop",) if desktop else ())
+        workspaces = frontends
         publish_stage("Updating Node dependencies")
 
         def node_dependencies(selected: tuple[str, ...]) -> None:
@@ -216,27 +211,11 @@ def build_update_products(project_root: Path, *, desktop: bool, after_dependenci
 
         # Every product compiles from these node_modules: without them there is nothing to build.
         prepared = attempt("Node dependencies", lambda: node_dependencies(workspaces))
-        desktop_skipped = False
-        if not prepared and desktop and env:
-            # Only apps/desktop brings native addons (node-pty, electron) into the union: a host
-            # whose compiler cannot build them must still get the TUI and web UI it runs.
-            print("  → Retrying Node dependencies without the desktop app")
-            failed = failures.pop()
-            prepared = desktop_skipped = attempt("Node dependencies", lambda: node_dependencies(frontends))
-            if desktop_skipped:
-                failures.append(("desktop dependencies", failed[1]))
         if after_dependencies is not None:
             after_dependencies()
-        desktop_reason = failures[-1][0] if failures else ""
-        if desktop and (desktop_skipped or _headless_linux()):
-            print("  ⓘ If this host never runs the desktop app, `hermes uninstall --gui` removes it "
-                  "and future updates stop building it.")
         if prepared:
             # An update that changed no TUI/web input reuses the receipted output, as the
-            # launch path already does; recompiling it produces the same bytes. Desktop
-            # additionally needs the packaged app to name HEAD (its baked stamp carries the
-            # commit), so it is reused only when HEAD did not move: "Already up to date",
-            # a retried tail, a takeover re-entry.
+            # launch path already does; recompiling it produces the same bytes.
             if "ui-tui" in frontends:
                 if source_product_current(project_root, "tui", project_root / "ui-tui/dist"):
                     print("  ✓ TUI is up to date")
@@ -249,16 +228,6 @@ def build_update_products(project_root: Path, *, desktop: bool, after_dependenci
                 else:
                     publish_stage("Building the web UI")
                     attempt("web UI build", lambda: build_source_web(project_root, env=env))
-            if desktop and not desktop_skipped:
-                desktop_built = attempt("desktop app build", lambda: _build_desktop_product(project_root, env, publish_stage))
-                desktop_reason = failures[-1][0] if not desktop_built else ""
-        if desktop and not desktop_built:
-            # One whole line the Desktop hand-off scripts match: the follow-up text is truncated
-            # and names whichever products failed first, so it cannot say if THIS app was rebuilt.
-            print(f"  Desktop app build owed: {desktop_reason} failed")
-    if (project_root / "apps/desktop/scripts/build-webapp.mjs").is_file():
-        # Its dependencies live in a private workspace, so it never waits on the union above.
-        attempt("Webapp build", lambda: _rebuild_served_webapp(project_root, publish_stage))
     # A configured memory provider that no longer ships in core is installed from the
     # catalog for every profile home sharing this venv (config, data and tool names
     # unchanged). The update must finish even if the migration blows up.
@@ -278,63 +247,6 @@ def build_update_products(project_root: Path, *, desktop: bool, after_dependenci
         print(f"  ⚠ Plugin migration skipped: {exc}")
     if failures:
         raise ProductBuildError(failures)
-
-
-def _rebuild_served_webapp(project_root: Path, publish_stage) -> None:
-    """The Webapp bundle (``apps/desktop/dist-webapp``), when a home sharing this install serves it
-    (``webapp.enabled``): its gateway serves the bundle as built, so one older than the updated
-    backend would talk to it with an outdated contract. Built with the function ``hermes webapp``
-    uses, which reuses a current bundle. A failed build leaves the previous bundle on disk, marked
-    out of date: its gateways report the Webapp unavailable until ``hermes webapp`` rebuilds it."""
-    from gateway.webapp_listener import webapp_settings
-    from hermes_cli.webapp import mark_webapp_stale, prepare_webapp_renderer
-    from pm.plugins_state import dependency_homes
-
-    if not any(webapp_settings(home).enabled for home in dependency_homes()):
-        return
-    publish_stage("Building the Webapp")
-    try:
-        prepare_webapp_renderer(project_root, explicit=True)
-    except BaseException:
-        try:
-            if mark_webapp_stale(project_root):
-                print("  ⓘ The Webapp stays unavailable until `hermes webapp` rebuilds it.")
-        except OSError as exc:
-            print(f"  ⚠ Could not mark the Webapp out of date: {exc}")
-        raise
-
-
-def _build_desktop_product(project_root: Path, env: dict, publish_stage) -> None:
-    from hermes_cli.desktop_build_reuse import packaged_desktop_reusable
-    from hermes_cli.main_desktop import (
-        _packaged_desktop_current_for_head, _refresh_installed_desktop_apps, build_prepared_desktop)
-
-    desktop_dir = project_root / "apps/desktop"
-    if _packaged_desktop_current_for_head(desktop_dir, project_root):
-        print("  ✓ Desktop app is up to date")
-    elif built_from := packaged_desktop_reusable(desktop_dir, project_root, env):
-        print(f"  ✓ Desktop app is up to date: no desktop build input changed since {built_from[:12]}")
-    else:
-        publish_stage("Building the desktop app")
-        # The desktop build mutates checkout-scoped node_modules and
-        # apps/desktop/release; serialize it against a concurrent manual
-        # `hermes desktop` (#93940). The update path waits rather than exits:
-        # the in-flight build it queues behind produces the same fresh tree
-        # this update needs.
-        from hermes_cli.desktop_build_lock import DesktopBuildLock
-
-        build_lock = DesktopBuildLock(project_root)
-        build_lock.acquire(wait=True)
-        try:
-            build_prepared_desktop(
-                desktop_dir, source_mode=False,
-                pnpm=shutil.which("pnpm", path=env["PATH"]), env=env, icons=project_root,
-            )
-        finally:
-            build_lock.release()
-    # A current release/ can still sit beside a stale installed copy (an earlier
-    # update rebuilt but never installed); healing must not wait for the next build.
-    _refresh_installed_desktop_apps(desktop_dir)
 
 
 if __name__ == "__main__":

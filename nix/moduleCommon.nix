@@ -10,9 +10,9 @@
 #   nixosModules.nix        the service user and group, stateDir,
 #                           addToSystemPackages, container mode, tmpfiles,
 #                           system.activationScripts, system systemd units
-#   homeManagerModules.nix  hermesHome, programs.hermes-agent (the CLI and
-#                           the desktop application), home.activation,
-#                           systemd.user.services, launchd.agents
+#   homeManagerModules.nix  hermesHome, programs.hermes-agent (the CLI),
+#                           home.activation, systemd.user.services,
+#                           launchd.agents
 #
 # The split is by scope, not by feature. Code that needs root or a system
 # identity stays in the NixOS module. All other code is here.
@@ -277,7 +277,7 @@ let
           The merge into the config.yaml on disk is also a deep merge. These
           keys replace the keys on disk. The module keeps all other keys,
           which includes the keys that `hermes config set` and the settings
-          panes of the TUI and the desktop app write at runtime.
+          panes of the TUI write at runtime.
         '';
         example = literalExpression ''
           {
@@ -508,9 +508,9 @@ let
       # `hermes serve` and `hermes dashboard` are the same entry point,
       # hermes_cli.main:cmd_dashboard, with one flag of difference. serve runs
       # without a user interface. dashboard also serves the web application.
-      # Both give the /api/ws and /api/pty sockets that Hermes Desktop
-      # connects to. They are one process, and you can run only one of them.
-      # Thus this option is an enum and not two booleans.
+      # Both give the /api/ws and /api/pty sockets. They are one process, and
+      # you can run only one of them. Thus this option is an enum and not two
+      # booleans.
       #
       # The backend does not run the messaging gateway. web_server.py only
       # controls an external gateway, with `hermes gateway restart`. It does
@@ -528,8 +528,7 @@ let
 
             - "none"      — no backend
             - "serve"     — the backend without a user interface. It gives
-                            the /api/ws and /api/pty sockets that Hermes
-                            Desktop connects to.
+                            the /api/ws and /api/pty sockets.
             - "dashboard" — all that "serve" gives, and the browser admin
                             panel on the same port
 
@@ -641,9 +640,7 @@ let
 
             The backend reads the file at each start and gives the value to
             HERMES_DASHBOARD_SESSION_TOKEN. That token authorizes the /api
-            routes and the /api/ws socket. Hermes Desktop presents the same
-            value, so the application reaches this backend and starts no
-            second one.
+            routes and the /api/ws socket.
 
             Without this option the backend makes a new token at each start,
             which no other process can know.
@@ -652,7 +649,7 @@ let
             it mode 0600. Do not use a Nix path literal, because that copies
             the secret into the Nix store.
           '';
-          example = literalExpression ''config.sops.secrets."hermes/desktop-token".path'';
+          example = literalExpression ''config.sops.secrets."hermes/session-token".path'';
         };
       };
     };
@@ -674,7 +671,6 @@ let
       Home Manager convention:
 
         programs.hermes-agent.enable = ${lib.boolToString (value != false)};  # the hermes CLI, and HERMES_HOME for your shells
-        programs.hermes-agent.desktop.enable = true;  # the desktop application
 
       `services.hermes-agent` keeps the state, the configuration and
       the daemons. Remove `installPackage` and add the line above.
@@ -1070,9 +1066,9 @@ let
   backendDescription =
     cfg:
     if cfg.backend.mode == "dashboard" then
-      "Hermes Agent web dashboard and desktop backend"
+      "Hermes Agent web dashboard and backend"
     else
-      "Hermes Agent backend for Hermes Desktop";
+      "Hermes Agent backend without the web dashboard";
 
   # The environment that each Hermes process needs, from either module.
   #

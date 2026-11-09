@@ -6,7 +6,6 @@ import { basename, delimiter, dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
 
-import { prepareElectronRuntime } from './electron-runtime.mjs'
 import { lockImporters } from './pnpm-lock.mjs'
 
 // pnpm 12 is a native executable (pnpm.exe on Windows, never a .cmd shim), so it
@@ -100,9 +99,8 @@ function removeInstalledTrees(source, projects) {
   }
 }
 
-/** Install the full requested workspace union in one strict, locked operation.
- *  ``electron: false`` leaves Desktop's Electron binary unprepared, for builds that never run it. */
-export function prepareNodeDependencies({ source, workspaces, env = process.env, reuse = false, install = true, nativeToolchain, electron = true }) {
+/** Install the full requested workspace union in one strict, locked operation. */
+export function prepareNodeDependencies({ source, workspaces, env = process.env, reuse = false, install = true, nativeToolchain }) {
   source = resolve(source)
   if (!Array.isArray(workspaces) || workspaces.length === 0) {
     throw new Error('Select at least one workspace; implicit all-workspace installation is not allowed')
@@ -116,8 +114,6 @@ export function prepareNodeDependencies({ source, workspaces, env = process.env,
     }
     return workspace
   }))].sort()
-  const prepareElectron = electron && selected.includes('apps/desktop')
-    && Boolean(JSON.parse(readFileSync(join(source, 'apps/desktop/package.json'), 'utf8')).devDependencies?.electron)
   const pnpm = pnpmCommand({ env })
   const version = pnpmVersion(pnpm, { source, env })
   // pnpm never checks its own version here (pmOnFail: ignore keeps the lock one YAML
@@ -154,7 +150,6 @@ export function prepareNodeDependencies({ source, workspaces, env = process.env,
   }
   const key = inputs.digest('hex')
   if (reuse && completedInstallMatches({ source, receipt, installedLock, key, nativeKey })) {
-    if (prepareElectron) prepareElectronRuntime({ source, install, env })
     console.log(`node-deps: reusing completed install (${selected.join(', ')})`)
     return { source, workspaces: selected }
   }
@@ -165,7 +160,6 @@ export function prepareNodeDependencies({ source, workspaces, env = process.env,
   removeInstalledTrees(source, projects)
   console.log(`node-deps: installing workspace dependencies with pnpm (${selected.join(', ')})...`)
   execFileSync(pnpm, args, { cwd: source, env, stdio: 'inherit' })
-  if (prepareElectron) prepareElectronRuntime({ source, install, env })
   if (reuse) {
     const completed = `${key}\n${createHash('sha256').update(readFileSync(installedLock)).digest('hex')}\n`
     writeFileSync(receipt, completed)

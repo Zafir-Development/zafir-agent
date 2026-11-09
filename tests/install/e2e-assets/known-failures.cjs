@@ -20,30 +20,18 @@ function readOptional(file) {
   }
 }
 
-// Each harness keeps its own work-root layout: shas.json + hermes-home on
-// windows-e2e.ps1, shas.env + home/.hermes on macos-desktop-e2e.sh.
-const WORK_ROOTS = {
-  windows: root => ({
+// windows-e2e.ps1's work-root layout: shas.json + hermes-home.
+function windowsWorkRoot(root) {
+  return {
     state: JSON.parse(fs.readFileSync(path.join(root, 'shas.json'), 'utf8').replace(/^\uFEFF/, '')),
-    logs: {
-      update: readOptional(path.join(root, 'logs', 'update.log')),
-      desktop: readOptional(path.join(root, 'hermes-home', 'logs', 'desktop.log')),
-    },
-  }),
-  macos: root => {
-    const env = Object.fromEntries(fs.readFileSync(path.join(root, 'shas.env'), 'utf8')
-      .split(/\r?\n/).filter(line => line.includes('=')).map(line => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)]))
-    return {
-      state: { old: env.OLD_SHA, current: env.TARGET_SHA, old_ref: env.OLD_REF },
-      logs: { bootstrap: readOptional(path.join(root, 'home', '.hermes', 'logs', 'bootstrap-installer.log')) },
-    }
-  },
+    logs: { update: readOptional(path.join(root, 'logs', 'update.log')) },
+  }
 }
 
-function classifyWorkRoot(root, installMethod, updateMethod, error, platform = 'windows') {
-  const { state, logs } = WORK_ROOTS[platform](root)
+function classifyWorkRoot(root, installMethod, updateMethod, error) {
+  const { state, logs } = windowsWorkRoot(root)
   const rule = matchKnownFailure({
-    platform, phase: 'update', commit: state.old, installMethod, updateMethod, error, logs,
+    platform: 'windows', phase: 'update', commit: state.old, installMethod, updateMethod, error, logs,
   })
   if (!rule) return null
   return {
@@ -56,9 +44,9 @@ function classifyWorkRoot(root, installMethod, updateMethod, error, platform = '
 module.exports = { matchKnownFailure, classifyWorkRoot, rules }
 
 if (require.main === module) {
-  const [root, install, update, error, platform] = process.argv.slice(2)
+  const [root, install, update, error] = process.argv.slice(2)
   try {
-    const receipt = classifyWorkRoot(root, install, update, error, platform || 'windows')
+    const receipt = classifyWorkRoot(root, install, update, error)
     if (!receipt) process.exitCode = 1
     else {
       fs.writeFileSync(path.join(root, 'known-failure.json'), JSON.stringify(receipt, null, 2) + '\n')

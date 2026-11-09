@@ -132,6 +132,8 @@ def prepare_webapp_renderer(
             _clear_stale_mark(dist)
             print(f"✓ Hermes Webapp renderer is up to date: {dist}")
             return dist
+        if not (project_root / "scripts/build/webapp.mjs").is_file():
+            raise WebappBuildError("Building the Webapp renderer is no longer supported by this source install.")
         try:
             build_source_webapp(project_root, env=source_build_env(explicit=explicit), explicit=explicit)
         except (OSError, subprocess.SubprocessError, RuntimeError) as exc:

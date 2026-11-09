@@ -12,7 +12,9 @@ $tok = $null; $err = $null
 if ($err -and $err.Count) { $err | ForEach-Object { Write-Host $_.Message }; exit 1 }
 Write-Host "parse: OK"
 
-# 2. Parameter surface: both axes present with the generator's ids.
+# 2. Parameter surface: both axes present with the generator's ids. Only
+# source install/update surfaces survive: the GUI installer and the packaged
+# bundle routes are gone.
 $ast = [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $driver), [ref]$tok, [ref]$err)
 $params = $ast.ParamBlock.Parameters
 $byName = @{}
@@ -21,28 +23,32 @@ foreach ($required in @("Phase", "InstallMethod", "Route", "InstallRef")) {
     if (-not $byName.ContainsKey($required)) { Write-Host "missing param: $required"; exit 1 }
 }
 $imSet = ($byName["InstallMethod"].Attributes | Where-Object { $_.TypeName.Name -eq "ValidateSet" }).PositionalArguments.Value
-foreach ($m in @("desktop-installer@latest", "installer-script")) {
-    if ($imSet -notcontains $m) { Write-Host "InstallMethod ValidateSet missing $m"; exit 1 }
-}
+if ($imSet.Count -ne 1 -or $imSet -notcontains "installer-script") { Write-Host "InstallMethod ValidateSet must be installer-script only"; exit 1 }
 $rSet = ($byName["Route"].Attributes | Where-Object { $_.TypeName.Name -eq "ValidateSet" }).PositionalArguments.Value
-foreach ($m in @("open-app-update", "hermes-desktop-app-update", "hermes-update", "installer-script", "desktop-installer@latest")) {
+foreach ($m in @("hermes-update", "installer-script")) {
     if ($rSet -notcontains $m) { Write-Host "Route ValidateSet missing $m"; exit 1 }
+}
+if ($rSet.Count -ne 2) { Write-Host "Route ValidateSet must be exactly hermes-update + installer-script"; exit 1 }
+foreach ($gone in @("hermes-desktop-app-update", "open-app-update", "desktop-installer@latest")) {
+    if ($rSet -contains $gone) { Write-Host "Route ValidateSet still offers removed route $gone"; exit 1 }
+    if ($imSet -contains $gone) { Write-Host "InstallMethod ValidateSet still offers removed method $gone"; exit 1 }
 }
 Write-Host "parameter surface: OK"
 
-# 3. Dispatch bodies reference the right arms (AST-level: the switch on
-# InstallMethod contains both source/GUI arms; the switch on Route contains
-# all of them, with desktop-installer@latest re-running the GUI installer).
+# 3. Dispatch bodies reference the right arms (AST-level): the install phase
+# runs the source installer, the update switch keeps the two source routes.
 $text = Get-Content -LiteralPath $driver -Raw
 foreach ($needle in @(
     'function Invoke-PhaseInstall',
     'function Invoke-PhaseUpdate',
     'Invoke-RefInstaller $state.old "old"',
-    'Invoke-HermesDesktopAppUpdate $state.current',
     'Invoke-HermesUpdate',
-    'Invoke-PhaseInstallGui -Mode "update"'
+    'Invoke-RefInstaller $state.current "head"'
 )) {
     if ($text.IndexOf($needle) -lt 0) { Write-Host "dispatch missing: $needle"; exit 1 }
+}
+foreach ($gone in @('Invoke-PhaseInstallGui', 'Invoke-GuiUpdateDesktopRoute', 'Assert-DesktopArtifact', 'Save-GuiDriverFailureEvidence', 'Invoke-HermesDesktopAppUpdate')) {
+    if ($text.IndexOf($gone) -ge 0) { Write-Host "removed GUI arm still present: $gone"; exit 1 }
 }
 Write-Host "dispatch arms: OK"
 Write-Host "ALL HARNESS CHECKS PASSED"

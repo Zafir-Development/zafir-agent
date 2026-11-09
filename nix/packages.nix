@@ -96,8 +96,6 @@
 
         tui = full.hermesTui;
         web = full.hermesWeb;
-        webapp = full.hermesWebapp;
-        desktop = full.hermesDesktop;
 
         # The fixed-output pnpm store every frontend installs from; its hash
         # lives in nix/pnpm-deps-hash (`nix run .#update-pnpm-lockfile`).

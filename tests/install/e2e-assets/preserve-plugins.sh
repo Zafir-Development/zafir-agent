@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# Shared plugin upgrade-preservation hooks for the install E2E drivers
-# (POSIX + macOS). Sourced by tests/install/installer-script-e2e.sh and
-# tests/install/macos-desktop-e2e.sh.
+# Shared plugin upgrade-preservation hooks for the install E2E drivers.
+# Sourced by tests/install/installer-script-e2e.sh.
 #
 # The contract under test: a tagged Hermes upgrade must NOT delete or modify
 # anything in the active home's plugins/** tree or any profile's plugins/**

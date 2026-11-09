@@ -7,6 +7,6 @@
     "noEmit": false
   },
   "files": ["electron/backend-discovery.ts"],
-  "include": ["e2e", "playwright.config.ts", "../../tests-js/scripts", "../../tests/install/e2e-assets/desktop-smoke.ts"],
+  "include": ["e2e", "playwright.config.ts", "../../tests-js/scripts"],
   "exclude": ["src", "electron"]
 }

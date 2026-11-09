@@ -47,7 +47,7 @@ export function planTracker(run, jobs, openIssue) {
   const classes = new Map();
   for (const job of red) {
     const step = (job.steps || []).find((s) => RED.has(String(s.conclusion)))?.name || '(no step reported)';
-    // "Install v2026.9.24 (installer-script)" and "Install HEAD (installer-script+desktop)"
+    // "Install v2026.9.24 (installer-script)" and "Install HEAD (installer-script)"
     // are the same step of the driver; the leg name already carries ref and method.
     const phase = step.replace(/\bv\d{4}\.\d+\.\d+(?:\.\d+)?\b|\bHEAD\b|\bNEXT\b/g, '<ref>').replace(/\s*\([^)]*\)\s*$/, '');
     const key = `${job.conclusion} in step \`${phase}\``;

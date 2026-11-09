@@ -14,16 +14,14 @@
  * anything the types can't catch is self-evident on the next CI run.
  *
  * Used by .github/workflows/install-e2e.yml, which runs it with the picked
- * release tags (annotated at pick time with what each tag's tree ships):
+ * release tags:
  *
  *   node scripts/sandbox/generate-e2e-matrix.mjs \
- *     --tags '[{"ref":"v2026.8.3","desktop":true}]'
+ *     --tags '["v2026.8.3"]'
  *
  * Prints JSON: { linux: {include:[...]}, windows: {include:[...]},
- * macos: {include:[...]} } -- every entry is {name, install_method,
- * update_method, install_ref, update_ref, tag_has_desktop} (the tag
- * annotation lets a run workflow natively skip desktop-surface legs from
- * releases that predate the desktop app).
+ * macos: {include:[...]} } -- every entry is {name, leg_id, install_method,
+ * update_method, install_ref, update_ref}.
  */
 
 import fs from 'node:fs';
@@ -35,48 +33,37 @@ import { fileURLToPath } from 'node:url';
  * The closed method/version vocabulary. Workflows key off these exact
  * strings, so they are types, not conventions.
  *
- * @typedef {'latest'} InstallerVersion
- *   A published artifact version. The GUI installer this union described was
- *   removed with Hermes-Setup; the union remains for the packaged-bundle legs.
- * @typedef {'installer-script' | 'packaged-app'} InstallMethod
- *   installer-script is the platform's one-liner (curl | bash on
- *   linux/macos, irm | iex on windows); packaged-app installs a signed
- *   bundle. The desktop-stage opt-in and the GUI installer were removed, so
- *   the plain one-liner is the only source install method. The signed
- *   bundle's native in-app update pair is
- *   declared separately, not crossed with source-checkout update methods.
- * @typedef {InstallMethod | 'hermes-update' | 'open-app-update' | 'hermes-desktop-app-update'} UpdateMethod
+ * @typedef {'installer-script'} InstallMethod
+ *   The platform's one-liner (curl | bash on linux/macos, irm | iex on
+ *   windows). Packaged installs (signed bundle, GUI installer) were removed,
+ *   so the source one-liner is the only install method.
+ * @typedef {InstallMethod | 'hermes-update'} UpdateMethod
  *   Every install method doubles as an update method (re-run it over the
- *   existing install), plus the updater CLI and the two app-update
- *   variants. The variants differ by launch surface: open-app-update
- *   starts the app from the OS entry point a packaged install registers;
- *   hermes-desktop-app-update starts the app via `hermes desktop`, which
- *   every install method provides on every OS that ships the desktop app.
- *   Both then update through the app's own Update button.
+ *   existing install), plus the updater CLI. The source app-update variant
+ *   went with the desktop builders.
  * @typedef {'linux' | 'windows' | 'macos'} Os
  *
- * @typedef {{method: InstallMethod, versions?: InstallerVersion[]}} InstallEntry
- * @typedef {{method: UpdateMethod, versions?: InstallerVersion[]}} UpdateEntry
- *   `versions` expands the entry into one combination per version.
+ * @typedef {{method: InstallMethod}} InstallEntry
+ * @typedef {{method: UpdateMethod}} UpdateEntry
  * @typedef {{install: InstallEntry[], update: UpdateEntry[], secondUpdate?: never[]}} OsSpec
  *   secondUpdate (install -> update -> update again) is a real future axis
  *   -- the updater that RESULTS from an update must itself update -- typed
  *   `never[]` so declaring one is a type error until a leg implements it.
  *
- * @typedef {{ref: string, desktop: boolean}} TagAnnotation
- *   A picked release tag plus what its own tree ships (annotated by
- *   pick-releases in install-e2e.yml).
+ * @typedef {string} TagRef
+ *   One picked release tag. The matrix expands every tag into an OLD -> HEAD
+ *   column, so the tag list is just ref names.
  *
  * @typedef {'HEAD' | 'NEXT'} UpdateTarget
  *   HEAD is the commit under test. NEXT is not a git ref: the drivers mint
  *   it as a synthetic child of the install ref, so a leg starting AT HEAD
  *   still has an update to take.
  *
- * @typedef {{from: string, to: UpdateTarget, desktop: boolean}} Start
+ * @typedef {{from: string, to: UpdateTarget}} Start
  *   One column of the plan: install `from`, update to `to`.
  *
  * @typedef {{name: string, leg_id: string, install_method: string, update_method: string,
- *            install_ref: string, update_ref: UpdateTarget, tag_has_desktop?: boolean}} MatrixEntry
+ *            install_ref: string, update_ref: UpdateTarget}} MatrixEntry
  */
 
 /**
@@ -93,30 +80,19 @@ export function legId(name) {
   return name.replace(/[^A-Za-z0-9._-]+/g, '-');
 }
 
-/** One pinned package transition; source-release sampling does not apply.
- * @param {'windows' | 'macos'} os
- * @param {string} oldTag
- * @returns {{include: MatrixEntry[]}}
- */
-export function bundledMatrix(os, oldTag) {
-  const name = `${os}: packaged-app -> open-app-update (${oldTag} -> HEAD)`;
-  return { include: [{ name, leg_id: legId(name), install_method: 'packaged-app',
-    update_method: 'open-app-update', install_ref: oldTag, update_ref: 'HEAD', tag_has_desktop: true }] };
-}
-
 /**
  * The starting points every combination runs from: each sampled release
  * tag updating to HEAD, then HEAD itself updating to NEXT. The HEAD start
  * is the only leg whose installer runs against an empty machine with the
  * CURRENT script, and the only one whose updater is the one we ship today
  * (every tag leg exercises the OLD build's updater handing off to HEAD).
- * @param {TagAnnotation[]} tags
+ * @param {TagRef[]} tags
  * @returns {Start[]}
  */
 export function startsFor(tags) {
   return [
-    ...tags.map((t) => /** @type {Start} */ ({ from: t.ref, to: 'HEAD', desktop: t.desktop })),
-    { from: 'HEAD', to: 'NEXT', desktop: true },
+    ...tags.map((ref) => /** @type {Start} */ ({ from: ref, to: 'HEAD' })),
+    { from: 'HEAD', to: 'NEXT' },
   ];
 }
 
@@ -140,8 +116,6 @@ export const SPEC = {
     update: [
       { method: 'installer-script' },
       { method: 'hermes-update' },
-      // Same button, app launched via `hermes desktop`.
-      { method: 'hermes-desktop-app-update' },
     ],
   },
   macos: {
@@ -151,7 +125,6 @@ export const SPEC = {
     update: [
       { method: 'installer-script' },
       { method: 'hermes-update' },
-      { method: 'hermes-desktop-app-update' },
     ],
   },
   linux: {
@@ -161,23 +134,9 @@ export const SPEC = {
     update: [
       { method: 'installer-script' },
       { method: 'hermes-update' },
-      // `hermes desktop` is the source-mode path (build apps/desktop from
-      // the checkout, launch electron) and the one app surface a linux
-      // install has.
-      { method: 'hermes-desktop-app-update' },
     ],
   },
 };
-
-/**
- * Expand one method entry into concrete ids ("<method>@<version>").
- * @param {InstallEntry | UpdateEntry} entry
- * @returns {string[]}
- */
-export function expandMethod(entry) {
-  if (!entry.versions) return [entry.method];
-  return entry.versions.map((v) => `${entry.method}@${v}`);
-}
 
 /**
  * Every {os, install, update} combination in SPEC.
@@ -188,9 +147,9 @@ export function generateEnvironments(spec) {
   /** @type {{os: Os, install: string, update: string}[]} */
   const envs = [];
   for (const [os, osSpec] of /** @type {[Os, OsSpec][]} */ (Object.entries(spec))) {
-    for (const install of osSpec.install.flatMap(expandMethod)) {
-      for (const update of osSpec.update.flatMap(expandMethod)) {
-        envs.push({ os, install, update });
+    for (const install of osSpec.install) {
+      for (const update of osSpec.update) {
+        envs.push({ os, install: install.method, update: update.method });
       }
     }
   }
@@ -209,7 +168,7 @@ export function generateEnvironments(spec) {
  * graph renders.
  *
  * @param {{os: Os, install: string, update: string}[]} envs
- * @param {TagAnnotation[]} tags
+ * @param {TagRef[]} tags
  * @returns {Record<Os, {include: MatrixEntry[]}>}
  */
 export function buildMatrices(envs, tags) {
@@ -226,10 +185,6 @@ export function buildMatrices(envs, tags) {
         update_method: env.update,
         install_ref: start.from,
         update_ref: start.to,
-        // Every OS declares desktop-surface methods (both app-update
-        // variants at minimum), so every leg carries the annotation and
-        // its run workflow can natively skip pre-desktop tags.
-        tag_has_desktop: start.desktop,
       };
       byOs[env.os].include.push(entry);
     }
@@ -243,12 +198,6 @@ const ROUTE_OSES = /** @type {Record<string, Os[]>} */ ({
   both: ['linux'],
   update: ['linux'],
   installer: ['linux'],
-  'windows-desktop': ['windows'],
-  'macos-desktop': ['macos'],
-  // Bundled legs come from bundle-plan.mjs, not this matrix.
-  bundled: [],
-  'windows-bundled': [],
-  'macos-bundled': [],
 });
 
 /**
@@ -302,26 +251,13 @@ export function selectRoute(matrices, route) {
 }
 
 /**
- * Does this method id need the starting tag to ship the desktop app?
- * Shared by the plan chart (pre-desktop cells) and the results chart
- * (labeling WHY a skipped leg skipped).
- * @param {string} m
- * @returns {boolean}
- */
-export function methodNeedsDesktop(m) {
-  return m === 'open-app-update' || m === 'hermes-desktop-app-update';
-}
-
-/**
  * Render the plan as a markdown cross-table for $GITHUB_STEP_SUMMARY:
  * one row per {os, install -> update} combination, one column per
  * starting tag. Every cell is dispatched; whether it RUNS or greys out
- * is the run workflow's call (capability lives there, not here), so the
- * chart only distinguishes the one thing the plan itself knows:
- * desktop-surface legs from tags that predate the desktop app.
+ * is the run workflow's call (capability lives there, not here).
  *
  * @param {{os: Os, install: string, update: string}[]} envs
- * @param {TagAnnotation[]} tags
+ * @param {TagRef[]} tags
  * @returns {string}
  */
 export function renderMarkdownPlan(envs, tags) {
@@ -335,15 +271,7 @@ export function renderMarkdownPlan(envs, tags) {
     `|---|${starts.map(() => '---').join('|')}|`,
   ];
   for (const env of envs) {
-    const cells = starts.map((start) => {
-      if (
-        !start.desktop &&
-        (methodNeedsDesktop(env.install) || methodNeedsDesktop(env.update))
-      ) {
-        return 'pre-desktop';
-      }
-      return '⏳ 	';
-    });
+    const cells = starts.map(() => '⏳ 	');
     lines.push(`| \`${env.os}: ${env.install} -> ${env.update}\` | ${cells.join(' | ')} |`);
   }
   return lines.join('\n');
@@ -359,10 +287,6 @@ export function renderMarkdownPlan(envs, tags) {
  * (pick-releases, the report job itself) fall out naturally.
  *
  * @param {{name: string, conclusion: string | null}[]} jobs
- * @param {TagAnnotation[]} [tagAnnotations] When given (the same --tags the
- *   plan got), skipped cells carry their REASON: `pre-desktop` when a
- *   desktop-surface method meets a tag that predates apps/desktop, `TODO`
- *   when the pair is declared but no driver arm runs it yet.
  * @param {Map<string, number>} [artifactById] Artifact name -> id for this
  *   run (the report job's --artifacts). Legs that RAN (success or failure)
  *   get TWO links: 📼 to the run's single player artifact (playback.html,
@@ -375,33 +299,17 @@ export function renderMarkdownPlan(envs, tags) {
  *   name with the same formula the generator mints (legId).
  * @returns {string}
  */
-export function renderMarkdownResults(jobs, tagAnnotations = [], artifactById = new Map()) {
+export function renderMarkdownResults(jobs, artifactById = new Map()) {
   const knownRules = JSON.parse(fs.readFileSync(new URL('../../tests/install/e2e-assets/known-failures.json', import.meta.url), 'utf8'));
   /** @type {Map<string, {number: number, rule: any}>} */
   const footnotes = new Map();
   const LEG = /^(linux|windows|macos): (\S+) -> (\S+) \(([^)]+) -> (HEAD|NEXT)\) \//;
-  /** @type {Map<string, boolean>} */
-  const desktopByTag = new Map(tagAnnotations.map((t) => [t.ref, t.desktop]));
-  /**
-   * @param {string} install @param {string} update @param {string} tag
-   * @returns {string}
-   */
-  const skipLabel = (install, update, tag) => {
-    if (desktopByTag.size === 0) return 'skip';
-    if (
-      desktopByTag.get(tag) === false &&
-      (methodNeedsDesktop(install) || methodNeedsDesktop(update))
-    ) {
-      return 'pre-desktop';
-    }
-    return 'TODO';
-  };
   // A combination can surface as SEVERAL jobs with the same leg name (a
   // run workflow may have one inner job per driver arm; exactly one runs
   // and the others natively skip), so cells merge by significance: a real
   // outcome always beats a skip, and a bad outcome beats a good one.
-  const RANK = ['skip', 'TODO', 'pre-desktop', '&#x2705;', 'known', 'running', 'cancelled', '&#x274C;'];
-  const SKIPS = ['skip', 'TODO', 'pre-desktop'];
+  const RANK = ['TODO', '&#x2705;', 'known', 'running', 'cancelled', '&#x274C;'];
+  const SKIPS = ['TODO'];
   // Rendered success/failure cells carry artifact links after the glyph;
   // rank by the leading token or every such cell would rank as unknown (-1)
   // and lose to any skip already in the map.
@@ -445,7 +353,7 @@ export function renderMarkdownResults(jobs, tagAnnotations = [], artifactById = 
         return `known [^${footnotes.get(rule.id)?.number}]${reel}`;
       }
       case 'failure': return `&#x274C;${reel}`;
-      case 'skipped': return skipLabel(m[2], m[3], m[4]);
+      case 'skipped': return 'TODO';
       case 'cancelled': return 'cancelled';
       default: return 'running';
     }
@@ -465,7 +373,7 @@ export function renderMarkdownResults(jobs, tagAnnotations = [], artifactById = 
   const lines = [
     '### Install & Update E2E results',
     '',
-    `${passed} passed, ${failed} failed, ${known} known failures, ${skipped} skipped (TODO = declared, no driver arm yet; pre-desktop = the starting release predates apps/desktop), ${cells.length} legs total`,
+    `${passed} passed, ${failed} failed, ${known} known failures, ${skipped} skipped (TODO = declared, no driver arm yet), ${cells.length} legs total`,
     '',
     `| combination | ${tags.join(' | ')} |`,
     `|---|${tags.map(() => '---').join('|')}|`,
@@ -500,7 +408,6 @@ async function main() {
   });
   if (values.format === 'results') {
     const jobs = (await readStdin()).split('\n').filter((l) => l.trim()).map((l) => JSON.parse(l));
-    const annotations = /** @type {TagAnnotation[]} */ (JSON.parse(values.tags));
     /** @type {Map<string, number>} */
     const artifactById = new Map();
     if (values.artifacts) {
@@ -510,10 +417,10 @@ async function main() {
         if (typeof a.name === 'string' && typeof a.id === 'number') artifactById.set(a.name, a.id);
       }
     }
-    process.stdout.write(renderMarkdownResults(jobs, annotations, artifactById));
+    process.stdout.write(renderMarkdownResults(jobs, artifactById));
     return;
   }
-  const tags = /** @type {TagAnnotation[]} */ (JSON.parse(values.tags));
+  const tags = /** @type {TagRef[]} */ (JSON.parse(values.tags));
   const envs = generateEnvironments(SPEC);
   if (values.format === 'markdown') {
     process.stdout.write(renderMarkdownPlan(envs, tags));

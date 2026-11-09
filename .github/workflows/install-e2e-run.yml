@@ -18,9 +18,8 @@ name: Install & Update E2E (reusable)
 # workflow OS-agnostic: the same driver runs on ubuntu and macos runners.
 #
 # Method ids come from scripts/sandbox/generate-e2e-matrix.mjs. Supported
-# today: install via installer-script, update via hermes-update,
-# installer-script (re-run the one-liner), or hermes-desktop-app-update
-# (source-mode app launched by `hermes desktop`). Anything else NATIVELY
+# today: install via installer-script, update via hermes-update or
+# installer-script (re-run the one-liner). Anything else NATIVELY
 # SKIPS (grey check, no runner): capability knowledge lives here, next to
 # the driver, so the caller can dispatch every declared combination without
 # knowing which ones work.
@@ -47,7 +46,7 @@ on:
         required: true
         type: string
       update-method:
-        description: 'How the install updates to HEAD. Supported: hermes-update (the updater), installer-script (re-run the one-liner), hermes-desktop-app-update (launch via hermes desktop under Playwright, click Update now). Pairs without a driver arm skip.'
+        description: 'How the install updates to HEAD. Supported: hermes-update (the updater), installer-script (re-run the one-liner). Pairs without a driver arm skip.'
         required: true
         type: string
       install-ref:
@@ -64,19 +63,13 @@ on:
         description: 'Artifact-safe matrix leg id (from generate-e2e-matrix.mjs legId). Names this leg''s logs + player artifacts so the report job can link a row to its zip.'
         required: true
         type: string
-      tag-has-desktop:
-        description: "Whether install-ref ships the desktop app (apps/desktop). The caller annotates this from the tag's own tree; the app-update leg from a pre-desktop release natively skips."
-
-        required: false
-        type: boolean
-        default: true
       runner:
         description: 'Runner label.'
         required: false
         type: string
         default: ubuntu-latest
       timeout-minutes:
-        description: 'Job timeout. A cold run installs real toolchains twice, and app-update legs add a full desktop build + launch.'
+        description: 'Job timeout. A cold run installs real toolchains twice.'
         required: false
         type: number
         default: 60
@@ -88,12 +81,9 @@ jobs:
   e2e:
     name: install & update
     # The pairs the driver can run today; anything else natively skips.
-    # hermes-desktop-app-update also needs the starting tag to ship
-    # apps/desktop (the `hermes desktop` surface shipped with it).
     if: >-
       inputs.install-method == 'installer-script'
-      && (contains(fromJSON('["hermes-update", "installer-script"]'), inputs.update-method)
-        || (inputs.update-method == 'hermes-desktop-app-update' && inputs.tag-has-desktop))
+      && contains(fromJSON('["hermes-update", "installer-script"]'), inputs.update-method)
     runs-on: ${{ inputs.runner }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
 
