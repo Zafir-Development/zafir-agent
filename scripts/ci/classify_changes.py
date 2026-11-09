@@ -423,10 +423,10 @@ for _lane in ("e2e_upgrade",):
 _E2E_LANE_EXCLUDES = {
     "e2e": ("tests/e2e/core/upgrade/", "tests/e2e/core/windows_update/"),
 }
-# The image builds the Webapp (webapp_build stage), so its manifests and build
-# recipe route here; Desktop sources stay out, as web/ and ui-tui/ do.
+# The image builds the TUI and dashboard frontends from the shared recipe and
+# apps/shared, so those inputs route here. The desktop app is not in the image
+# build context (its sources are dockerignored), so it routes nowhere.
 _DOCKER_PATHS = (*_DOCKER_META, *_DEP_MANIFESTS, *_NPM_MANIFESTS, "pm/", "tests/docker/",
-                 "apps/desktop/package.json", "apps/desktop/scripts/build-webapp.mjs",
                  "apps/shared/package.json", "scripts/build/")
 _NIX_LANE_PATHS = (*_NIX_PATHS, *_NIX_FILES, *_DEP_MANIFESTS, *_NPM_MANIFESTS)
 

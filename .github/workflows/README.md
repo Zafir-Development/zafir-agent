@@ -294,7 +294,7 @@ branch protection.
 
 | Workflow | Triggers | Runs / skips | Manual trigger |
 |---|---|---|---|
-| `docker.yml`, **Docker Build, Test, and Publish** | `pull_request`, `push: main`, `workflow_call` (stable) | **PR:** `mode` (phase + classification, one job) → `build` only when the `docker` slow lane is on (Docker meta, dependency manifests, `pm/`, `tests/docker/`, webapp build recipe, or the `run-e2e` label). Builds slim+desktop × amd64+arm64 and runs the docker integration tests. Never pushes. **Push to `main` on the upstream repo:** always builds, then `publish` (env `container-publish`) and `merge` push `:main` / `:main-desktop` only (never `:latest`). **Stable `release-phase: test`:** builds the claim commit, tests it (unless the claim has no `docker-tests` lane), and archives the exact image. **`release-phase: publish`:** pushes the archived bytes under the attempt ref and returns the manifest digest. No `release: published` trigger, on purpose. | none (`gh run rerun`) |
+| `docker.yml`, **Docker Build, Test, and Publish** | `pull_request`, `push: main`, `workflow_call` (stable) | **PR:** `mode` (phase + classification, one job) → `build` only when the `docker` slow lane is on (Docker meta, dependency manifests, `pm/`, `tests/docker/`, the frontend build recipes (`scripts/build/`, `apps/shared/`), or the `run-e2e` label). Builds slim+desktop × amd64+arm64 and runs the docker integration tests. Never pushes. **Push to `main` on the upstream repo:** always builds, then `publish` (env `container-publish`) and `merge` push `:main` / `:main-desktop` only (never `:latest`). **Stable `release-phase: test`:** builds the claim commit, tests it (unless the claim has no `docker-tests` lane), and archives the exact image. **`release-phase: publish`:** pushes the archived bytes under the attempt ref and returns the manifest digest. No `release: published` trigger, on purpose. | none (`gh run rerun`) |
 | `nix.yml`, **Nix flake check** | `pull_request`, `push: main`, `workflow_call` | `flake-check` runs when the `nix` lane is on (`nix/`, `flake.*`, dependency/npm manifests, `.github/`, `run-e2e` label). Every push to `main` turns it on. `release: true` forces it. | none |
 | `pm-bundle.yml`, **PM Bundle** | `pull_request` on `pm/**` (not `*.md`), `scripts/bundles/**`, the Windows build deps, `uv.lock`, `pyproject.toml`, itself; `workflow_dispatch`; `workflow_call` (stable) | Stages and smoke-tests `hermes pm bundle` on darwin-arm64, win32-x64, win32-arm64. Linux targets are commented out; there is no Intel macOS leg. | `gh workflow run pm-bundle.yml [-f ref=<sha>]` |
 | `termux-verify.yml`, **Termux verification** | `push: main` / `pull_request` on `scripts/termux/**`, `pm/**` (not `*.md`), `tests/scripts/test_termux*`, itself; `workflow_dispatch`; `workflow_call` (stable) | `contracts` and `tui` always run. `r2-provisioned` is skipped on PRs. `native-runtime` (arm64) runs only when R2 secrets exist or `release: true`. A release run fails loudly without R2. | `gh workflow run termux-verify.yml` |
@@ -434,7 +434,7 @@ Long-form reference: `website/docs/developer-guide/stable-releases.md`.
 
 ```sh
 gh workflow run install-e2e.yml --ref main -f route=all
-gh workflow run install-e2e.yml --ref main -f route=windows-desktop -f install-ref=v0.21.5
+gh workflow run install-e2e.yml --ref main -f route=windows -f install-ref=v0.21.5
 gh workflow run install-e2e-red.yml -f run-id=<id> -f dry-run=false
 ```
 

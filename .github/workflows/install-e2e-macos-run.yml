@@ -3,8 +3,7 @@
 #   e2e (script arm)        tests/install/installer-script-e2e.sh - the
 #                           OS-agnostic git-redirect driver shared with
 #                           linux. installer-script installs;
-#                           script/updater/hermes-desktop-app-update
-#                           updates.
+#                           script/updater methods update.
 #
 # Method pairs without a driver arm yet NATIVELY SKIP (grey check, no
 # runner): the capability knowledge lives here, next to the drivers.
@@ -23,7 +22,7 @@ on:
         required: true
         type: string
       update-method:
-        description: 'How the install updates to HEAD. Supported: hermes-update, installer-script (re-run the one-liner), hermes-desktop-app-update (source-mode app launched by hermes desktop).'
+        description: 'How the install updates to HEAD. Supported: hermes-update, installer-script (re-run the one-liner).'
         required: true
         type: string
       install-ref:
@@ -36,17 +35,12 @@ on:
         required: false
         type: string
         default: HEAD
-      tag-has-desktop:
-        description: "Whether install-ref ships the desktop app (apps/desktop). The caller annotates this from the tag's own tree; the app-update leg from a pre-desktop release natively skips."
-        required: false
-        type: boolean
-        default: true
       leg-id:
         description: 'Artifact-safe matrix leg id (from generate-e2e-matrix.mjs legId). Names this leg''s logs + player artifacts so the report job can link a row to its zip.'
         required: true
         type: string
       timeout-minutes:
-        description: 'Job timeout. App-update legs do a full Electron build.'
+        description: 'Job timeout.'
         required: false
         type: number
         default: 60
@@ -64,8 +58,7 @@ jobs:
     name: install & update
     if: >-
       inputs.install-method == 'installer-script'
-      && (contains(fromJSON('["hermes-update", "installer-script"]'), inputs.update-method)
-        || (inputs.update-method == 'hermes-desktop-app-update' && inputs.tag-has-desktop))
+      && contains(fromJSON('["hermes-update", "installer-script"]'), inputs.update-method)
     uses: ./.github/workflows/install-e2e-run.yml
     with:
       commit: ${{ inputs.commit }}
@@ -73,7 +66,6 @@ jobs:
       update-method: ${{ inputs.update-method }}
       install-ref: ${{ inputs.install-ref }}
       update-ref: ${{ inputs.update-ref }}
-      tag-has-desktop: ${{ inputs.tag-has-desktop }}
       leg-id: ${{ inputs.leg-id }}
       runner: blacksmith-6vcpu-macos-latest
       timeout-minutes: ${{ inputs.timeout-minutes }}

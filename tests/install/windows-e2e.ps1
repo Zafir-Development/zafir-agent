@@ -11,15 +11,6 @@
 #               release tag) -- the version a user who installed on release
 #               day is on -- against serve.git, whose `main` is parked there.
 #   UPDATE    - OLD -> HEAD through the route selected by -Route:
-#                 hermes-desktop-app-update
-#                            launch the app via `hermes desktop` (the source
-#                            desktop launch surface; it stays until the
-#                            desktop app is removed), intercept the product's
-#                            final spawn, and CLICK Settings -> About ->
-#                            "Update now" under Playwright. The production
-#                            hand-off chain runs untouched: marker, app quit,
-#                            detached updater, `hermes update`, desktop
-#                            rebuild, RELAUNCH.
 #                 hermes-update
 #                            run `hermes update` from the installed command
 #                            (the CLI route a user might take).
@@ -79,7 +70,7 @@ param(
     [string]$InstallMethod = "installer-script",
 
     # Update method to exercise in the update phase, same id namespace.
-    [ValidateSet("hermes-desktop-app-update", "hermes-update", "installer-script")]
+    [ValidateSet("hermes-update", "installer-script")]
     [string]$Route = "hermes-update",
 
     # The OLD version: the ref served as `main` while the installer runs,
@@ -116,14 +107,11 @@ $OutputEncoding = [Console]::OutputEncoding
 
 # One PM tool store per leg. setup-pm exports HERMES_RUNTIME_DIR (its own
 # store) and HERMES_PYTHON for this job's tooling. A user's machine has one
-# store, <HERMES_HOME>\tools, and the desktop smoke already launches the app
-# that way (smoke-env.mjs drops every HERMES_* override). When install.ps1
-# and `hermes update` saw the job's store while the smoke did not, a leg
-# settled onto two stores and the update rewrote its own running launcher
-# ("source launcher publication failed"). No product step (installer, app,
-# update, chat) sees the job's variables; the driver keeps setup-pm only
-# through $DriverPython. PATH keeps setup-pm's tools, as older installers
-# expect uv/ripgrep there.
+# store, <HERMES_HOME>\tools, and the driver drops every HERMES_* override
+# before any product step runs. No product step (installer, update, chat)
+# sees the job's variables; the driver keeps setup-pm only through
+# $DriverPython. PATH keeps setup-pm's tools, as older installers expect
+# uv/ripgrep there.
 $DriverPython = if ($env:HERMES_PYTHON) { $env:HERMES_PYTHON } else { (Get-Command python.exe -ErrorAction Stop).Source }
 foreach ($jobOnly in @('HERMES_RUNTIME_DIR', 'HERMES_PYTHON', 'VIRTUAL_ENV')) {
     if (Test-Path -LiteralPath "env:$jobOnly") { Remove-Item -LiteralPath "env:$jobOnly" }
@@ -147,39 +135,10 @@ $ProofRoot   = Join-Path $WorkRoot "proof"
 $AssetsDir   = Join-Path $PSScriptRoot "e2e-assets"
 if (-not $DriverNode) { $DriverNode = (Get-Command node.exe -ErrorAction Stop).Source }
 $env:HERMES_E2E_NODE = $DriverNode
-$env:HERMES_DESKTOP_USER_DATA_DIR = Join-Path $WorkRoot 'electron-user-data'
 $script:ChatMock = $null
-$script:ChatFailure = $false
-. (Join-Path $AssetsDir 'desktop-smoke-windows.ps1')
-
-function Start-JourneyChat {
-    if (-not $script:ChatMock) {
-        $script:ChatFailure = $true
-        $script:ChatMock = Start-DesktopJourneyMock $DriverNode $AssetsDir $WorkRoot $HermesHome $ProofRoot
-        $script:ChatFailure = $false
-    }
-}
-
-function Invoke-DesktopCheckpoint([string]$ChatPhase, [string]$Commit, [string]$Method) {
-    # Every checkpoint chats through the journey mock. Without it the smoke starts a private mock,
-    # and the detached gateway that checkpoint leaves running keeps that dead URL into later steps;
-    # the journey mock's URL file lets a later step's mock rebind the same port.
-    Start-JourneyChat
-    $script:ChatFailure = $true
-    # The app must be able to detach its gateway, as from a user's launch (see Invoke-OutsideRunnerJob).
-    $chatExit = Invoke-OutsideRunnerJob "desktop-$ChatPhase" $WorkRoot $DriverNode @(
-        (Join-Path $AssetsDir 'source-desktop-smoke.mjs'),
-        '--root', $InstallDir, '--home', $HermesHome, '--user-data', $env:HERMES_DESKTOP_USER_DATA_DIR,
-        '--out', $ProofRoot, '--phase', $ChatPhase, '--expect-commit', $Commit, '--desktop', $script:ExpectedDesktop, '--method', $Method)
-    if ($chatExit -ne 0) { throw "Mandatory desktop chat $ChatPhase failed (exit $chatExit)" }
-    $script:ChatFailure = $false
-}
-
-function Confirm-OldChat([string]$Out) {
-    $receipt = Get-Content -LiteralPath (Join-Path $Out 'desktop-chat-old.json') -Raw | ConvertFrom-Json
-    if ($receipt.status -ne 'passed') { throw 'Mandatory OLD update-window chat failed' }
-    $script:ChatFailure = $false
-}
+# No source install builds a desktop product any more.
+$script:ExpectedDesktop = 'absent'
+. (Join-Path $AssetsDir 'journey-mock-windows.ps1')
 
 $RepoUrlHttps = "https://github.com/NousResearch/hermes-agent.git"
 $RepoUrlSsh   = "git@github.com:NousResearch/hermes-agent.git"
@@ -349,21 +308,11 @@ function Get-InstalledHead {
     return Invoke-Git @("-C", $InstallDir, "rev-parse", "HEAD")
 }
 
-function Get-DesktopExe {
-    foreach ($c in @(
-        (Join-Path $InstallDir "apps\desktop\release\win-unpacked\Hermes.exe"),
-        (Join-Path $InstallDir "apps\desktop\release\win-arm64-unpacked\Hermes.exe")
-    )) {
-        if (Test-Path -LiteralPath $c) { return $c }
-    }
-    return $null
-}
-
-# Install-side state snapshot, taken BEFORE Test-HermesRuns can throw: on
-# app-update legs the updater runs detached and its transcript lands in the
-# product logs and hand-off files, not in this driver. Copy those plus the
-# venv entry-point dir while the install is still there to inspect, so a
-# failed post-update assertion leaves its evidence in the proof tree.
+# Install-side state snapshot, taken BEFORE Test-HermesRuns can throw: the
+# updater's transcript lands in the product logs and hand-off files, not in
+# this driver. Copy those plus the venv entry-point dir while the install is
+# still there to inspect, so a failed post-update assertion leaves its
+# evidence in the proof tree.
 function Save-InstallSideState([string]$Label) {
     $dest = Join-Path $ProofRoot "install-side-$Label"
     New-Item -ItemType Directory -Path $dest -Force | Out-Null
@@ -588,149 +537,6 @@ function Stop-HangWatchdog($Job) {
     }
 }
 
-function Invoke-ManualCardUpdate([string]$ReceiptPath, [string]$TargetSha) {
-    Assert-True (Test-Path -LiteralPath $ReceiptPath) "manual update card produced a receipt"
-    $manual = Get-Content -LiteralPath $ReceiptPath -Raw | ConvertFrom-Json
-    Assert-True ($manual.command -match '^hermes update(?:\s|$)') "manual update card instructed hermes update"
-    Invoke-HermesUpdate
-    Assert-True ((Get-InstalledHead) -eq $TargetSha) "manual update landed on target commit"
-    Test-HermesRuns "post-manual-update"
-    Assert-True ($null -ne (Get-DesktopExe)) "Hermes.exe still present after manual update"
-}
-
-function Clear-HistoricalInstallerChurn {
-    # The GUI driver refuses a dirty source tree. v2026.7.1's installer leaves
-    # its own state there: `npm install` rewrites package-lock.json on Windows
-    # (later installers use `npm ci`, #112378) and v2026.6.19-era installers
-    # write an unignored .install_method. Installers through v2026.9.24 also
-    # clone under Git for Windows' system core.autocrlf=true and pin false only
-    # afterwards, leaving CRLF copies of every text file .gitattributes does not
-    # pin to LF (*.mdx, LICENSE, ...). The stat cache hides them except the few
-    # written in the index's racy timestamp window, which read as modified with
-    # identical index/HEAD blobs. Undo only that installer-generated state in
-    # this disposable clone; any other change still fails, listed.
-    # porcelain=v2: Invoke-Git trims output, which would eat v1's leading " M".
-    $lines = @((Invoke-Git @("-C", $InstallDir, "-c", "core.quotepath=false", "status", "--porcelain=v2", "--untracked-files=all")) -split "\r?\n" |
-        Where-Object { $_ })
-    if ($lines.Count -eq 0) { return }
-    Write-Host "  source status before GUI update:"
-    $lines | ForEach-Object { Write-Host "    $_" }
-    # --numstat honours --ignore-cr-at-eol (--name-only does not): a modified
-    # path with no record and an unchanged mode differs from its index blob
-    # only by CRs.
-    $content = @{}
-    (Invoke-Git @("-C", $InstallDir, "-c", "core.quotepath=false", "diff", "--numstat", "--ignore-cr-at-eol")) -split "\r?\n" |
-        Where-Object { $_ } | ForEach-Object { $content[($_ -split "`t", 3)[2]] = $true }
-    $locks = @(); $other = @()
-    foreach ($line in $lines) {
-        $fields = $line -split " ", 9
-        if ($fields[0] -eq "1" -and $fields[1] -eq ".M" -and $fields.Count -eq 9 -and
-            ($fields[8] -eq "package-lock.json" -or $fields[8] -like "*/package-lock.json" -or
-             ($fields[4] -eq $fields[5] -and -not $content.ContainsKey($fields[8])))) {
-            $locks += $fields[8]
-        } elseif ($line -eq "? .install_method") {
-            Add-Content -LiteralPath (Join-Path $InstallDir ".git\info\exclude") -Value "/.install_method"
-        } else {
-            $other += $line
-        }
-    }
-    Assert-True ($other.Count -eq 0) "installed source has only installer-generated changes (other: $($other -join '; '))"
-    if ($locks.Count) {
-        # From a file: a v2026.7.1 clone churns hundreds of paths, and passing
-        # them as arguments overflows the Windows command line ("The filename
-        # or extension is too long"). NUL-separated, literal: no quoting or
-        # glob magic applies to a path.
-        $pathspecs = Join-Path $WorkRoot "installer-churn.pathspec"
-        [System.IO.File]::WriteAllText($pathspecs, (($locks -join "`0") + "`0"), (New-Object System.Text.UTF8Encoding $false))
-        Invoke-Git @("--literal-pathspecs", "-C", $InstallDir, "checkout", "--pathspec-from-file=$pathspecs", "--pathspec-file-nul") | Out-Null
-    }
-    $left = @((Invoke-Git @("-C", $InstallDir, "status", "--porcelain", "--untracked-files=all")) -split "\r?\n" |
-        Where-Object { $_ })
-    Assert-True ($left.Count -eq 0) "undid only installer-generated source churn before the GUI update"
-}
-
-function Invoke-HermesDesktopAppUpdate([string]$TargetSha) {
-    # The hermes-desktop launch surface: `hermes desktop` runs its whole
-    # real pipeline; the driver intercepts the product's final spawn
-    # (argv/cwd/env captured by e2e-assets/launch-capture/sitecustomize.py)
-    # and re-executes it under Playwright, which clicks Update now.
-    $hermesExe = Get-SourceHermes $InstallDir
-    $spec = Join-Path $WorkRoot "launch-spec.json"
-    New-Item -ItemType Directory -Path (Join-Path $WorkRoot "logs") -Force | Out-Null
-    $log = Join-Path $WorkRoot "logs\desktop-launch-capture.log"
-
-    $capDir = Join-Path $AssetsDir "launch-capture"
-    $prevPy = $env:PYTHONPATH
-    $prevCap = $env:HERMES_E2E_CAPTURE_LAUNCH
-    $env:PYTHONPATH = if ($prevPy) { "$capDir;$prevPy" } else { $capDir }
-    $env:HERMES_E2E_CAPTURE_LAUNCH = $spec
-    $prevEap = $ErrorActionPreference; $ErrorActionPreference = "Continue"
-    Push-Location $InstallDir
-    try {
-        if ($hermesExe.StartsWith((Join-Path $InstallDir '.hermes'), [StringComparison]::OrdinalIgnoreCase)) {
-            # The PM launcher runs its interpreter with -I, so PYTHONPATH never
-            # imports sitecustomize. Same as installer-script-e2e.sh: ask the
-            # launcher for its own isolated command and inject the hook into it.
-            & $DriverPython -I (Join-Path $capDir 'pm-launch.py') $hermesExe $spec 2>&1 | Add-TsPrefix | Out-File -Encoding UTF8 $log
-        } else {
-            # Pre-PM venv console scripts load sitecustomize from PYTHONPATH.
-            & $hermesExe desktop 2>&1 | Add-TsPrefix | Out-File -Encoding UTF8 $log
-        }
-        $capExit = $LASTEXITCODE
-    } finally {
-        Pop-Location
-        $ErrorActionPreference = $prevEap
-        $env:PYTHONPATH = $prevPy
-        $env:HERMES_E2E_CAPTURE_LAUNCH = $prevCap
-    }
-    Write-LogGroup "hermes desktop (launch capture) transcript" $log
-    Assert-True ($capExit -eq 0) "hermes desktop exited 0 during launch capture"
-    Assert-True (Test-Path -LiteralPath "$spec.captured") "a launch was actually captured (exit 0 without a launch must not pass)"
-    Clear-HistoricalInstallerChurn
-
-    $node = $DriverNode
-    $chatOut = Join-Path $ProofRoot 'update-window'
-    Remove-Item -LiteralPath (Join-Path $chatOut 'desktop-chat-old.json') -Force -ErrorAction SilentlyContinue
-    $script:ChatFailure = $true
-    $prevEap = $ErrorActionPreference; $ErrorActionPreference = "Continue"
-    Push-Location $WorkRoot
-    try {
-        # 30 min, not the 10 min default: from v2026.9.24 the app's update
-        # runs the historical venv->PM takeover plus a full Desktop rebuild
-        # (9m43s measured).
-        & $node (Join-Path $AssetsDir "launch-from-spec.mjs") --spec $spec `
-            --old-sha (Read-State).old --chat-out $chatOut --mock-url $env:HERMES_E2E_MOCK_URL `
-            --result (Join-Path $HermesHome ".hermes-update-result.json") `
-            --expect-sha $TargetSha --repo-dir $InstallDir --timeout-ms 1800000 2>&1 |
-            ForEach-Object { Write-Host "  pw| $_" }
-        $driveExit = $LASTEXITCODE
-    } finally {
-        Pop-Location
-        $ErrorActionPreference = $prevEap
-    }
-    Confirm-OldChat $chatOut
-    $manualReceipt = Join-Path $chatOut 'manual-update.json'
-    if ($driveExit -eq 42) {
-        Invoke-ManualCardUpdate $manualReceipt $TargetSha
-        return
-    }
-    Assert-True ($driveExit -eq 0) "app driven via captured hermes desktop spec; update completed"
-
-    # The production updater relaunches Hermes. Close that verified window
-    # normally so the test-owned checkpoint starts and owns its own backend.
-    $desktopExe = Get-DesktopExe
-    $deadline = (Get-Date).AddMinutes(5)
-    $windows = @()
-    while ((Get-Date) -lt $deadline) {
-        $windows = @(Get-VerifiedDesktopWindows $desktopExe)
-        if ($windows.Count -eq 1) { break }
-        Start-Sleep -Seconds 2
-    }
-    Assert-True ($windows.Count -eq 1) "updated desktop relaunched exactly one verified window"
-    $script:ChatFailure = $true
-    Close-VerifiedDesktop $desktopExe $windows[0].Id
-}
-
 # ----------------------------------------------------------------------------
 # Phase: stage -- serve.git with `main` at OLD (advanced to HEAD by the update phase)
 # ----------------------------------------------------------------------------
@@ -883,8 +689,8 @@ function Invoke-UserStateActions {
     # CLI with a real (mocked-inference) provider configured.
     $hermes = Get-SourceHermes $InstallDir
     if (-not $script:ChatMock) {
-        # Same mock + config writer the desktop chat checkpoints use, so the
-        # leg has a genuinely configured provider rather than a dummy key.
+        # The journey mock + config writer, so the leg has a genuinely
+        # configured provider rather than a dummy key.
         $script:ChatMock = Start-DesktopJourneyMock $DriverNode $AssetsDir $WorkRoot $HermesHome $ProofRoot
     }
     $prevLazy = $env:HERMES_DISABLE_LAZY_INSTALLS
@@ -1070,10 +876,8 @@ function Assert-UserShims {
 
 function Invoke-PhaseInstall {
     # The source install lands on OLD, hermes runs, and state carries how OLD
-    # landed so any update route can follow it. A source install builds no
-    # desktop app.
+    # landed so any update route can follow it.
     $state = Read-State
-    $script:ExpectedDesktop = 'absent'
     # Isolated install target; serve.git's file:// origin
     # looks like a fork to the updater, whose "add the official repo as
     # upstream?" prompt would hang a headless run - the marker is the
@@ -1084,16 +888,12 @@ function Invoke-PhaseInstall {
     Invoke-RefInstaller $state.old "old"
     Assert-True ((Get-InstalledHead) -eq $state.old) "installed checkout is at OLD"
     Test-HermesRuns "post-install-script"
-    Invoke-DesktopCheckpoint 'old' $state.old $InstallMethod
     Assert-RedirectIsTransportOnly
     Invoke-UserStateActions
 }
 
 function Invoke-PhaseUpdate {
     $state = Read-State
-    # Only the source desktop launch route leaves a built desktop app behind;
-    # every other source route keeps the source-only install.
-    $script:ExpectedDesktop = if ($Route -eq 'hermes-desktop-app-update') { 'present' } else { 'absent' }
     $env:HERMES_HOME = $HermesHome
     # Match the POSIX driver's explicit opt-out when a detached updater bypasses
     # the PATH shim and sees our local transport as a fork.
@@ -1101,11 +901,6 @@ function Invoke-PhaseUpdate {
 
     # The update becomes available the way it does for a real user: the
     # remote's main moves forward.
-    # The mock provider is journey setup, not an upgrade mutation. Configure it
-    # before preservation snapshots so its stable endpoint is part of baseline state.
-    if ($Route -eq 'hermes-desktop-app-update') {
-        Start-JourneyChat
-    }
     Set-SourceMainChannel $InstallDir
     # Snapshot every plugin tree BEFORE the upgrade moves anything.
     Invoke-PreserveSnapshot
@@ -1116,9 +911,6 @@ function Invoke-PhaseUpdate {
     Write-Host "  serve.git main advanced to $($state.current)"
 
     switch ($Route) {
-        "hermes-desktop-app-update" {
-            Invoke-HermesDesktopAppUpdate $state.current
-        }
         "hermes-update" {
             Invoke-HermesUpdate
         }
@@ -1133,20 +925,18 @@ function Invoke-PhaseUpdate {
     Assert-UserShims
     Invoke-PreserveVerify
     Invoke-UserStateVerify
-    Invoke-DesktopCheckpoint 'new' $state.current $Route
 }
 
 function Invoke-CheckedPhaseUpdate {
     Remove-Item -LiteralPath (Join-Path $WorkRoot "known-failure.json") -Force -ErrorAction SilentlyContinue
     # Only evidence produced by this update attempt can match an exception.
-    foreach ($oldLog in @((Join-Path $WorkRoot "logs\update.log"), (Join-Path $HermesHome "logs\desktop.log"))) {
+    foreach ($oldLog in @((Join-Path $WorkRoot "logs\update.log"))) {
         if (Test-Path -LiteralPath $oldLog) { Move-Item -LiteralPath $oldLog -Destination "$oldLog.before-update" -Force }
     }
     try {
         Invoke-PhaseUpdate
     } catch {
         $failure = $_
-        if ($script:ChatFailure) { throw $failure }
         $node = $DriverNode
         $classification = & $node (Join-Path $AssetsDir "known-failures.cjs") $WorkRoot $InstallMethod $Route $failure.Exception.Message
         $classificationExit = $LASTEXITCODE
@@ -1164,8 +954,8 @@ function Invoke-CheckedPhaseUpdate {
 }
 
 function Invoke-PhaseVerifyStamp {
-    # Runs AFTER everything (install, update, the new runtime's launch and its
-    # smoke checks): the bootstrap-complete receipt and the checkout's source
+    # Runs AFTER everything (install, update and the new runtime's launch): the
+    # bootstrap-complete receipt and the checkout's source
     # stamp must both tell the truth about the final HEAD. A separate phase —
     # not an install-phase check — because the bootstrap marker can complete
     # on a LATER run than the install itself.

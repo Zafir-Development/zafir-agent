@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { expect, test } from 'vitest'
 
 const script: string = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../scripts/sandbox/generate-e2e-matrix.mjs')
-const TAGS: string = JSON.stringify([{ ref: 'v2026.6.19' }])
+const TAGS: string = JSON.stringify(['v2026.6.19'])
 
 interface Leg {
   name: string
@@ -54,10 +54,11 @@ test('every generated leg is a source install; no packaged or bundled route surv
 
   expect(legs(all).every(leg => leg.install_method === 'installer-script')).toBe(true)
   expect(new Set(legs(all).map(leg => leg.update_method))).toEqual(
-    new Set(['installer-script', 'hermes-update', 'hermes-desktop-app-update'])
+    new Set(['installer-script', 'hermes-update'])
   )
-  expect(legNames(all).some(name => /packaged-app|open-app-update|bundled/.test(name))).toBe(false)
+  expect(legNames(all).some(name => /desktop-app-update|packaged-app|open-app-update|bundled/.test(name))).toBe(false)
   expect(() => generate('windows-bundled')).toThrow()
+  expect(() => generate('windows-desktop')).toThrow()
 })
 
 test('the pr route runs one script install updated by hermes update per OS start, nothing else', () => {

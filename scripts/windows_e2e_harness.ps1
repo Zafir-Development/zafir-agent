@@ -25,29 +25,29 @@ foreach ($required in @("Phase", "InstallMethod", "Route", "InstallRef")) {
 $imSet = ($byName["InstallMethod"].Attributes | Where-Object { $_.TypeName.Name -eq "ValidateSet" }).PositionalArguments.Value
 if ($imSet.Count -ne 1 -or $imSet -notcontains "installer-script") { Write-Host "InstallMethod ValidateSet must be installer-script only"; exit 1 }
 $rSet = ($byName["Route"].Attributes | Where-Object { $_.TypeName.Name -eq "ValidateSet" }).PositionalArguments.Value
-foreach ($m in @("hermes-desktop-app-update", "hermes-update", "installer-script")) {
+foreach ($m in @("hermes-update", "installer-script")) {
     if ($rSet -notcontains $m) { Write-Host "Route ValidateSet missing $m"; exit 1 }
 }
-foreach ($gone in @("open-app-update", "desktop-installer@latest")) {
+if ($rSet.Count -ne 2) { Write-Host "Route ValidateSet must be exactly hermes-update + installer-script"; exit 1 }
+foreach ($gone in @("hermes-desktop-app-update", "open-app-update", "desktop-installer@latest")) {
     if ($rSet -contains $gone) { Write-Host "Route ValidateSet still offers removed route $gone"; exit 1 }
     if ($imSet -contains $gone) { Write-Host "InstallMethod ValidateSet still offers removed method $gone"; exit 1 }
 }
 Write-Host "parameter surface: OK"
 
 # 3. Dispatch bodies reference the right arms (AST-level): the install phase
-# runs the source installer, the update switch keeps the three source routes.
+# runs the source installer, the update switch keeps the two source routes.
 $text = Get-Content -LiteralPath $driver -Raw
 foreach ($needle in @(
     'function Invoke-PhaseInstall',
     'function Invoke-PhaseUpdate',
     'Invoke-RefInstaller $state.old "old"',
-    'Invoke-HermesDesktopAppUpdate $state.current',
     'Invoke-HermesUpdate',
     'Invoke-RefInstaller $state.current "head"'
 )) {
     if ($text.IndexOf($needle) -lt 0) { Write-Host "dispatch missing: $needle"; exit 1 }
 }
-foreach ($gone in @('Invoke-PhaseInstallGui', 'Invoke-GuiUpdateDesktopRoute', 'Assert-DesktopArtifact', 'Save-GuiDriverFailureEvidence')) {
+foreach ($gone in @('Invoke-PhaseInstallGui', 'Invoke-GuiUpdateDesktopRoute', 'Assert-DesktopArtifact', 'Save-GuiDriverFailureEvidence', 'Invoke-HermesDesktopAppUpdate')) {
     if ($text.IndexOf($gone) -ge 0) { Write-Host "removed GUI arm still present: $gone"; exit 1 }
 }
 Write-Host "dispatch arms: OK"

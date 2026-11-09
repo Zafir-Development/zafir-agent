@@ -9,10 +9,6 @@
 #   installer-script            the irm | iex one-liner: the install.ps1
 #                               shipped AT the OLD ref, headless.
 #   hermes-update               venv hermes.exe update.
-#   hermes-desktop-app-update   the app's own Update button, app launched via
-#                               `hermes desktop`: the driver captures the
-#                               product's own spawn (argv/cwd/env) and
-#                               re-executes it under Playwright.
 #
 # Method pairs without a driver arm yet NATIVELY SKIP (grey check, no
 # runner): the capability knowledge lives here, next to the driver, so the
@@ -43,7 +39,7 @@ on:
         required: true
         type: string
       update-method:
-        description: 'How the install updates to HEAD. Supported: hermes-desktop-app-update (Update button under Playwright, app launched via hermes desktop), hermes-update, installer-script.'
+        description: 'How the install updates to HEAD. Supported: hermes-update, installer-script.'
         required: true
         type: string
       install-ref:
@@ -56,23 +52,18 @@ on:
         required: false
         type: string
         default: HEAD
-      tag-has-desktop:
-        description: "Whether install-ref ships the desktop app (apps/desktop). The caller annotates this from the tag's own tree; the app-update leg from a pre-desktop release natively skips."
-        required: false
-        type: boolean
-        default: true
       leg-id:
         description: "Artifact-safe matrix leg id (from generate-e2e-matrix.mjs legId). Names this leg's logs + player artifacts so the report job can link a row to its zip."
         required: true
         type: string
       timeout-minutes:
-        description: 'Job timeout. The install leg does real toolchain work and the update leg a full Electron rebuild.'
+        description: 'Job timeout. The install leg does real toolchain work and the update leg a full rebuild.'
         required: false
         type: number
         # Green legs take up to ~40 min; from v2026.9.24 the update alone runs the venv->PM
         # takeover plus the JS install and a Desktop rebuild (24 min in 108542725043, 11 of them
-        # one npm ci), and the app-update driver may wait 30 min. pty-run.py's deadline and the
-        # per-step budgets bound real hangs, so the job cap only has to clear a slow runner.
+        # one npm ci). pty-run.py's deadline and the per-step budgets bound real hangs, so the
+        # job cap only has to clear a slow runner.
         default: 90
 permissions:
   contents: read
@@ -86,23 +77,20 @@ jobs:
     # Short static name on purpose: name expressions render UNEXPANDED on
     # skipped jobs.
     name: e2e
-    # The implemented source {install x update} pairs. hermes-desktop-app-update
-    # also needs the starting tag to ship apps/desktop (pre-desktop releases
-    # have no window to launch and no Update button to click).
+    # The implemented source {install x update} pairs.
     if: >-
       inputs.install-method == 'installer-script'
-      && (contains(fromJSON('["hermes-update", "installer-script"]'), inputs.update-method)
-        || (inputs.update-method == 'hermes-desktop-app-update' && inputs.tag-has-desktop))
+      && contains(fromJSON('["hermes-update", "installer-script"]'), inputs.update-method)
     runs-on: windows-latest-32-core
     timeout-minutes: ${{ inputs.timeout-minutes }}
 
     env:
-      # Sibling of the checkout (D:\a\hermes-agent\hermes-desktop-gui-e2e):
+      # Sibling of the checkout (D:\a\hermes-agent\hermes-source-gui-e2e):
       # outside the repo so the staged bare clone and the install never
       # collide with the checkout itself. NOTE: ${{ runner.temp }} is NOT
       # available in job-level env (only github/inputs/matrix/needs/
       # secrets/strategy/vars).
-      HERMES_E2E_WORKROOT: ${{ github.workspace }}\..\hermes-desktop-gui-e2e
+      HERMES_E2E_WORKROOT: ${{ github.workspace }}\..\hermes-source-gui-e2e
 
     steps:
       # Full history: the driver bare-clones this checkout as the repo the

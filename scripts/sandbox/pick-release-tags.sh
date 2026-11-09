@@ -108,10 +108,10 @@ else
   done
 fi
 
-# Materialize exactly the picked tags as local refs: the caller walks the
-# picked tags' trees (git ls-tree), which a checkout without tags cannot do.
-# The name-based ordering above needs no objects, so unselected releases are
-# never fetched.
+# Materialize exactly the picked tags as local refs: the matrix generator runs
+# `git rev-parse` on each as an install baseline, which a checkout without
+# tags cannot do. The name-based ordering above needs no objects, so unselected
+# releases are never fetched.
 refs=()
 for tag in "${picked[@]}"; do
   refs+=("+refs/tags/$tag:refs/tags/$tag")
