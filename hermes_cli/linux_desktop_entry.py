@@ -408,9 +408,8 @@ def _wrapper_targets_checkout(wrapper: Path, checkout_root: Path) -> bool:
 
 
 _HERMES_CODE_MARKERS = ("hermes_cli", "workspace/hermes_cli")
-# A desktop workspace beside the code tree: ``desktop/package.json`` at the root or in a
-# ``workspace/`` sub-checkout.
-_DESKTOP_APP_ENTRIES = ("desktop/package.json", "workspace/desktop/package.json")
+# A desktop workspace beside the code tree.
+_DESKTOP_APP_ENTRIES = ("apps/desktop/package.json", "workspace/apps/desktop/package.json")
 
 
 def _launcher_tree(path: Path) -> Path:

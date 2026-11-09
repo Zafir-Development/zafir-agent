@@ -69,7 +69,7 @@ def test_sign_in_fonts_load_from_the_packaged_dashboard_without_a_source_tree(mo
         (dashboard / url.lstrip("/")).write_bytes(b"packaged " + url.encode())
     webapp = tmp_path / "webapp"
     webapp.mkdir()
-    monkeypatch.setattr(static_assets, "_WEB_PUBLIC", tmp_path / "no-source-tree" / "web" / "public")
+    monkeypatch.setattr(static_assets, "_web_public_dir", lambda: tmp_path / "no-source-tree" / "web" / "public")
     monkeypatch.setattr(server, "WEB_DIST", dashboard)
     client = _spa(monkeypatch, webapp, surface="webapp")
 
