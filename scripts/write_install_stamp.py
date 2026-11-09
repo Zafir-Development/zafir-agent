@@ -61,6 +61,8 @@ _SEMVER_TAG_RE = re.compile(r"^v(0|[1-9]\d{0,2})\.(\d+)\.(\d+)(?:-[0-9A-Za-z.-]+
 _LEGACY_CALVER_TAG_RE = re.compile(r"^v20\d{2}\.\d+\.\d+(?:\.\d+)?$")
 
 FALLBACK_COMMIT = "0" * 40
+# A caller-supplied identity is only an identity when it is the whole SHA.
+_FULL_COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 
 
 def _run_git(*args: str, cwd: str | Path = _REPO_ROOT) -> str | None:
@@ -125,8 +127,9 @@ def build_stamp(
 
     Args override detection.
     ``source`` identifies where the stamp came from (``ci``, ``local``,
-    ``docker``, ``nix``, ``fallback``). ``update_mechanism`` is required:
-    every stamp names who applies the next update (see UPDATE_MECHANISMS).
+    ``docker``, ``nix``, ``commit-build``, ``fallback``). ``update_mechanism``
+    is required: every stamp names who applies the next update (see
+    UPDATE_MECHANISMS).
 
     ``runtime_dir`` is a path RELATIVE to the stamp file's directory, naming
     where the pm store (the managed tool bytes) lives. A sealed desktop-app
@@ -215,7 +218,19 @@ def build_stamp(
     tag = os.environ.get("HERMES_PAYLOAD_TAG") or None
 
     _stable_tag = re.compile(r"^v(0|[1-9]\d{0,2})\.\d+\.\d+$")
-    if payload != "bootstrap" and not (
+    # The one tagless non-bootstrap payload: the Termux .deb's --commit lane
+    # (HERMES_DESKTOP_VARIANT=runtime). Its identity is the full SHA the caller
+    # explicitly admitted on the command line -- never an ambient env/git guess,
+    # never the all-zero fallback. Commit builds never enter an update channel,
+    # so the stamp keeps tag=None.
+    tagless_runtime = (
+        payload == "runtime"
+        and commit_admitted
+        and commit != FALLBACK_COMMIT
+        and bool(_FULL_COMMIT_RE.fullmatch(commit))
+        and not tag
+    )
+    if payload != "bootstrap" and not tagless_runtime and not (
         tag and (_stable_tag.match(tag) or update_channel.is_canary_tag(tag))
     ):
         raise SystemExit(

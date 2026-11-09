@@ -36,6 +36,7 @@ RELEASE_COMMIT=""
 PAYLOAD=""
 OUT=""
 TUI_PRODUCT=""
+STAMP_SOURCE=bundle
 
 usage() { printf 'usage: build_deb.sh --repo <dir> (--tag <tag> | --commit <full-sha>) --payload <dir> --tui-product <dir> --out <dir>\n' >&2; exit 2; }
 log()  { printf '\n==> %s\n' "$*"; }
@@ -87,14 +88,15 @@ PY
     if [ -n "$RELEASE_COMMIT" ]; then
         DEB_VERSION="$(python3 "$HERE/deb_version.py" "$TAG")" || fail "version derivation failed for tag $TAG"
         export HERMES_PAYLOAD_TAG="$TAG"
-        unset HERMES_BUILD_COMMIT
     else
         DEB_VERSION="${PY_VERSION}+commit${COMMIT_MODE:0:12}"
         export HERMES_PAYLOAD_TAG=""
-        export HERMES_BUILD_COMMIT="$COMMIT_MODE"
+        # The retained provenance label: hermes_cli/update_contract.is_commit_build
+        # and the update refusal read it, and the stamp writer admits a tagless
+        # runtime stamp only for an explicit full-SHA commit.
+        STAMP_SOURCE=commit-build
     fi
 else
-    unset HERMES_BUILD_COMMIT
     COMMIT="$(git -C "$REPO_ABS" rev-parse --verify "refs/tags/$TAG^{commit}")" \
         || fail "tag $TAG not found in $REPO_ABS"
     PY_VERSION="${TAG#v}"
@@ -193,7 +195,9 @@ rm -rf "$ASSEMBLY"
 printf 'apt\n' > "$PAYLOAD_ABS/app/.install_method"
 
 # The shared stamp writer records the apt-termux update owner.
-# Commit mode exports HERMES_BUILD_COMMIT and leaves the tag empty.
+# Commit mode passes --source commit-build: the identity is the explicit
+# --commit (the writer admits the tagless runtime stamp for it), and the
+# updater reads that label to refuse in-place updates.
 # 'runtime', not 'bundled': the deb ships a runtime but no Electron app,
 # and 'bundled' readers (data cleanup) go looking for the enclosing app.
 log "Writing app/install-stamp.json"
@@ -207,7 +211,7 @@ python3 "$REPO_ABS/scripts/write_install_stamp.py" \
     --distance 0 \
     --distribution apt-termux \
     --update-mechanism external \
-    --source bundle \
+    --source "$STAMP_SOURCE" \
     || fail "stamp write failed"
 
 # [5]+[6] Staging dir: DEBIAN/ control + payload under lib/hermes-agent/.
