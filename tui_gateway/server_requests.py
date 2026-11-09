@@ -127,7 +127,7 @@ _answerable: Callable[[str], bool] = lambda sid: True
 _clients: Callable[[str], list] = lambda sid: []
 
 # Error code a client answers when none of its windows shows the request's session, and the refusal the
-# tool reports once every attached client said so. Mirrored in apps/desktop server-requests.ts.
+# tool reports once every attached client said so.
 NOT_SHOWN_CODE = 4404
 NOT_SHOWN_MESSAGE = ("No Hermes Desktop window is showing this chat, so its preview, terminal and tour are out "
                      "of reach. Ask the user to open this chat in the Desktop app, then retry.")

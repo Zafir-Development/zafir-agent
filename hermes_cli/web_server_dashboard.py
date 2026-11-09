@@ -101,26 +101,52 @@ _HEADLESS_MSG = (
     "`hermes dashboard` for the browser UI."
 )
 
+# Requests under these prefixes are files, never client-side routes, so a miss is a 404 rather
+# than the SPA shell (a font answered with HTML renders in a fallback face, silently).
+STATIC_ASSET_PREFIXES: tuple[str, ...] = ("assets/", "ds-assets/", "fonts/", "fonts-terminal/")
+# Root page icons answer without sign-in, so a missing (or out-of-dist) icon must be a 404, not
+# the SPA shell served anonymously.
+STATIC_ASSET_FILES: frozenset[str] = frozenset({"apple-touch-icon.png", "favicon.ico"})
+_PUBLIC_FONT_DIRS: tuple[str, ...] = ("fonts", "fonts-terminal")
+
+
+def _web_public_dir() -> Path:
+    from hermes_cli._startup_fast import project_root_str
+    return Path(project_root_str()) / "web" / "public"
+
+
+def is_static_asset_path(full_path: str) -> bool:
+    return full_path in STATIC_ASSET_FILES or full_path.startswith(STATIC_ASSET_PREFIXES)
+
+
+def public_font_file(dist: Path, dashboard_dist: Path, full_path: str) -> Path | None:
+    """The served dist's copy of ``fonts/<name>`` (or ``fonts-terminal/<name>``), else the packaged
+    dashboard dist's, else the ``web/public`` copy the dashboard build takes it from; ``None`` when
+    none has it."""
+    folder, _, name = full_path.partition("/")
+    if folder not in _PUBLIC_FONT_DIRS or not name:
+        return None
+    for root in (dist / folder, dashboard_dist / folder, _web_public_dir() / folder):
+        candidate = root / name
+        if candidate.is_file() and candidate.resolve().is_relative_to(root.resolve()):
+            return candidate
+    return None
+
 
 def mount_spa(application: FastAPI):
     """Mount the built SPA; unmatched paths fall back to index.html for client-side routing.
 
-    Dashboard injects its session token into index.html; Webapp instead receives
-    the same credential through an operator-only launch fragment. Behind a path-prefix reverse
+    Dashboard injects its session token into index.html. Behind a path-prefix reverse
     proxy (``X-Forwarded-Prefix: /hermes``) the served index.html is rewritten so absolute
     asset URLs and the runtime ``__HERMES_BASE_PATH__`` honour that prefix without a rebuild.
 
     A missing WEB_DIST is deliberately NOT a mount-time terminal state: every route copes
     with a missing dist per-request (404 JSON / ``check_dir=False``), so a long-lived
     ``--skip-build`` process recovers the moment a build appears on disk — no restart.
-    The dist is also chosen per request: this mount runs at import, and a host that serves
-    another renderer (the Webapp's ``dist-webapp``) records it on ``application.state.web_dist``
-    later.
     """
     from hermes_cli.web_server import WEB_DIST, _DASHBOARD_EMBEDDED_CHAT_ENABLED
     from hermes_cli.web_deps import _server
     from hermes_cli.web_server_surface import policy
-    from hermes_cli.web_server_static_assets import is_static_asset_path, public_font_file
 
     # `hermes serve` is the headless backend: it must NEVER serve the browser SPA, even if a
     # dist is lying around, so only the JSON-RPC/WS/API surface is reachable.
@@ -169,28 +195,13 @@ def mount_spa(application: FastAPI):
         try:
             html = (web_dist() / "index.html").read_text(encoding="utf-8-sig")
         except OSError:
-            # Partial build / wiped dist / permissions: same JSON 404 as a fully-missing dist. The
-            # Webapp's bundle is built by `hermes webapp`, not by the dashboard's web project.
-            webapp = getattr(application.state, "ui_surface", "dashboard") == "webapp"
-            missing = ("The Webapp is not built. Run: hermes webapp" if webapp
-                       else "Frontend not built. Run: pnpm --dir web run build")
-            return JSONResponse({"error": missing}, status_code=404)
-        if getattr(application.state, "ui_surface", "dashboard") == "webapp":
-            # A bundle `hermes update` could not rebuild was built for the code before the update:
-            # refuse it until `hermes webapp` rebuilds it.
-            from gateway.webapp_listener import bundle_stale_reason
-            stale = bundle_stale_reason(web_dist())
-            if stale:
-                return JSONResponse({"error": stale}, status_code=503, headers=_NO_STORE)
+            # Partial build / wiped dist / permissions: same JSON 404 as a fully-missing dist.
+            return JSONResponse({"error": "Frontend not built. Run: pnpm --dir web run build"},
+                                status_code=404)
         chat_js = "true" if _DASHBOARD_EMBEDDED_CHAT_ENABLED else "false"
         gated = bool(getattr(application.state, "auth_required", False))
-        # Only a host that records its surface (the gateway's Webapp) names it to the page.
-        surface = getattr(application.state, "ui_surface", None)
-        surface_js = "" if surface is None else f"window.__HERMES_UI_SURFACE__={json.dumps(surface)};"
-        # Webapp grants host files and shell.exec as well as PTYs: its existing
-        # session token must come from the operator, never anonymous HTML. The
-        # gateway-hosted listener (gateway/run_api.py) never publishes it either:
-        # local clients use tickets.
+        # The gateway-hosted listener (gateway/run_api.py) never publishes the
+        # session token: local clients use tickets.
         withheld = (gated or bool(getattr(_server().app.state, "withhold_session_token", False))
                     or not policy(application.state).html_token)
         token_js = "" if withheld else f'window.__HERMES_SESSION_TOKEN__="{_server()._SESSION_TOKEN}";'
@@ -211,7 +222,6 @@ def mount_spa(application: FastAPI):
             f'window.__HERMES_BASE_PATH__="{prefix}";'
             f"window.__HERMES_AUTH_REQUIRED__={'true' if gated else 'false'};"
             f"window.__HERMES_INITIAL_PROFILE__={initial_profile_js};"
-            f"{surface_js}"
             f"window.__HERMES_DASHBOARD_PROFILE__={serving_profile_js};"
             f"</script>"
         )
@@ -224,8 +234,7 @@ def mount_spa(application: FastAPI):
         if theme_bootstrap:
             html = html.replace("</head>", f"{theme_bootstrap}</head>", 1)
         html = html.replace("</head>", f"{bootstrap_script}</head>", 1)
-        from hermes_cli.webapp_page_policy import page_headers
-        return HTMLResponse(html, headers=page_headers(request, html, _NO_STORE))
+        return HTMLResponse(html, headers=_NO_STORE)
 
     # Built CSS contains absolute ``url(/fonts/...)`` / ``url(/ds-assets/...)`` references that
     # browsers resolve against the document origin — wrong under a proxy prefix. Intercept CSS
@@ -264,8 +273,6 @@ def mount_spa(application: FastAPI):
             asset_files[directory] = _ImmutableAssetFiles(directory=directory, check_dir=False)
         await asset_files[directory](scope, receive, send)
 
-    from hermes_cli.webapp_previews import mount_preview_assets
-    mount_preview_assets(application)
     application.mount("/assets", serve_assets, name="assets")
 
     @application.get("/{full_path:path}")

@@ -41,12 +41,6 @@ def source_build_env(base_env: dict | None = None, *, explicit: bool = False, ve
     python = str(project_python(root)) if running_from_selected_environment(root) else sys.executable
     env = {**os.environ, **(base_env or {}), "CI": "1", "HERMES_PYTHON": python,
            "PYTHON": python}
-    # Electron's installer unpacks its binary with a native module that imports
-    # VCRUNTIME140.dll, which a fresh Windows lacks. Our Python ships one, and
-    # scripts/build/electron-runtime.mjs copies it beside that module.
-    vc_runtime = Path(sys.base_prefix) / "vcruntime140.dll"
-    if vc_runtime.is_file():
-        env["HERMES_VC_RUNTIME"] = str(vc_runtime)
     env.pop("ESBUILD_BINARY_PATH", None)
     npmrc = user_npmrc(env)
     if npmrc == hermes_npmrc():
@@ -116,12 +110,7 @@ def prepare_source_dependencies(project_root: Path, workspaces: tuple[str, ...],
 
 def prepare_launch_dependencies(project_root: Path, *, env: dict) -> None:
     """A launch rebuild must not prune another installed source frontend."""
-    from hermes_cli.main_desktop import _desktop_dist_exists, _desktop_packaged_executable
-
-    desktop_dir = project_root / "apps/desktop"
-    desktop = _desktop_dist_exists(desktop_dir) or _desktop_packaged_executable(desktop_dir) is not None
-    workspaces = ("ui-tui", "web") + (("apps/desktop",) if desktop else ())
-    prepare_source_dependencies(project_root, workspaces, env=env)
+    prepare_source_dependencies(project_root, ("ui-tui", "web"), env=env)
 
 
 def build_source_tui(project_root: Path, *, env: dict) -> None:
@@ -139,12 +128,6 @@ def build_source_web(project_root: Path, *, env: dict, icons: Path | None = None
     run_source_script(project_root, "scripts/build/web.mjs", "--source", str(project_root),
                       "--icons", str(icons), "--out", str(project_root / "hermes_cli/web_dist"), env=env,
                       label="Building the web UI")
-
-
-def build_source_webapp(project_root: Path, *, env: dict, explicit: bool = False) -> None:
-    """Browser renderer; its dependencies live in a private workspace, never the checkout's."""
-    run_source_script(project_root, "apps/desktop/scripts/build-webapp.mjs", *_install_args(explicit),
-                      env=env, label="Building the Webapp renderer")
 
 
 def source_frontends(project_root: Path) -> tuple[str, ...]:

@@ -23,7 +23,6 @@ from hermes_cli.web_deps import late
 from hermes_cli.web_server_chat import _ws_auth_ok, _ws_request_is_allowed
 from hermes_cli.web_server_gateway import _read_dashboard_json_response, _split_text_for_speak_stream
 from hermes_cli.web_server_surface import policy
-from hermes_cli.web_session_sockets import SPEAK_STREAM_SOCKET, TRANSCRIBE_STREAM_SOCKET
 from fastapi import HTTPException, Request, WebSocket, WebSocketDisconnect
 from hermes_cli.web_models import (
     AudioTranscriptionRequest,
@@ -530,8 +529,7 @@ async def transcribe_stream_ws(ws: WebSocket) -> None:
                ``{"type": "error", "message": ...}`` — also when no live STT is available, so the
                client falls back to ``POST /api/audio/transcribe`` with its recorded blob.
     """
-    # A socket ticket opens this stream only when minted for it (``/api/webapp/socket-ticket``).
-    if not _ws_auth_ok(ws, socket=TRANSCRIBE_STREAM_SOCKET):
+    if not _ws_auth_ok(ws):
         await ws.close(code=4401)
         return
     if not _ws_request_is_allowed(ws):
@@ -622,8 +620,7 @@ async def speak_stream_ws(ws: WebSocket) -> None:
                still speak per sentence via ``text_to_speech_tool`` and stream
                that PCM — the client POST is the last resort, not the Edge path.
     """
-    # A socket ticket opens this stream only when minted for it (``/api/webapp/socket-ticket``).
-    if not _ws_auth_ok(ws, socket=SPEAK_STREAM_SOCKET):
+    if not _ws_auth_ok(ws):
         await ws.close(code=4401)
         return
     if not _ws_request_is_allowed(ws):

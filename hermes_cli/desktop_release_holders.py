@@ -1,4 +1,4 @@
-"""Name the programs holding ``apps/desktop/release`` open by working directory (#101789).
+"""Name the programs holding the desktop app's ``release`` directory open by working directory (#101789).
 
 Windows refuses to rename a directory that a live process uses as its current working
 directory. A resident helper that some Hermes window spawned (an IME cloud service such as

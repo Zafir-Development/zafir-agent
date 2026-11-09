@@ -136,8 +136,6 @@ $AssetsDir   = Join-Path $PSScriptRoot "e2e-assets"
 if (-not $DriverNode) { $DriverNode = (Get-Command node.exe -ErrorAction Stop).Source }
 $env:HERMES_E2E_NODE = $DriverNode
 $script:ChatMock = $null
-# No source install builds a desktop product any more.
-$script:ExpectedDesktop = 'absent'
 . (Join-Path $AssetsDir 'journey-mock-windows.ps1')
 
 $RepoUrlHttps = "https://github.com/NousResearch/hermes-agent.git"
@@ -370,7 +368,7 @@ function Test-HermesRuns([string]$Label) {
         Write-Host "  first startup after the update ran (exit $startupExit); the checks below assert the launcher it must have published"
         $hermesExe = Get-SourceHermes $InstallDir
     }
-    & $DriverPython -B (Join-Path $AssetsDir 'source_driver.py') --root $InstallDir --launcher $hermesExe --desktop $script:ExpectedDesktop
+    & $DriverPython -B (Join-Path $AssetsDir 'source_driver.py') --root $InstallDir --launcher $hermesExe
     Assert-True ($LASTEXITCODE -eq 0) "$Label -- read-only install verification (no repair)"
     $prevLazy = $env:HERMES_DISABLE_LAZY_INSTALLS
     $prevBytecode = $env:PYTHONDONTWRITEBYTECODE

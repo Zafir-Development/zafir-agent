@@ -124,7 +124,7 @@ def source_checkout(tmp_path, monkeypatch):
     use_host_node_as_pm_node(monkeypatch)
     root = tmp_path / "source with spaces"
     root.mkdir()
-    workspaces = ["ui-tui", "web", "apps/desktop", "unrelated"]
+    workspaces = ["ui-tui", "web", "unrelated"]
     manifest = {"name": "build-fixture", "private": True, "version": "1.0.0",
                 "scripts": {"postinstall": "node log.mjs deps"}}
     (root / "package.json").write_text(json.dumps(manifest), encoding="utf-8")
@@ -143,9 +143,6 @@ def source_checkout(tmp_path, monkeypatch):
         (directory / "package.json").write_text(json.dumps({
             "name": workspace.replace("/", "-"), "version": "1.0.0",
             "dependencies": {"fixture-dep": f"file:{os.path.relpath(root / 'fixture-dep', directory)}"},
-            "scripts": {"build": "node ../../scripts/build/build-desktop.mjs",
-                        "builder": "node ../../scripts/build/package-desktop.mjs"}
-            if workspace == "apps/desktop" else {},
         }), encoding="utf-8")
     (root / "log.mjs").write_text(
         "import { appendFileSync } from 'node:fs';\n"
@@ -192,10 +189,7 @@ def source_products(source_checkout):
         "  const path = join(root, output); mkdirSync(dirname(path), { recursive: true });\n"
         "  writeFileSync(path, step);\n"
         "  if (step !== 'icons') {\n"
-        "    let out = dirname(path);\n"
-        "    if (step === 'desktop') { out = join(out, 'resources/app.asar.unpacked/dist');\n"
-        "      mkdirSync(out, {recursive: true}); writeFileSync(join(out, 'index.html'), 'renderer'); }\n"
-        "    recordProduct({source: root, product: step, out, inputs: buildInputs(root, step)});\n"
+        "    recordProduct({source: root, product: step, out: dirname(path), inputs: buildInputs(root, step)});\n"
         "  }\n"
         "}\n",
         encoding="utf-8",
@@ -210,18 +204,6 @@ def source_products(source_checkout):
             f"import {{ build }} from '{relative}product.mjs'; build({step!r}, {output!r});\n",
             encoding="utf-8",
         )
-    (root / "scripts/build/package-desktop.mjs").write_text(
-        "import { relative } from 'node:path';\n"
-        "import { build } from '../../product.mjs';\n"
-        "const flag = '-c.directories.output=';\n"
-        "const staging = process.argv.find(arg => arg.startsWith(flag)).slice(flag.length);\n"
-        "build('desktop', relative('../..', staging) + '/linux-unpacked/hermes');\n",
-        encoding="utf-8",
-    )
-    (root / "scripts/build/build-desktop.mjs").write_text(
-        "if (!process.argv.includes('--icons')) await import('../generate-icons.mjs');\n",
-        encoding="utf-8",
-    )
     # Default-brand icons are committed; updates consume them without rendering.
     (root / "web/public").mkdir(parents=True, exist_ok=True)
     (root / "web/public/favicon.ico").write_bytes(b"committed icon")
@@ -257,15 +239,13 @@ def test_preparation_reuses_only_the_exact_completed_workspace_union(source_chec
     assert (Path(os.environ["HERMES_HOME"]) / "cache/pnpm/store").is_dir()
     assert (root / "ui-tui/node_modules/fixture-dep").exists()
     assert (root / "web/node_modules/fixture-dep").exists()
-    assert not (root / "apps/desktop/node_modules").exists()
     assert not (root / "unrelated/node_modules").exists()
 
     prepare_source_dependencies(root, ("ui-tui", "web"), env=env)
     assert _events(root) == first
-    prepare_source_dependencies(root, ("ui-tui", "web", "apps/desktop"), env=env)
+    prepare_source_dependencies(root, ("ui-tui", "web", "unrelated"), env=env)
     assert len(_events(root)) == 2
-    assert (root / "apps/desktop/node_modules/fixture-dep").exists()
-    assert not (root / "unrelated/node_modules").exists()
+    assert (root / "unrelated/node_modules/fixture-dep").exists()
     assert (root / "pnpm-lock.yaml").read_bytes() == before
     assert acquired == ["pnpm"]
 
@@ -287,14 +267,11 @@ def test_preparation_reuses_only_the_exact_completed_workspace_union(source_chec
 
 @pytest.mark.platforms("linux")
 @pytest.mark.parametrize("desktop", [False, True])
-def test_update_builds_selected_products_after_one_union_preparation(source_products, desktop):
+def test_update_builds_the_tui_and_web_products_after_one_union_preparation(source_products, desktop):
     from hermes_cli.source_build import build_update_products
     from hermes_cli.main_web_build import _web_ui_build_needed
 
     root, acquired = source_products
-    app = root / "apps/desktop/release/linux-unpacked/hermes"
-    app.parent.mkdir(parents=True)
-    app.write_text("previous app")
     build_update_products(root, desktop=desktop)
     steps = [event["step"] for event in _events(root)]
     assert steps == ["deps", "tui", "web"]
@@ -302,10 +279,7 @@ def test_update_builds_selected_products_after_one_union_preparation(source_prod
     assert (root / "ui-tui/dist/entry.js").read_text() == "tui"
     assert (root / "hermes_cli/web_dist/index.html").read_text() == "web"
     assert not _web_ui_build_needed(root / "web")
-    assert not (root / "apps/desktop/node_modules").exists()
     assert not (root / "unrelated/node_modules").exists()
-    assert app.read_text() == "previous app"
-    assert not list((root / "apps/desktop").glob(".staging-*"))
 
 
 @pytest.mark.platforms("linux")
@@ -331,13 +305,10 @@ def test_update_recompiles_only_products_whose_inputs_changed(source_products):
 
 @pytest.mark.platforms("linux")
 @pytest.mark.parametrize("step", ["tui", "web"])
-def test_update_failure_raises_without_retries_or_replacing_live_app(source_products, step):
+def test_update_failure_raises_without_retries_and_still_builds_the_other_product(source_products, step):
     from hermes_cli.source_build import ProductBuildError, build_update_products
 
     root, acquired = source_products
-    app = root / "apps/desktop/release/linux-unpacked/hermes"
-    app.parent.mkdir(parents=True)
-    app.write_text("previous app")
     (root / f"fail-{step}").touch()
     with pytest.raises(ProductBuildError) as failure:
         build_update_products(root, desktop=True)
@@ -347,8 +318,6 @@ def test_update_failure_raises_without_retries_or_replacing_live_app(source_prod
     # ... but it no longer skips the independent products after it (was order[:index + 1]).
     assert [event["step"] for event in _events(root)] == ["deps", "tui", "web"]
     assert acquired == ["pnpm"]
-    assert app.read_text() == "previous app"
-    assert not list((root / "apps/desktop").glob(".staging-*"))
 @pytest.mark.platforms("linux")
 @pytest.mark.parametrize("desktop", [False, True])
 def test_module_cli_builds_the_requested_products(source_products, desktop, monkeypatch):
@@ -361,4 +330,3 @@ def test_module_cli_builds_the_requested_products(source_products, desktop, monk
     runpy.run_module("hermes_cli.source_build", run_name="__main__")
     assert acquired == ["pnpm"]
     assert (root / "hermes_cli/web_dist/index.html").is_file()
-    assert not (root / "apps/desktop/release/linux-unpacked/hermes").exists()

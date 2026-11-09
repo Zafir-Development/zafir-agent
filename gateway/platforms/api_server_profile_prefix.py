@@ -4,7 +4,7 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# The @handle Bot Mode advertises a host's default profile under (apps/desktop hermes-bots
+# The @handle Bot Mode advertises a host's default profile under (hermes-bots
 # ``botHandle``). New profiles cannot take the name, but a pre-reservation profiles/hermes can exist.
 DEFAULT_PROFILE_HANDLE = "hermes"
 # 404 body for a prefix naming no profile here. Older gateways also send it for a 'hermes' profile

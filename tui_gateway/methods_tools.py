@@ -1680,15 +1680,12 @@ def _plugin_rows() -> list[dict]:
         # enable: _plugin_status reports the truthful default instead of "not enabled" (reads as OFF).
         status = pc._plugin_status(name, enabled, disabled, key=key, source=source, dir_path=_dir, active=active)
         # key = canonical registry key (names collide across category dirs); portable = Agent Plugins v1.
-        # ``has_desktop_half``: the package also ships a Desktop UI half (``desktop_source``: a root or
-        # ``desktop/`` plugin.js). The app pairs its app-level copy of that half with this ONE row.
         _dir_path = Path(str(_dir)) if _dir else None
         portable = pc._is_portable_plugin_dir(_dir)
         out.append({
             "name": name, "key": key, "version": str(version or ""), "description": desc or "",
             "source": source, "status": status, "portable": portable,
             "install_dir": str(_dir_path) if _dir_path else "",
-            "has_desktop_half": bool(_dir_path and _tools_mod("hermes_cli.desktop_plugin_halves").desktop_source(_dir_path)),
             # Manifest ``config_schema`` + current values: the Plugins hub renders these as a form.
             "settings_schema": _tools_mod("hermes_cli.plugins_settings").plugin_settings_fields(key, _dir_path),
             "servers": _plugin_server_rows(_dir_path, key, portable=portable, catalog_titles=titles),
@@ -1791,32 +1788,6 @@ def _plugins_inspect(rid, params):
         return _err(rid, 4019, "plugins.inspect requires 'identifier', 'repo', or 'catalog_name'")
     inspect = _tools_mod("hermes_cli.plugins_cmd_inspect").inspect_plugin_source
     return _ok(rid, inspect(ident, catalog_name=catalog_name or None))
-
-
-def _plugins_install_desktop(rid, params):
-    """Install a repository's desktop half onto this host (``desktop-plugins/<name>``) — what Electron's
-    ``installDesktopPlugin`` does, for a browser-hosted client with no disk of its own. ``ref`` is the
-    commit the install dialog reviewed; the loader picks the folder up on its next scan."""
-    ident = (params.get("identifier") or params.get("repo") or "").strip()
-    catalog_name = str(params.get("catalog_name") or "").strip()
-    if not ident and not catalog_name:
-        return _err(rid, 4019, "plugins.manage install_desktop requires 'identifier', 'repo', or 'catalog_name'")
-    result = _tools_mod("hermes_cli.desktop_plugin_install").install_desktop_plugin(
-        ident, ref=params.get("ref"), catalog_name=catalog_name or None, force=bool(params.get("force")))
-    if not result.get("ok"):
-        return _err(rid, 5026, result.get("error") or "desktop install failed", data=_source_moved_data(result))
-    return _ok(rid, result)
-
-
-def _plugins_remove_desktop(rid, params):
-    """Delete one installed desktop plugin folder from this host. The desktop half of a package is
-    refused: that package's own removal takes it away."""
-    name = (params.get("name") or params.get("key") or "").strip()
-    if not name:
-        return _err(rid, 4019, "plugins.manage remove_desktop requires a 'name'")
-    result = _tools_mod("hermes_cli.desktop_plugin_install").remove_desktop_plugin(
-        name, force=bool(params.get("force")))
-    return _ok(rid, result) if result.get("ok") else _err(rid, 5026, result.get("error") or "desktop remove failed")
 
 
 def _plugins_update(rid, params):
@@ -1927,7 +1898,6 @@ def _plugins_presence(rid, params):
 
 _PLUGINS_ACTIONS = {"list": _plugins_list, "onboarding": _plugins_onboarding, "presence": _plugins_presence,
                     "toggle": _plugins_toggle, "install": _plugins_install, "inspect": _plugins_inspect,
-                    "install_desktop": _plugins_install_desktop, "remove_desktop": _plugins_remove_desktop,
                     "update": _plugins_update, "remove": _plugins_remove, "settings": _plugins_settings,
                     "update_all": _plugins_update_all, "auto_update": _plugins_auto_update}
 

@@ -30,7 +30,7 @@ The wrapper replaces everything the old rust shim + its sidecar did
     writes (signature-breaking on mac, read-only mount on AppImage/MSIX).
 
 The whole file is import-safe so tests can drive configure()/main()
-directly (tests/scripts/test_desktop_cli_wrapper.py).
+directly.
 """
 
 import importlib

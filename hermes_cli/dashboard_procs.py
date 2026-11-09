@@ -847,7 +847,7 @@ def _process_ppid(pid: int) -> int | None:
 
 
 # SSH remote-backend lock ownership: ``backend.lock.json`` is written by the Desktop SSH runtime
-# (apps/desktop/electron/remote-lifecycle.ts) for every ``hermes serve`` it spawns. Such a backend
+# for every ``hermes serve`` it spawns. Such a backend
 # is legitimate even at ppid 1 (sshd exited); the reap must NEVER kill a PID a valid lock claims
 # — that once killed a production backend. Schema mirrors the writer; mismatches are ignored.
 _LOCKFILE_SCHEMA_VERSION = 2

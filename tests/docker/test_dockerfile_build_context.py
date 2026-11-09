@@ -7,10 +7,9 @@ runs, so a daemon-less developer host or a non-Docker CI lane sees nothing.
 These checks run statically instead: every COPY source must exist in the build
 context, and every ``COPY --from=<stage>`` must name a stage declared above it.
 
-Regression for PR #4 (docs/removal/02-removal-plan.md step 2): the desktop
-packaging removal deleted ``scripts/build/electron-runtime.mjs`` and
-``scripts/build/webapp.mjs`` while the Dockerfile still copied the first and
-still built the second in the ``webapp_build`` stage.
+Regression from the desktop-packaging removal (docs/removal/02-removal-plan.md
+step 2): it deleted build helpers while the Dockerfile still copied one and still
+built another in a removed stage.
 
 Sources are checked for existence in the checkout; ``.dockerignore`` filtering
 is not modelled (docker build remains the authority for context contents).

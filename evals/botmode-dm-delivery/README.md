@@ -1,19 +1,14 @@
 # Native Bot Mode delivery probe
 
 Real Electron, production Python backend and tool execution, disposable HOME/HERMES_HOME,
-loopback scripted inference (no paid model). Linux seat fixture; run from repository root:
+loopback scripted inference (no paid model). Linux seat fixture.
 
-```sh
-pnpm install --frozen-lockfile
-cp evals/botmode-dm-delivery/probe-dm-delivery.spec.ts apps/desktop/e2e/
-git apply evals/botmode-dm-delivery/mock-trigger.patch
-(cd apps/desktop && pnpm run build)
-(cd apps/desktop && DISPLAY=:0 XAUTHORITY=/run/user/1000/xauth_cnpsqU \
-  XDG_RUNTIME_DIR=/run/user/1000 VIRTUAL_ENV="$VIRTUAL_ENV" \
-  HERMES_DESKTOP_CDP_PORT=off pnpm exec playwright test e2e/probe-dm-delivery.spec.ts --reporter=list)
-git apply -R evals/botmode-dm-delivery/mock-trigger.patch
-rm apps/desktop/e2e/probe-dm-delivery.spec.ts
-```
+These probes have no runnable host in this tree: they drove the Electron renderer, and that app is
+removed (its Bot Mode surfaces go in a later step). They stay as the reference fixtures for that
+step. When the renderer existed, run from the repository root: install the frozen workspace, copy
+`probe-dm-delivery.spec.ts` and `mock-trigger.patch` into the app, apply the patch, build, then run
+Playwright with `DISPLAY`/`XAUTHORITY`/`XDG_RUNTIME_DIR`/`VIRTUAL_ENV` set and
+`HERMES_DESKTOP_CDP_PORT=off`; revert the patch and remove the spec afterwards.
 
 Use the current seat's actual Xauthority path and an existing runtime venv.
 Artifacts default to `/tmp/botmode-dm-review/native` (override with `BOT_DM_EVIDENCE`); sandbox path is printed. The
@@ -70,9 +65,9 @@ per-record file-scan exception has no counterpart. The regression case lives in
 
 ## Ordinary custom-root fallback (#104066 / #104055)
 
-`probe-cron-root.spec.ts` adds the never-deferred sibling: copy it to
-`apps/desktop/e2e/` and run with the same native fixture (no mock-trigger patch
-needed for this case). It keeps default's real Desktop Bot Chat lease, submits
+`probe-cron-root.spec.ts` adds the never-deferred sibling: copy it into the
+renderer's `e2e/` directory (see the removed-app note above) and run with the same
+native fixture (no mock-trigger patch needed for this case). It keeps default's real Desktop Bot Chat lease, submits
 ordinary cron output to unowned Alpha from a separate Python producer under a
 custom Hermes root, and holds the real quiet CLI child at loopback inference.
 The child shim PID must match Alpha's real CLI lease; default's lease is unchanged.

@@ -9,9 +9,8 @@ export const todoTone = (status: TodoItem['status']): TodoTone =>
   status === 'in_progress' ? 'active' : status === 'pending' ? 'body' : 'dim'
 
 /** DFS order of a (possibly nested) todo list: [item, depth] pairs, parents
- *  before children. Dangling/cyclic parents degrade to depth 0. Mirrors
- *  apps/desktop/src/lib/todos.ts's todoTree() so both surfaces render the
- *  same hierarchy from the same `parent` field. */
+ *  before children. Dangling/cyclic parents degrade to depth 0, so the
+ *  hierarchy renders from the same `parent` field the todo payload uses. */
 export function todoTree(todos: readonly TodoItem[]): [TodoItem, number][] {
   const ids = new Set(todos.map(t => t.id))
   const kids = new Map<string, TodoItem[]>()

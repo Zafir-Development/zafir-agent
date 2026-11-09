@@ -4,11 +4,8 @@ Engaged when ``app.state.auth_required is True``; a no-op otherwise (loopback
 mode is handled by the legacy ``_SESSION_TOKEN`` ``auth_middleware``). Allows
 the auth-bootstrap routes and static assets through unauthenticated; for
 everything else demands a bearer token or a valid session cookie and attaches
-the verified :class:`Session` to ``request.state.session``. On the gateway's
-Webapp a cookie session also needs its sign-in binding to the browser credential
-(``hermes_cli.webapp_sign_in``), and its cookie writes, sign-out included, must come
-from the Webapp's own origin; elsewhere a cookie write the browser marks as another page's
-(``Sec-Fetch-Site``) is refused. HTML routes are
+the verified :class:`Session` to ``request.state.session``. A cookie write the browser marks as
+another page's (``Sec-Fetch-Site``) is refused. HTML routes are
 redirected to ``/login``; ``/api/*`` routes get a 401 JSON envelope.
 """
 from __future__ import annotations
@@ -21,7 +18,6 @@ from fastapi import Request
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 from starlette.concurrency import run_in_threadpool
 
-from hermes_cli import webapp_sign_in
 from hermes_cli.dashboard_auth import list_interactive_providers, list_session_providers
 from hermes_cli.dashboard_auth.audit import AuditEvent, audit_log
 from hermes_cli.dashboard_auth.base import ProviderError
@@ -45,8 +41,6 @@ _GATE_PUBLIC_PREFIXES: tuple[str, ...] = (
     "/auth/login", "/auth/callback", "/auth/native/authorize", "/auth/native/token",
     "/auth/native/refresh", "/auth/password-login", "/auth/logout", "/login",
     "/api/auth/providers", "/api/mcp/oauth/callback/",
-    # A saved gateway's sign-in redirect: its one-use state is the credential (gateway_connections_oauth).
-    "/webapp/gateway-connections/oauth/callback",
     "/assets/", "/dashboard-plugins/", "/favicon.ico", "/ds-assets/", "/fonts/", "/fonts-terminal/")
 
 # Page icons, matched exactly. Browsers fetch them without cookies (the Webapp's page icon and
@@ -135,10 +129,9 @@ def _auto_sso_response(request: Request) -> Response | None:
     """
     if request.url.path.startswith("/api/"):
         return None
-    gateway = webapp_sign_in.cookie_gateway(request)
-    if read_sso_attempt_cookie(request, gateway):
+    if read_sso_attempt_cookie(request):
         resp = _unauth_response(request, reason="no_cookie")
-        clear_sso_attempt_cookie(resp, prefix=prefix_from_request(request), gateway=gateway)
+        clear_sso_attempt_cookie(resp, prefix=prefix_from_request(request))
         return resp
     providers = list_interactive_providers()
     if len(providers) != 1 or getattr(providers[0], "supports_password", False):
@@ -150,7 +143,7 @@ def _auto_sso_response(request: Request) -> Response | None:
     if next_param:
         auth_login = f"{auth_login}&next={next_param}"
     resp = RedirectResponse(url=auth_login, status_code=302)
-    set_sso_attempt_cookie(resp, use_https=detect_https(request), prefix=prefix, gateway=gateway)
+    set_sso_attempt_cookie(resp, use_https=detect_https(request), prefix=prefix)
     audit_log(AuditEvent.LOGIN_START, provider=provider.name, reason="auto_sso",
               ip=_client_ip(request))
     return resp
@@ -189,7 +182,7 @@ def _session_token_header_session(request: Request):
         return None
     provider = next(
         (p for p in list_session_providers() if p.name == _SESSION_TOKEN_PROVIDER), None)
-    if provider is None or not webapp_sign_in.access_token_works_alone(request, token):
+    if provider is None:
         return None
     return provider.verify_session(access_token=token)
 
@@ -201,17 +194,14 @@ def peek_session(request: Request):
     decide how much to show; an expired or unverifiable session reads as signed out."""
     bearer = _extract_bearer(request)
     if bearer:
-        if not webapp_sign_in.access_token_works_alone(request, bearer):
-            return None
         access_token, provider_hint = bearer, None
     else:
-        gateway = webapp_sign_in.cookie_gateway(request)
-        access_token, _rt = read_session_cookies(request, gateway)
+        access_token, _rt = read_session_cookies(request)
         if not access_token and not _rt:
             return _session_token_header_session(request)
-        if not access_token or (webapp_sign_in.applies(request) and not webapp_sign_in.check(request)):
+        if not access_token:
             return None
-        provider_hint = read_session_provider(request, gateway)
+        provider_hint = read_session_provider(request)
     try:
         return _verify_access_token(
             request, access_token=access_token, provider_hint=provider_hint, audit=False)
@@ -228,9 +218,7 @@ async def _serve_refreshed(request: Request, call_next, new_session, provider: s
     set_session_cookies(
         response, access_token=new_session.access_token, refresh_token=new_session.refresh_token,
         access_token_expires_in=_expires_in_seconds(new_session), use_https=detect_https(request),
-        prefix=prefix_from_request(request), provider=provider,
-        gateway=webapp_sign_in.cookie_gateway(request))
-    webapp_sign_in.renew(response, request)
+        prefix=prefix_from_request(request), provider=provider)
     audit_log(AuditEvent.REFRESH_SUCCESS, provider=provider, user_id=new_session.user_id,
               ip=_client_ip(request))
     return response
@@ -242,8 +230,7 @@ def _session_expired_response(request: Request) -> Response:
     audit_log(AuditEvent.SESSION_VERIFY_FAILURE, reason="no_provider_recognises",
               ip=_client_ip(request))
     response = _unauth_response(request, reason="invalid_or_expired_session")
-    clear_session_cookies(response, prefix=prefix_from_request(request),
-                          gateway=webapp_sign_in.cookie_gateway(request))
+    clear_session_cookies(response, prefix=prefix_from_request(request))
     return response
 
 
@@ -266,8 +253,6 @@ async def _serve_bearer(request: Request, call_next: Callable[[Request], Awaitab
                         bearer: str, cookie_logout: bool) -> Response:
     if cookie_logout:
         return await call_next(request)
-    if not webapp_sign_in.access_token_works_alone(request, bearer):
-        return _unauth_response(request, reason="invalid_or_expired_session")
     try:
         bearer_session = _verify_access_token(request, access_token=bearer, audit=False)
     except ProviderError as e:
@@ -306,9 +291,8 @@ async def gated_auth_middleware(
     if bearer:
         return await _serve_bearer(request, call_next, bearer, cookie_logout)
 
-    gateway = webapp_sign_in.cookie_gateway(request)
-    at, _rt = read_session_cookies(request, gateway)
-    provider_hint = read_session_provider(request, gateway)
+    at, _rt = read_session_cookies(request)
+    provider_hint = read_session_provider(request)
     refusal = _cookie_write_refusal(
         request, own_origin=own_origin, other_page=other_page, has_cookies=bool(at or _rt))
     if refusal is not None:
@@ -326,10 +310,6 @@ async def gated_auth_middleware(
         # No session at all: try the silent portal bounce before /login.
         auto = _auto_sso_response(request)
         return auto if auto is not None else _unauth_response(request, reason="no_cookie")
-    if webapp_sign_in.applies(request) and not webapp_sign_in.check(request):
-        # A login on the gateway's Webapp holds only while the browser credential it was bound to is
-        # in use; signing out replaced it. The cookies stay and open nothing until it signs in again.
-        return _unauth_response(request, reason="signed_out")
     # An absent AT with a present RT is the COMMON expiry case (the AT cookie's Max-Age tracks
     # the token TTL, so the browser evicts it first) — skip straight to refresh.
     session = None
@@ -356,7 +336,7 @@ async def gated_auth_middleware(
     if not provider_hint and session.provider:
         set_session_provider_cookie(
             response, provider=session.provider, use_https=detect_https(request),
-            prefix=prefix_from_request(request), gateway=gateway)
+            prefix=prefix_from_request(request))
     return response
 
 

@@ -9,7 +9,6 @@
     "install:root": "pnpm install --filter .",
     "install:web": "pnpm install --filter web...",
     "install:tui": "pnpm install --filter hermes-tui...",
-    "install:desktop": "pnpm install --filter hermes...",
     "audit:root": "pnpm audit --filter .",
     "audit:web": "pnpm audit --filter web",
     "audit:tui": "pnpm audit --filter hermes-tui",

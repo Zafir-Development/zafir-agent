@@ -60,7 +60,7 @@ def test_a_font_in_the_served_bundle_wins(monkeypatch, tmp_path):
 def test_sign_in_fonts_load_from_the_packaged_dashboard_without_a_source_tree(monkeypatch, tmp_path):
     """Nix and wheel installs ship no ``web/public``; the packaged dashboard dist has the fonts."""
     from hermes_cli import web_server as server
-    from hermes_cli import web_server_static_assets as static_assets
+    from hermes_cli import web_server_dashboard as static_assets
 
     dashboard = tmp_path / "dashboard"
     (dashboard / "fonts").mkdir(parents=True)

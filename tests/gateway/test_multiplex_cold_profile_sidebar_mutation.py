@@ -6,7 +6,7 @@ session that belongs to a profile with no resident client (COLD) used to fail on
 backend startup with background priority. With one multiplexing gateway there is no
 per-profile process to start: ``PATCH /api/sessions/{id}`` carrying the owning profile in
 routing metadata (``?profile=`` and ``body.profile``, exactly what
-``apps/desktop/src/api/sessions.ts::mutateSessionHttp`` sends) lands on that profile's
+the native client's session mutation sends) lands on that profile's
 authority, while another served profile holds a live interactive attachment.
 
 The Desktop's endpoint for a served secondary comes from ``hermes -p <name> gateway ensure``

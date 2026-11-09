@@ -3,7 +3,7 @@
 Native Desktop's local connection is the gateway's listener, and Electron's main process mints one
 ``native-http`` grant per request over the gateway's private control socket and sends it as
 ``X-Hermes-Gateway-Ticket`` from a loopback peer, with no Origin
-(``apps/desktop/electron/local-gateway.ts``, ``nativeGatewayHttpHeaders``). Here the grant comes from
+(``nativeGatewayHttpHeaders``). Here the grant comes from
 the same ``TicketStore`` the control socket mints from, bound to a runner serving the test's home,
 and the peer is recorded as ``GatewayRuntimeAPI`` records it, so the real
 ``hermes_cli.dashboard_auth.native_http`` gate admits each request.

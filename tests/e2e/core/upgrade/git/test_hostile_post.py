@@ -539,7 +539,7 @@ def test_sticky_profile_update_logs_and_receipts_land_in_the_root_home(w):
                       previous_update_id=prev.get("update_id")) + w.diag(cp)
         assert w.head() == target, f"premise: the release never committed:\n{diag}"
         assert cp.returncode == 0, f"the sticky-profile update failed:\n{diag}"
-        # The update's receipts never follow the sticky profile: the root dir is what the Desktop
+        # The update's receipts never follow the sticky profile: the root dir is what a client
         # and the hand-off scripts read. pm's own sync receipts stay where pm writes them (the
         # active home; pm is not the updater's). pm's reader shows the newest receipt of any kind,
         # as when both shared one folder: the updater finalizes after pm's sync, so that is this

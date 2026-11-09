@@ -433,10 +433,10 @@ export const LIGHT_THEME: Theme = {
 
 // ── Background-aware readability adaptation ─────────────────────────
 //
-// Mirrors the desktop app's theme contract (apps/desktop/src/themes): skins
+// Mirrors the theme contract the TUI inherited from the desktop renderer: skins
 // contribute accent IDENTITY; readability against the actual background is
-// the theme engine's job, enforced in one place. Two guards, in the desktop's
-// vocabulary:
+// the theme engine's job, enforced in one place. Two guards, in the theme
+// engine's vocabulary:
 //
 //   * `ensureContrast` — foreground-role colors are step-mixed toward the
 //     readable pole (black on light, white on dark) until they clear a
@@ -560,8 +560,8 @@ function referenceBackground(isLight: boolean, env: NodeJS.ProcessEnv = process.
 // A theme is a handful of SEEDS (text, primary, accent, border, status hues);
 // every secondary tone — muted text, labels, surfaces, selection chips — is a
 // color-mix derivative of those seeds against the real terminal background,
-// exactly like the desktop's `--theme-*` seeds → `--ui-*` color-mix ladder in
-// apps/desktop/src/styles.css. Skins therefore cannot ship an incoherent
+// following the `--theme-*` seeds → `--ui-*` color-mix ladder convention the
+// renderer and the TUI share. Skins therefore cannot ship an incoherent
 // "dim": if they don't author a tone, it is DERIVED from their own identity,
 // never inherited from another skin's palette.
 //

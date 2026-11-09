@@ -1,14 +1,11 @@
 """Identifier-to-speech normalization (#119207).
 
-Both speech normalizers — tools/tts_text_normalize.py (gateway/CLI/TTS tool)
-and apps/desktop/src/lib/speech-text.ts (Desktop read-aloud / auto-speak) —
-must apply the same policy to identifier-dense tokens (filenames with
-extensions, hashes, UUIDs, dense model/version IDs, paths): silence, never
-hardcoded English placeholder words (#86602 — the reply may be in any
-language). This suite pins the Python half against the shared corpus
-(tests/fixtures/identifier_speech_corpus.json); the vitest suite in
-apps/desktop runs the identical corpus, so the two implementations stay in
-lockstep.
+The speech normalizer (tools/tts_text_normalize.py, used by the gateway,
+CLI and TTS tool) must apply one policy to identifier-dense tokens
+(filenames with extensions, hashes, UUIDs, dense model/version IDs, paths):
+silence, never hardcoded English placeholder words (#86602 — the reply may
+be in any language). This suite pins that policy against the shared corpus
+(tests/fixtures/identifier_speech_corpus.json).
 """
 
 import json

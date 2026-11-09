@@ -340,7 +340,6 @@ def test_every_detect_output_a_lane_sets_is_consumed_by_some_job():
 # The job (path from ci.yaml down) that runs each lane's consumers of a shared fixture.
 _FIXTURE_LANE_JOBS: dict[str, tuple[str, ...]] = {
     "python": ("tests", "test"),  # pytest on Linux (marker.sh corpus included)
-    "frontend": ("js-tests", "check"),  # apps/desktop `check` -> vitest --project electron
 }
 _CORPUS = "tests/fixtures/update_marker_corpus.json"
 _TEST_FILE = re.compile(r"(^tests/(?!ci/).*\.py$)|(_tests?\.rs$)|(\.test\.[cm]?[jt]sx?$)")
@@ -353,10 +352,9 @@ def _fixture_lanes_reached(fixture: str) -> dict[str, bool]:
             for lane, job in _FIXTURE_LANE_JOBS.items()}
 
 
-def test_marker_corpus_change_runs_every_language_that_reads_it():
-    """The corpus is A7 rule 7's single source of truth for each reader. Classified by
-    path alone it selected ``python`` only: vitest reading the same cases never ran on
-    the PR that edited their expected answers."""
+def test_marker_corpus_change_runs_every_lane_that_reads_it():
+    """The corpus is A7 rule 7's single source of truth for each reader: the lane that
+    runs a consumer must fire on the PR that edits the shared cases."""
     reached = _fixture_lanes_reached(_CORPUS)
     assert all(reached.values()), f"{_CORPUS}: a corpus consumer's lane never runs: {reached}"
 
@@ -670,7 +668,7 @@ def test_shared_hubs_are_real_hubs_still_on_the_update_path():
 
 # -- ownership: the JavaScript compilers an update runs -------------------------------------
 
-_SCRIPT_LITERAL = re.compile(r"""["']((?:scripts/build|apps/desktop/scripts)/[\w./-]+\.(?:mjs|js|py|ps1))["']""")
+_SCRIPT_LITERAL = re.compile(r"""["'](scripts/build/[\w./-]+\.(?:mjs|js|py|ps1))["']""")
 _ESM_IMPORT = re.compile(r"""(?:from|import)\s*\(?\s*['"](\.{1,2}/[^'"]+)['"]""")
 _STEP = re.compile(r"""step\(\s*['"]([\w./-]+\.mjs)['"]""")
 

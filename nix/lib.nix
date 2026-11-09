@@ -121,7 +121,7 @@ let
 
   # Top-level directory of each workspace member, deduplicated.  Used to
   # exclude JS/TS workspace trees from the Python source filter.  E.g.
-  # apps/desktop + apps/shared + ui-tui + web → [ "apps" "ui-tui" "web" ].
+  # apps/shared + ui-tui + web → [ "apps" "ui-tui" "web" ].
   jsWorkspaceTopDirs = lib.unique (
     map (d: builtins.head (lib.splitString "/" d)) workspaceMemberDirs
   );

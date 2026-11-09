@@ -96,7 +96,7 @@ CASES = {
         _lanes(python=True, scan=True, deps=True, uv_lock=True, docker=True, nix=True, e2e_upgrade=True),
     ),
     "uv.lock → python": (["uv.lock"], _lanes(python=True, uv_lock=True, docker=True, nix=True, e2e_upgrade=True)),
-    "ts package → frontend": (["apps/desktop/src/app.tsx"], _lanes(frontend=True)),
+    "ts package → frontend": (["apps/shared/src/app.ts"], _lanes(frontend=True)),
     "ui-tui → frontend": (["ui-tui/src/entry.ts"], _lanes(frontend=True)),
     # Lockfile bump shifts every TS package's tree, but not the Python suite.
     "root lockfile → frontend, not python": (["pnpm-lock.yaml"], _lanes(frontend=True, npm_lock=True, docker=True, nix=True)),
@@ -112,7 +112,7 @@ CASES = {
         ["website/docs/developer-guide/plugins/index.md"],
         _lanes(python=True, site=True),
     ),
-    "frontend → no uv_lock": (["apps/desktop/src/store/profile.ts"], _lanes(frontend=True)),
+    "frontend → no uv_lock": (["apps/shared/src/store/profile.ts"], _lanes(frontend=True)),
     # Cross-language contract JSON under apps/: the pytest that pins it against
     # the Python side must run even when nothing else in the PR is Python.
     "generated gateway contract → python + frontend": (
@@ -125,14 +125,6 @@ CASES = {
     ),
     "control-socket vectors → python + frontend": (
         ["apps/shared/src/node/control-socket.vectors.json"],
-        _lanes(python=True, frontend=True),
-    ),
-    "desktop slash-registry JSON → python + frontend": (
-        ["apps/desktop/src/lib/desktop-slash-registry.json"],
-        _lanes(python=True, frontend=True),
-    ),
-    "desktop card-tool names → python + frontend": (
-        ["apps/desktop/src/lib/tool-render-class.ts"],
         _lanes(python=True, frontend=True),
     ),
     # The published CIMD document is asserted about by the Python suite, so a
@@ -230,10 +222,6 @@ CASES = {
         ["hermes_cli/mcp_catalog.py"],
         _lanes(python=True, scan=True),
     ),
-    "eslint config → frontend": (
-        ["apps/desktop/eslint.config.mjs"],
-        _lanes(frontend=True),
-    ),
     "shared eslint config → python": (
         ["eslint.config.shared.mjs"],
         _lanes(python=True),
@@ -272,10 +260,6 @@ CASES = {
         [".github/actions/retry/action.yml"],
         DEFAULT,
     ),
-    "desktop src → frontend only": (
-        ["apps/desktop/src/app.tsx"],
-        _lanes(frontend=True),
-    ),
     # Slow lanes on a pull request: an ordinary product change starts none of
     # them; the suite, its harness, or the code it guards starts its own.
     # Real SSH/Docker backend lane: the backends, the terminal tool, the real tests
@@ -297,7 +281,6 @@ CASES = {
         ["scripts/ci/test_sshd_container_setup.sh"], _lanes(python=True, remote_backends=True)),
     "other tool → no remote_backends": (["tools/file_tools.py"], _lanes(python=True, scan=True)),
     "gateway python → no slow lane": (["gateway/run.py", "agent/x.py"], _lanes(python=True, scan=True)),
-    "desktop renderer → no slow lane": (["apps/desktop/src/app/chat/composer.tsx"], _lanes(frontend=True)),
     "python e2e suite → e2e only": (
         ["tests/e2e/core/sqlite/test_torture.py"],
         _lanes(python=True, scan=True, e2e=True),
@@ -318,18 +301,6 @@ CASES = {
         ["hermes_cli/main.py"], _lanes(python=True, scan=True, e2e_upgrade=True),
     ),
     "gateway status stamp → e2e_upgrade": (["gateway/status.py"], _lanes(python=True, scan=True, e2e_upgrade=True)),
-    "electron main → frontend only": (
-        ["apps/desktop/electron/main.ts"],
-        _lanes(frontend=True),
-    ),
-    "desktop session resume → frontend only": (
-        ["apps/desktop/src/app/session/hooks/use-session-actions/index.ts"],
-        _lanes(frontend=True),
-    ),
-    "desktop queue panel → frontend only": (
-        ["apps/desktop/src/app/chat/composer/queue-panel.tsx"],
-        _lanes(frontend=True),
-    ),
     "image tests → docker": (
         ["tests/docker/test_image_smoke.py"],
         _lanes(python=True, scan=True, docker=True),
@@ -362,7 +333,7 @@ def test_classify(files, expected):
     assert classify(files) == expected
 
 
-@pytest.mark.parametrize("files", [["README.md"], ["gateway/run.py"], ["apps/desktop/src/app.tsx"]])
+@pytest.mark.parametrize("files", [["README.md"], ["gateway/run.py"], ["apps/shared/src/app.ts"]])
 def test_run_e2e_label_turns_every_slow_lane_on_and_nothing_else(files):
     labelled = classify(files, run_e2e=True)
     assert {lane for lane in SLOW_LANES if labelled[lane]} == SLOW_LANES

@@ -65,8 +65,8 @@ A method family whose names exist only at runtime (`plugin.<plugin_id>.<name>`) 
 `canonical_namespace(...)` entry in `CANONICAL_NAMESPACES` instead: a pattern, a prefix, open params and the
 `runtime.describe` capability clients gate on (`CanonicalRpcNamespaces` / OpenRPC `x-canonical-namespaces`).
 New question for the user = `_ask("<method>", sid, params, timeout)` in the emitter, a handler in
-`apps/desktop/.../gateway-event/server-requests.ts` and `ui-tui/src/app/createServerRequestHandler.ts`,
-and a `server_request(...)` in `contracts/server_requests.py`.
+`ui-tui/src/app/createServerRequestHandler.ts`, and a `server_request(...)` in
+`contracts/server_requests.py`.
 New event = `event("<type>", Payload)` in `contracts/events.py`; the emitter is checked against it.
 
 ## Profile scope in RPC methods
@@ -218,5 +218,4 @@ Python tests: `tests/tui_gateway/` via `scripts/run_tests.sh`. TS tests: vitest 
 Python test that asserts about `package.json` / `.ts` sources will not run on a JS-only PR — keep
 JS-side assertions in vitest (root testing rules). Root TypeScript style rules apply.
 
-Related: `web/AGENTS.md` (dashboard embeds this TUI over a PTY), `apps/desktop/AGENTS.md` (own
-renderer on the same backend).
+Related: `web/AGENTS.md` (dashboard embeds this TUI over a PTY).

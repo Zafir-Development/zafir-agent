@@ -4,7 +4,7 @@ The loopback gate spends a download ticket's use before the file is opened, and 
 retries a failed download by requesting that exact URL. The ticket stays bounded: it admits
 ``DOWNLOAD_MAX_REDEMPTIONS`` requests (a HEAD counts like a GET) within ``DOWNLOAD_TTL_SECONDS``
 of minting. A different path, query or method is refused without using one up. Stream tickets
-stay reusable until they expire. Signing out ends both (``test_webapp_sign_out_sockets.py``).
+stay reusable until they expire.
 """
 
 import secrets

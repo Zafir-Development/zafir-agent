@@ -9,11 +9,6 @@ pre-commit:
       glob: "web/**/*.{js,ts,tsx}"
       run: pnpm exec eslint {staged_files}
 
-    - name: lint desktop app
-      root: apps/desktop/
-      glob: "*.{js,ts,tsx}"
-      run: pnpm exec eslint {staged_files}
-
     - name: lint tui
       root: ui-tui/
       glob: "*.{js,ts,tsx}"

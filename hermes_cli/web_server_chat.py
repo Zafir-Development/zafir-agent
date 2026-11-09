@@ -178,11 +178,9 @@ def _ws_request_view(ws: WebSocket, app) -> Request:
 
     ``_verify_access_token`` only touches ``request.headers`` (X-Forwarded-For
     via ``client_ip``) and ``request.client`` on this path (``audit=False``,
-    no cookie/redirect work), and ``webapp_sign_in.token_works_alone`` reads
-    ``request.app.state``, so a lightweight stand-in carrying *app* avoids
+    no cookie/redirect work), so a lightweight stand-in carrying *app* avoids
     constructing a real ASGI request inside the upgrade. ``scan_session_providers``
     itself never sees the request — only the provider callbacks do.
-    ``webapp_sign_in.token_works_alone`` reads the listener's state from *app*.
     """
     from fastapi import Request
 
@@ -201,29 +199,20 @@ def _ws_request_view(ws: WebSocket, app) -> Request:
     })
 
 
-def _ws_auth_reason(ws: WebSocket, *, allow_internal: bool = False,
-                    socket: Optional[str] = None) -> tuple[Optional[str], str]:
+def _ws_auth_reason(ws: WebSocket) -> tuple[Optional[str], str]:
     """Validate WS-upgrade auth; return ``(reason, credential)``.
 
     ``reason`` is None when accepted, else a short token (``no_credential``,
     ``token_mismatch``, ``ticket_invalid``, ``internal_invalid``);
     ``credential`` names what was presented so the accept path can log *how*.
-    *socket* names the route's socket for its own tickets (``web_session_sockets.GATEWAY_SOCKET``,
-    ``HOST_TERMINAL_SOCKET`` or one of ``AUDIO_SOCKETS``): a ticket minted for
-    one socket opens no other, and the host terminal opens only with its own ticket.
 
-    Loopback / ``--insecure``: legacy ``?token=`` (constant-time compared); on the
-    gateway's Webapp a one-use socket ticket first (``/api/webapp/socket-ticket``).
+    Loopback / ``--insecure``: legacy ``?token=`` (constant-time compared).
     Gated: ``?ticket=`` (browser-minted, single-use, 30s TTL) or ``?internal=``
     (process-lifetime, multi-use, only for server-spawned WS clients so the PTY
-    child can reconnect; never injected into the SPA; on the gateway's Webapp it
-    opens only the sockets that pass *allow_internal*), or ``?token=`` holding a
+    child can reconnect; never injected into the SPA), or ``?token=`` holding a
     user session access token (verified against the dashboard auth session
     providers — the same ``verify_session`` seam the native bearer REST leg
-    uses — e.g. a token-mode Remote desktop connection; on the gateway's Webapp
-    only a token that listener gave a native app's sign-in or the deployment
-    session token, as for the bearer header,
-    ``webapp_sign_in.access_token_works_alone``). The legacy in-process
+    uses — e.g. a token-mode Remote desktop connection). The legacy in-process
     ``_SESSION_TOKEN`` is rejected in gated mode: a leaked ``_SESSION_TOKEN``
     must not grant access.
 
@@ -238,16 +227,7 @@ def _ws_auth_reason(ws: WebSocket, *, allow_internal: bool = False,
     """
     from hermes_cli.dashboard_auth.native_http import HEADER, authenticate_native_ws, redeem_audio_ws
     from hermes_cli.web_server import _SESSION_TOKEN, app
-    from hermes_cli.browser_credential import generation_of
-    from hermes_cli.web_session_sockets import OWN_TICKET_SOCKETS, track
     auth_required = bool(getattr(app.state, "auth_required", False))
-    # The Webapp's own rules (socket tickets on the loopback gate, the server's credential only where
-    # its spawned clients dial) apply on its listener; the standalone dashboard and serve keep main's.
-    webapp = getattr(app.state, "ui_surface", None) == "webapp"
-    if socket in OWN_TICKET_SOCKETS:
-        # No standing credential (the session token, a native grant, a login's access token) opens it.
-        reject = functools.partial(_audit_ws_rejection, ws) if auth_required else _ignore_rejection
-        return _consume_ws_ticket(ws, reject, socket, auth_required=auth_required) or ("no_credential", "none")
     if HEADER in ws.headers:
         grant = authenticate_native_ws(ws)
         if grant is None:
@@ -281,9 +261,6 @@ def _ws_auth_reason(ws: WebSocket, *, allow_internal: bool = False,
 
         internal = ws.query_params.get("internal", "")
         if internal:
-            if webapp and not allow_internal:
-                _reject("internal: endpoint not allowed")
-                return "internal_not_allowed", "internal"
             try:
                 _stamp_identity(consume_internal_credential(internal))
                 return None, "internal"
@@ -291,7 +268,7 @@ def _ws_auth_reason(ws: WebSocket, *, allow_internal: bool = False,
                 _reject(f"internal: {exc}")
                 return "internal_invalid", "internal"
 
-        consumed = _consume_ws_ticket(ws, _reject, socket, auth_required=True)
+        consumed = _consume_ws_ticket(ws, _reject)
         if consumed is not None:
             return consumed
 
@@ -304,22 +281,15 @@ def _ws_auth_reason(ws: WebSocket, *, allow_internal: bool = False,
         # the WS upgrade 403'd forever. The legacy in-process
         # ``_SESSION_TOKEN`` never reaches this check: gated mode falls
         # through to the explicit rejection below (leaked-constant safety),
-        # and a provider-verified token is accepted on identity merit. On the
-        # gateway's Webapp it follows the bearer header's rule: only a token this
-        # listener gave a native app's sign-in works on its own, so a browser
-        # login's tokens work only as its cookies, which sign-out ends.
+        # and a provider-verified token is accepted on identity merit.
         token = ws.query_params.get("token", "")
         if token:
-            from hermes_cli import webapp_sign_in
             from hermes_cli.dashboard_auth.base import ProviderError
             from hermes_cli.dashboard_auth.middleware import _verify_access_token
 
             view = _ws_request_view(ws, app)
             try:
-                # On the gateway's Webapp a browser login's tokens work only as its cookies, which
-                # sign-out ends; only a token this listener gave a native app's sign-in works alone.
-                session = (_verify_access_token(view, access_token=token, audit=False)
-                           if webapp_sign_in.access_token_works_alone(view, token) else None)
+                session = _verify_access_token(view, access_token=token, audit=False)
             except ProviderError as exc:
                 # All providers unreachable (IDP outage) — reject without
                 # crashing the upgrade; the REST bearer leg answers 503, and
@@ -349,22 +319,13 @@ def _ws_auth_reason(ws: WebSocket, *, allow_internal: bool = False,
 
         return "no_credential", "none"
 
-    # Loopback: on the Webapp a one-use ticket ``/api/webapp/socket-ticket`` minted for the
-    # session-token owner (its sockets on this same origin), else the legacy ``?token=``.
-    consumed = _consume_ws_ticket(ws, _ignore_rejection, socket) if webapp else None
-    if consumed is not None:
-        return consumed
+    # Loopback: the legacy ``?token=`` only.
     token = ws.query_params.get("token", "")
     if not token:
         return "no_credential", "none"
     if hmac.compare_digest(token.encode(), _SESSION_TOKEN.encode()):
-        track(ws, generation_of(token))
         return None, "token"
     return "token_mismatch", "token"
-
-
-def _ignore_rejection(reason: str) -> None:
-    """The loopback gate keeps no audit record of a refused credential."""
 
 
 def _audit_ws_rejection(ws: WebSocket, reason: str) -> None:
@@ -374,15 +335,12 @@ def _audit_ws_rejection(ws: WebSocket, reason: str) -> None:
               path=ws.url.path)
 
 
-def _consume_ws_ticket(ws: WebSocket, reject, socket: Optional[str] = None, *,
-                       auth_required: bool = False) -> Optional[tuple[Optional[str], str]]:
+def _consume_ws_ticket(ws: WebSocket, reject) -> Optional[tuple[Optional[str], str]]:
     """A one-use ticket offered as the ``hermes-gateway-ticket.`` subprotocol or ``?ticket=``:
     ``(reason, credential)`` once judged, or None when the upgrade presents none. An accepted ticket
     stamps the server-minted identity onto the socket; the client never supplies it through RPC
-    params. *socket* is the route's socket (``web_session_sockets.ticket_refusal``); a socket a
-    session-token ticket, or a Webapp login's ticket, opens is tracked so signing out closes it."""
+    params."""
     from hermes_cli.dashboard_auth.ws_tickets import TicketInvalid, consume_ticket
-    from hermes_cli.web_session_sockets import admitted_with, ticket_refusal, track
     protocol_ticket, protocol_reason = _gateway_ws_ticket_from_subprotocol(ws)
     if protocol_reason == "invalid":
         return "ticket_invalid", "ticket-subprotocol"
@@ -393,10 +351,6 @@ def _consume_ws_ticket(ws: WebSocket, reject, socket: Optional[str] = None, *,
         info = consume_ticket(ticket)
     except TicketInvalid as exc:
         reject(str(exc))
-        return "ticket_invalid", "ticket"
-    refusal = ticket_refusal(info, socket, auth_required=auth_required)
-    if refusal is not None:
-        reject(refusal)
         return "ticket_invalid", "ticket"
     if info.get("provider") == "bot-desktop":
         # A display ticket admits one RFB bridge on /api/display/ws (a watch-only capability handed
@@ -409,8 +363,6 @@ def _consume_ws_ticket(ws: WebSocket, reject, socket: Optional[str] = None, *,
         ws._hermes_auth_identity["issuer"] = info["issuer"]
     if info.get("profile_home"):
         ws._hermes_ticket_profile_home = info["profile_home"]
-    if (admitted := admitted_with(info)) is not None:
-        track(ws, admitted)
     if not protocol_ticket:
         return None, "ticket"
     # Select only the stable public protocol during accept. The ticket-bearing protocol is a
@@ -419,9 +371,9 @@ def _consume_ws_ticket(ws: WebSocket, reject, socket: Optional[str] = None, *,
     return None, "ticket-subprotocol"
 
 
-def _ws_auth_ok(ws: WebSocket, *, allow_internal: bool = False, socket: Optional[str] = None) -> bool:
+def _ws_auth_ok(ws: WebSocket) -> bool:
     """True when the WS-upgrade credential is accepted. See _ws_auth_reason."""
-    return _ws_auth_reason(ws, allow_internal=allow_internal, socket=socket)[0] is None
+    return _ws_auth_reason(ws)[0] is None
 
 
 def _ws_auth_mode() -> str:
@@ -459,7 +411,7 @@ async def _ws_gate(ws: WebSocket, kind: str) -> Optional[tuple[str, str, str]]:
         await ws.close(code=4404, reason="embedded chat disabled")
         return None
 
-    auth_reason, cred = _ws_auth_reason(ws, socket=kind)
+    auth_reason, cred = _ws_auth_reason(ws)
     mode = _ws_auth_mode()
     if auth_reason is not None:
         _log.warning("%s auth rejected reason=%s mode=%s cred=%s peer=%s", kind, auth_reason, mode, cred, peer)

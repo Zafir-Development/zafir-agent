@@ -113,7 +113,6 @@ async def _check_profile_scope(request, profile_id):
 # ``/api/profiles/<suffix>`` collection routes, by method (hermes_cli/web_routers/profiles.py). Every
 # other method on these paths is the per-profile ``/api/profiles/{name}`` route of a profile NAMED
 # ``active``/``import``/``sessions``/…: valid profile names (PROFILE_ID_RE, not reserved).
-# Desktop mirror: apps/desktop/electron/profile-routes.ts.
 PROFILE_COLLECTION_ROUTES = {
     'active': frozenset({'GET', 'POST'}), 'import': frozenset({'POST'}),
     'projects/tree': frozenset({'GET'}), 'sessions': frozenset({'GET'}),

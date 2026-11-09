@@ -201,7 +201,7 @@ assert_checkout() {
   local hermes
   hermes="$(source_hermes "$INSTALL_DIR")" || fail "no usable installed command at $2"
   python3 -B "$REPO_ROOT/tests/install/e2e-assets/source_driver.py" \
-    --root "$INSTALL_DIR" --launcher "$hermes" --desktop "$EXPECT_DESKTOP" \
+    --root "$INSTALL_DIR" --launcher "$hermes" \
     || fail "read-only verification failed at $2; no repair was attempted"
   HERMES_DISABLE_LAZY_INSTALLS=1 PYTHONDONTWRITEBYTECODE=1 source_build_env "$hermes" --version 2>&1 | ts_prefix > "$LOG_DIR/version-$2.log" \
     || fail "hermes --version failed after $2; log in $LOG_DIR/version-$2.log"
@@ -259,9 +259,6 @@ assert_user_shims() {
 # --- install OLD ---------------------------------------------------------------
 
 step "installing OLD ($INSTALL_REF) via its own scripts/install.sh ($INSTALL_METHOD)"
-# No source install builds a desktop product any more: the read-only verifier
-# asserts that the installed tree ships no desktop outputs.
-EXPECT_DESKTOP=absent
 source_build_env run_source_installer "$REPO_ROOT" "$WORK_ROOT" "$LOG_DIR" "$OLD_SHA" old
 assert_checkout "$OLD_SHA" OLD
 

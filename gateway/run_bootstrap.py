@@ -371,11 +371,6 @@ async def _start_gateway_start_control_socket(runner):
         # The public client lookup answers from the same descriptor ``identify`` does.
         from gateway.control_resolve import resolve_profile_handler
         _control_server.resolve_handler = resolve_profile_handler(_identify_runtime)
-        # The Webapp's verbs answer from the socket's first moment ("starting" until the listener
-        # settles): a client polling a restarting gateway must never read "unknown verb" as a failure.
-        from gateway.webapp_listener import register_control_verbs
-        from hermes_constants import get_hermes_home
-        register_control_verbs(runner, get_hermes_home(), server=_control_server)
         if not await _control_server.start():
             _control_server = None
         else:

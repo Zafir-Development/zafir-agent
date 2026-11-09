@@ -120,10 +120,6 @@ _PY_RELEVANT_CONTRACT_FILES = {
     "apps/shared/src/gateway-contract.openrpc.json",
     # tests/gateway/test_control_socket_vectors.py (the public control-socket contract)
     "apps/shared/src/node/control-socket.vectors.json",
-    # tests/hermes_cli/test_desktop_slash_registry.py
-    "apps/desktop/src/lib/desktop-slash-registry.json",
-    # tests/tui_gateway/test_show_reasoning_display_gate.py (card-tool names vs the gateway lifecycle set)
-    "apps/desktop/src/lib/tool-render-class.ts",
     # tests/website/test_catalog_rules_mirror.py (docs page mirrors the canonical rules)
     "plugin-catalog/README.md",
     # tests/hermes_cli/test_plugin_docs_public_imports.py (its examples import only the plugin API)
@@ -159,14 +155,10 @@ _SHARED_FIXTURE_CONSUMERS: dict[str, tuple[str, ...]] = {
     # A7 rule 7: the update-marker parse / judge / release corpus.
     "tests/fixtures/update_marker_corpus.json": (
         "tests/hermes_cli/test_update_marker_corpus.py",  # Python: update_lock
-        "apps/desktop/electron/update-marker-corpus.test.ts",  # Electron: vitest
-        "apps/desktop/electron/remote-update-marker-programs.test.ts",  # SSH remote judge
-        "apps/desktop/electron/remote-lifecycle-v2-marker.test.ts",  # SSH relaunch/spawn gate
     ),
-    # Which halves a plugin folder ships: the gateway's and native Desktop's inspectors.
+    # Which halves a plugin folder ships: the gateway's inspector.
     "tests/fixtures/plugin_component_detection.json": (
         "tests/hermes_cli/test_plugins_cmd_inspect.py",  # Python: detect_components
-        "apps/desktop/electron/desktop-plugin-install.test.ts",  # Electron: detectPluginComponents
     ),
 }
 # What a fixture inherits from its consumers: the lanes that run them as tests.
@@ -334,9 +326,6 @@ _UPDATE_DEPENDENCIES = (
     # The compilers source_build runs (freshness, node-deps, tui, web and their
     # shared frontend-common).
     "scripts/build/",
-    "apps/desktop/scripts/build-webapp.mjs",  # source_build's Webapp renderer build
-    "hermes_cli/webapp.py",  # source_build rebuilds the Webapp bundle a home serves
-    "gateway/webapp_listener.py",  # source_build reads which homes serve the Webapp
 )
 # General-purpose modules an entry point imports but that half the product
 # imports too (>= HUB_MIN_IMPORTERS product modules, checked by the test). The
@@ -424,8 +413,7 @@ _E2E_LANE_EXCLUDES = {
     "e2e": ("tests/e2e/core/upgrade/", "tests/e2e/core/windows_update/"),
 }
 # The image builds the TUI and dashboard frontends from the shared recipe and
-# apps/shared, so those inputs route here. The desktop app is not in the image
-# build context (its sources are dockerignored), so it routes nowhere.
+# apps/shared, so those inputs route here.
 _DOCKER_PATHS = (*_DOCKER_META, *_DEP_MANIFESTS, *_NPM_MANIFESTS, "pm/", "tests/docker/",
                  "apps/shared/package.json", "scripts/build/")
 _NIX_LANE_PATHS = (*_NIX_PATHS, *_NIX_FILES, *_DEP_MANIFESTS, *_NPM_MANIFESTS)

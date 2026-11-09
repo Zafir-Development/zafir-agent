@@ -44,7 +44,7 @@ _MENTION_RE = re.compile(r"@([A-Za-z0-9][A-Za-z0-9._:-]*)", re.IGNORECASE)
 # compaction handoff, runtime/system notes, background-process and prior-context frames). A member reply is
 # republished to every peer inside a role=user prompt, so a reply reproducing one of these reads as harness
 # input to the peers; the opener is relabelled visibly (the words stay, the exact trusted shape does not).
-# Genuine user lines are never touched. Keep in sync with apps/desktop hermes-bots/group-round-prompt.ts.
+# Genuine user lines are never touched.
 _MEMBER_CONTROL_FRAME_RE = re.compile(
     r"\[(?=" + "|".join(opener.replace("]", r"\]") for opener in CONTROL_FRAME_OPENERS) + ")",
     re.IGNORECASE,

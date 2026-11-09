@@ -563,14 +563,14 @@ class RepinResult(NamedTuple):
 
 
 # Surfaces a re-pin can widen without the user seeing a diff: each is a list of identifiers the
-# new manifest adds (``desktop`` = a Desktop half appeared). Compared as sets — removals are not consent events.
+# new manifest adds. Compared as sets — removals are not consent events.
 _SURFACE_LABELS = {"capabilities": "host capabilities", "tools": "tools", "hooks": "hooks",
-                   "python_dependencies": "Python dependencies", "desktop": "Desktop UI half",
+                   "python_dependencies": "Python dependencies",
                    "requires_auth": "your sign-in for", "oauth": "your OAuth sign-in for"}
 
 
 def plugin_surface(manifest: dict, tree: Path) -> dict[str, set]:
-    """What an installed tree exposes: declared host capabilities, tools, hooks, Python deps, Desktop half."""
+    """What an installed tree exposes: declared host capabilities, tools, hooks, Python deps."""
     from hermes_cli.plugin_oauth import oauth_surface
     from hermes_cli.plugins_cmd import _declared_capabilities_from_manifest
     manifest = manifest or {}
@@ -587,25 +587,10 @@ def plugin_surface(manifest: dict, tree: Path) -> dict[str, set]:
         "tools": _list("provides_tools"), "hooks": _list("provides_hooks", "hooks"),
         "python_dependencies": _list("python_dependencies"), "requires_auth": _list("requires_auth"),
         "oauth": oauth_surface(manifest),
-        "desktop": _desktop_surface(tree),
     }
 
 
-def _desktop_surface(tree: Path) -> set:
-    """The desktop entry the tree ships, by the installers' own layout rule (root or ``desktop/``)."""
-    from hermes_cli.desktop_plugin_halves import desktop_source
-    source = desktop_source(tree)
-    return {(source / "plugin.js").relative_to(tree).as_posix()} if source else set()
-
-
-# Surfaces that are one thing however they are spelled: the Desktop half is present or not, and moving
-# it between ``plugin.js`` and ``desktop/plugin.js`` grants nothing new.
-_PRESENCE_SURFACES = frozenset({"desktop"})
-
-
 def _added(surface: str, old: set, new: set) -> set:
-    if surface in _PRESENCE_SURFACES:
-        return set() if old else new
     return new - old
 
 

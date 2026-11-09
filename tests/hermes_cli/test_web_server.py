@@ -5349,7 +5349,7 @@ class TestHeadlessServeTokenPage:
         assert resp.headers["content-type"].startswith("text/html")
         assert "no-store" in resp.headers.get("cache-control", "")
         # Must match the desktop's extraction regex exactly
-        # (apps/desktop/electron/dashboard-token.ts).
+        # (the native client's dashboard token).
         match = re.search(
             r'window\.__HERMES_SESSION_TOKEN__\s*=\s*("(?:\\.|[^"\\])*")',
             resp.text,
