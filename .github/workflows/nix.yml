@@ -1,7 +1,7 @@
 name: Nix flake check
 
-# Builds every output of the flake: the package, the devShell, and the 21
-# checks under nix/checks.nix — module evaluation, option parity, .env
+# Builds every output of the flake: the package, the devShell, and every
+# check under nix/checks.nix — module evaluation, option parity, .env
 # assembly, service argv, and the rest.
 #
 # This workflow owns its triggers and ci.yml does not call it, for the reason
@@ -108,8 +108,8 @@ jobs:
     if: needs.detect.outputs.nix == 'true' || inputs.release == true
     # The build compiles the package and its whole dependency closure, so this
     # takes minutes and not seconds when the cache misses. `nix flake check`
-    # builds 21 checks, and --max-jobs defaults to the core count. It uses the
-    # wider runner with no more configuration.
+    # builds every check, and --max-jobs defaults to the core count. It uses
+    # the wider runner with no more configuration.
     runs-on: blacksmith-32vcpu-ubuntu-2404
     timeout-minutes: 60
     steps:

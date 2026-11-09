@@ -6,7 +6,7 @@
 #
 # Source filters (pythonSrc, per-package npm srcs) reduce rebuild scope so
 # that e.g. a .tsx change doesn't trigger a Python venv rebuild, and a .py
-# change doesn't trigger a TUI/Web/Desktop rebuild.  Each derivation gets a
+# change doesn't trigger a TUI/Web rebuild.  Each derivation gets a
 # filtered src that only includes files it actually needs, while keeping
 # the repo-root directory layout intact for pnpmConfigHook workspace
 # resolution.
@@ -128,7 +128,7 @@ let
 
   # ── Source filters for reducing rebuild scope ──────────────────────
   # Changing a .tsx/.mjs file should NOT trigger a Python venv rebuild,
-  # and changing a .py file should NOT trigger a TUI/Web/Desktop rebuild.
+  # and changing a .py file should NOT trigger a TUI/Web rebuild.
 
   # Python source: everything except JS/TS/docs/infra directories.
   pythonSrc = lib.cleanSourceWith {
@@ -281,11 +281,11 @@ let
   # its first entry is the package's own folder (→ packageJsonPath), and
   # all entries scope the filtered src.  Packages that import source from
   # another workspace member (workspace: deps) must list that member's dir
-  # too, e.g. apps/desktop depends on apps/shared.
+  # too, e.g. ui-tui depends on apps/shared.
   #
   # Usage:
   #   hermesNpmLib.buildPnpmPackage {
-  #     dirs = [ "apps/desktop" "apps/shared" ];
+  #     dirs = [ "ui-tui" "apps/shared" ];
   #     buildPhase = '' ... '';
   #     installPhase = '' ... '';
   #   }
@@ -370,7 +370,7 @@ in
     fi
     echo "$hash" > nix/pnpm-deps-hash
 
-    nix build .#tui .#web .#webapp .#desktop
+    nix build .#tui .#web
     echo "Lockfile and pnpmDeps hash updated and all pnpm packages built."
   '';
 
