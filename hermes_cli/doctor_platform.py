@@ -317,7 +317,7 @@ def check_macos_tcc_grants() -> None:
 
 
 def _desktop_app_bundle() -> Path | None:
-    """Locate the locally-built desktop bundle (``apps/desktop/release/mac-<arch>/Hermes.app``), newest first.
+    """Locate the locally-built desktop bundle (the workspace's ``release/mac-<arch>/Hermes.app``), newest first.
 
     The only layout whose ad-hoc re-signed bundle can invalidate TCC grants. ``/Applications/Hermes.app`` is
     deliberately not probed: it is the separately-signed, certificate-anchored Hermes-Setup launcher.

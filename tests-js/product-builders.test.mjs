@@ -45,18 +45,16 @@ function webSource(source) {
 test('product outputs exclude the source tree except supported generated destinations', async () => {
   const inputs = ['ui-tui', 'apps/shared', 'node_modules']
   // Only call the read-only validator on real source paths: never publish here.
-  for (const name of ['pm', 'hermes_cli', 'scripts', 'pyproject.toml', '.git', 'tools', '.build', 'apps/desktop/build/products']) {
+  for (const name of ['pm', 'hermes_cli', 'scripts', 'pyproject.toml', '.git', 'tools', '.build']) {
     expect(() => productOutput(repo, path.join(repo, name), inputs), name).toThrow(/output/i)
   }
   const base = fixture()
   const source = path.join(base, 'source')
   mkdirSync(source)
-  for (const name of ['new-source-file', 'pm/generated', 'hermes_cli/web_dist-copy', 'apps/desktop/dist-copy', 'apps/desktop/build/native-deps-copy', 'hermes_cli/web_dist/assets',
-    'apps/desktop/build/native-deps-win32-x64/nested', 'apps/desktop/build/native-deps-freebsd-x64', 'apps/desktop/build/native-deps-win32-ia32']) {
+  for (const name of ['new-source-file', 'pm/generated', 'hermes_cli/web_dist-copy', 'hermes_cli/web_dist/assets']) {
     expect(() => productOutput(source, path.join(source, name), inputs), name).toThrow(/output/i)
   }
-  for (const name of ['hermes_cli/web_dist', 'apps/desktop/dist', 'apps/desktop/build/native-deps', 'apps/desktop/build/native-deps-win32-x64',
-    'apps/desktop/build/native-deps-darwin-arm64', 'apps/desktop/build/products/tui', 'apps/desktop/build/products/web', '.build/web', '.build/termux/tui']) {
+  for (const name of ['hermes_cli/web_dist', '.build/web', '.build/termux/tui']) {
     const out = path.join(source, name)
     expect(productOutput(source, out, inputs).out).toBe(out)
     expect(existsSync(out)).toBe(false)
@@ -120,7 +118,7 @@ test('publication replaces only builder-owned directories and rechecks ownership
 
 test('existing npm build directories can be rebuilt without adopting arbitrary outputs', async () => {
   const source = fixture()
-  for (const name of ['ui-tui/dist', 'hermes_cli/web_dist', 'apps/desktop/dist', 'apps/desktop/build/native-deps']) {
+  for (const name of ['ui-tui/dist', 'hermes_cli/web_dist']) {
     const out = path.join(source, name)
     put(out, 'old-output', 'previous compiler output')
     await withProduct(out, product => put(product, 'new-output', 'rebuilt'), { source })
@@ -280,7 +278,6 @@ test('built web freshness follows shared sources and build inputs, not mtimes or
     await buildWeb({ source, icons, out })
     expect(productCurrent({ source, product: 'web', out })).toBe(true)
   }
-  expect(productCurrent({ source, product: 'desktop', out })).toBe(false)
   rmSync(path.join(out, 'favicon.ico'))
   expect(productCurrent({ source, product: 'web', out })).toBe(false)
 }, 30_000)
@@ -368,17 +365,4 @@ test('TUI freshness invalidates source, configuration and compiler inputs and da
   expect(execFileSync(process.execPath, [entry], { encoding: 'utf8' }).trim()).toBe('rebuilt source')
   writeFileSync(entry, 'damaged output')
   expect(current()).toBe(false)
-})
-
-test('a browser renderer publish never invalidates the native Desktop inputs', async () => {
-  const { sourceHash } = await import('../scripts/build/freshness.mjs')
-  const source = fixture()
-  put(source, 'apps/desktop/package.json', '{}')
-  put(source, 'apps/desktop/src/main.ts', 'export {}')
-  const before = sourceHash(source, 'desktop')
-  put(source, 'apps/desktop/dist-webapp/index.html', 'browser renderer')
-  put(source, 'apps/desktop/.dist-webapp-build-1/product/index.html', 'staged renderer')
-  expect(sourceHash(source, 'desktop')).toBe(before)
-  put(source, 'apps/desktop/src/main.ts', 'export const changed = true')
-  expect(sourceHash(source, 'desktop')).not.toBe(before)
 })

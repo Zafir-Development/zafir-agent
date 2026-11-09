@@ -74,17 +74,17 @@ def test_failed_preparation_never_runs_web_compilation(source_products):
 
 
 @pytest.mark.platforms("linux")
-def test_web_rebuild_reuses_the_existing_desktop_union(source_products):
+def test_web_rebuild_reuses_the_existing_tui_and_web_union(request):
     from hermes_cli.source_build import build_update_products
 
-    root, acquired = source_products
+    root, acquired = request.getfixturevalue("source_products")
     build_update_products(root, desktop=True)
     before = _events(root)
     (root / "web/changed.ts").write_text("changed web source")
     assert _build_web_ui(root / "web", fatal=True)
     assert _events(root) == [*before, {"step": "web"}]
     assert acquired == ["pnpm", "pnpm"]
-    assert (root / "apps/desktop/node_modules").exists()
+    assert (root / "ui-tui/node_modules").exists() and (root / "web/node_modules").exists()
 
 
 @pytest.mark.platforms("linux")

@@ -382,10 +382,7 @@ def desktop_surface_registry() -> dict[str, str | None]:
     too, or offline it cannot tell ``/context`` from a skill command and files it under
     Skills / routes it down the extension path until the live catalog warms up.
 
-    The desktop app reads this live from ``commands.catalog``; the copy committed at
-    ``apps/desktop/src/lib/desktop-slash-registry.json`` (``scripts/dump_desktop_slash_registry.py``)
-    is its offline fallback before the catalog answers, so the registry stays the ONLY place a
-    command's desktop disposition is authored. A test on each side fails when the two drift.
+    The registry stays the ONLY place a command's desktop disposition is authored.
     """
     return {
         f"/{key}": cmd.desktop or None

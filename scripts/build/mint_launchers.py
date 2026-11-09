@@ -1,6 +1,6 @@
 r"""Mint the bundled payload's win32 CLI launchers with distlib.
 
-Run by scripts/bundles/desktop.py (step 5b) with the payload's OWN
+Run by scripts/build/launchers.py with the payload's OWN
 store python as the minting interpreter — the store python is the same
 distribution the launchers will execute, and its architecture is by
 construction the target architecture, which is exactly what distlib's

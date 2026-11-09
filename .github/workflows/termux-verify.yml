@@ -86,10 +86,10 @@ jobs:
           # tests-js generates real icons; the wrapper needs core Pillow/resvg.
           extras: '[]'
           cache-node: false
-      # tests-js type-checks contracts against apps/desktop modules (vite,
-      # node-pty): pnpm installs only the selected workspaces, so select it too.
+      # pnpm installs only the selected workspaces: select the TUI and the JS test
+      # suite that checks its contracts.
       - name: Install the locked JS workspace
-        run: pnpm install --frozen-lockfile --filter "{./ui-tui}..." --filter "{./tests-js}..." --filter "{./apps/desktop}..."
+        run: pnpm install --frozen-lockfile --filter "{./ui-tui}..." --filter "{./tests-js}..."
       - name: Check and bundle the TUI
         run: |
           pnpm --dir tests-js run check

@@ -76,9 +76,8 @@ runtime/
 
 # ---------- Not needed inside the Docker image ----------
 
-# Desktop app source (Tauri/Electron); no Docker stage builds or ships it.
-# apps/shared is the dashboard↔desktop websocket helper and is linked from
-# web/package.json as a workspace:* dep — keep it in the build context.
+# Only apps/shared is needed in the Docker build context: web and ui-tui link
+# it as a workspace:* dependency.
 apps/
 !apps/shared/
 !apps/shared/**

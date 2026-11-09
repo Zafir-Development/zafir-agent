@@ -1,7 +1,7 @@
 """Real ``hermes serve`` backend + WebSocket JSON-RPC clients for the terminal lane E2E suites.
 
 One backend per test module: a real ``python -m hermes_cli.main serve --port 0`` subprocess (the
-exact argv Desktop spawns, see ``apps/desktop/electron/backend-command.ts``) with an isolated
+argv a local client spawns) with an isolated
 HOME/HERMES_HOME, no inherited provider credentials, and only the recording fake LLM provider
 configured. Clients speak the Desktop wire protocol over ``/api/ws`` (newline JSON-RPC,
 ``gateway.ready`` on accept, ``client.capabilities`` to answer server→client requests), so every

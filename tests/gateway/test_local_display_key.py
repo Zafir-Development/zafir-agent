@@ -161,7 +161,7 @@ def test_footer_writes_global_from_chat_and_cli_key_locally(tmp_path, monkeypatc
         assert 'platforms' not in saved['display'], saved
 
 
-# What Desktop Settings -> Chat -> Reasoning Blocks PUTs when switched on (apps/desktop/src/app/settings/helpers.ts
+# What a client's Settings -> Chat -> Reasoning Blocks PUTs when switched on (settings helpers
 # setConfigField; pinned by its vitest): the global key and the local key every local surface reads first.
 _SETTINGS_REASONING_ON = {'display': {'show_reasoning': True, 'platforms': {'cli': {'show_reasoning': True}}}}
 

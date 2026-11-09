@@ -11,7 +11,7 @@ from typing import IO
 class DesktopBuildLock:
     """Advisory lock held while pnpm installs and packages Hermes Desktop.
 
-    ``node_modules`` and ``apps/desktop/release`` are checkout-scoped even
+    ``node_modules`` and the desktop release dir are checkout-scoped even
     when two commands use different Hermes profiles.  The lock therefore
     lives under the profile-common Hermes root and is keyed by the resolved
     checkout path.  Keeping it out of the checkout preserves ``--skip-build``

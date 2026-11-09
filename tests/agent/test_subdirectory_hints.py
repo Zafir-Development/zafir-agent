@@ -119,7 +119,7 @@ class TestSubdirectoryHintTracker:
 
     def test_truncation_of_large_hints(self, tmp_path, caplog):
         """Over the ceiling: head AND tail survive, the marker names the file to read_file, and it is logged
-        (the old silent tail-chop hid a truncated apps/desktop/AGENTS.md for months)."""
+        (the old silent tail-chop hid a truncated area AGENTS.md for months)."""
         import logging
         from agent import subdirectory_hints as sh
         sub = tmp_path / "bigdir"

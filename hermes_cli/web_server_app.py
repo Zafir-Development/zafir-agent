@@ -200,11 +200,8 @@ async def standalone_lifespan(app: "FastAPI"):
 @asynccontextmanager
 async def http_lifespan(app: FastAPI):
     """The gateway already owns schema, rooms, scheduler and model services."""
-    from contextlib import AsyncExitStack
-
     from hermes_cli.web_server import _dashboard_selftest_loop
     from hermes_cli.web_server_chat import PTY_REGISTRY
-    from hermes_cli.web_server_surface import policy
 
     app.state.event_channels = {}
     app.state.event_lock = asyncio.Lock()
@@ -216,18 +213,7 @@ async def http_lifespan(app: FastAPI):
         asyncio.create_task(_dashboard_selftest_loop(), name="gateway-api-selftest"),
     ]
     try:
-        async with AsyncExitStack() as surface:
-            if policy(app.state).host_terminal:
-                from hermes_cli.web_host_terminal_sessions import host_terminal_lifespan
-                await surface.enter_async_context(host_terminal_lifespan(app))
-            if policy(app.state).gateway_connections:
-                from hermes_cli import gateway_connections_ssh
-                from hermes_cli.gateway_connections_watch import watch_store
-                # Registered first so it runs last: the watcher stops, then every SSH tunnel this
-                # listener opened (and the remote serve it owns) is closed, never orphaned.
-                surface.push_async_callback(asyncio.to_thread, gateway_connections_ssh.close_all)
-                await surface.enter_async_context(watch_store())
-            yield
+        yield
     finally:
         for task in tasks:
             task.cancel()

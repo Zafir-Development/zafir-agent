@@ -136,9 +136,8 @@ def normalize_symbols_for_tts(text: str) -> str:
 # audio sound corrupted. They become silence, never a hardcoded English
 # placeholder word (#86602: the reply may be in any language). Ordinary
 # prose, dates, ratios and short hyphenated words (COVID-19, well-known)
-# pass through untouched. Mirrored token-for-token by
-# apps/desktop/src/lib/speech-text.ts — keep both in lockstep and extend the
-# shared corpus (tests/fixtures/identifier_speech_corpus.json) first.
+# pass through untouched. Extend the shared corpus
+# (tests/fixtures/identifier_speech_corpus.json) first.
 
 _FILENAME_EXT_RE = re.compile(
     r"[\w.-]{0,60}\.(?:wav|ogg|mp3|flac|m4a|aac|py|pyc|ts|tsx|js|jsx|mjs|cjs|json|yaml|yml|toml|"

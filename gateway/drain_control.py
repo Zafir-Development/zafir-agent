@@ -49,10 +49,9 @@ def restart_wait_open(runner) -> bool:
 
 # The requests a client needs during that wait to find, open and answer the conversation parked on
 # approval/clarify: the GET reads below (Desktop's session picker, the session detail and its
-# transcript pages, and the health probes) and one write, a Webapp tab's mint of the one-use ticket
-# its /api/ws dial-back needs (restart_wait_socket_ticket). Both only pass the drain's refusal; the
-# listener's auth gate still runs on them. Every other write and route keeps that refusal. The
-# prompt itself (approval.pending / *.respond) rides the WebSocket.
+# transcript pages, and the health probes). They only pass the drain's refusal; the listener's auth
+# gate still runs on them. Every other write and route keeps that refusal. The prompt itself
+# (approval.pending / *.respond) rides the WebSocket.
 _RESTART_WAIT_READS = re.compile(
     r"/api/(?:health|status|profiles/sessions(?:/sidebar)?"
     r"|sessions/[^/]+(?:/messages(?:/around)?|/timeline)?)")
@@ -63,15 +62,6 @@ def restart_wait_read(runner, method, path) -> bool:
     return (method == "GET" and bool(_RESTART_WAIT_READS.fullmatch(path or ""))
             and restart_wait_open(runner))
 
-
-def restart_wait_socket_ticket(runner, method, path, query) -> bool:
-    """True for a gateway-socket ticket mint while *runner* is in a restart's after-turn wait.
-
-    Exempts the request from the drain's refusal only: it does not authenticate it."""
-    from urllib.parse import parse_qs
-    from hermes_cli.web_session_sockets import GATEWAY_SOCKET
-    return (method == "POST" and path == "/api/webapp/socket-ticket"
-            and parse_qs(query or "").get("socket") == [GATEWAY_SOCKET] and restart_wait_open(runner))
 
 # The WebSocket verbs an interactive client may still call during that wait: attach to and read the
 # parked session, answer its prompt (or interrupt the turn so the restart can finish) and commit

@@ -3,7 +3,7 @@
 0.22.2's session PATCH/DELETE carry no ``request_id``/``expected_revision``. The owner never
 commits an unfenced write (the revision boundary holds on every transport), so it refuses with
 ``client_upgrade_required``, worded so 0.22.2's own toast summariser (``readableError`` ->
-``rpcOutOfSync``, ``apps/desktop/src/store/notifications.ts`` at v0.22.2) shows "The app and the
+``rpcOutOfSync``, an older client at v0.22.2) shows "The app and the
 backend are on different versions. Update both." with its Update action instead of a raw code.
 """
 import re

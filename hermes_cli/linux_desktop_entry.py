@@ -208,7 +208,7 @@ def _is_this_checkout_managed_cli(candidate: str, checkout_root: Path) -> bool:
     """True when *candidate* is this checkout's PM-managed console script.
 
     That script lives under ``installs/<key>/environments`` and imports a
-    generated workspace that does not ship ``apps/desktop``. It sits outside
+    generated workspace without the desktop app's sources. It sits outside
     the checkout, so the external-primary rule would persist it and the
     desktop launcher would exit with the GUI source missing.
     """
@@ -259,7 +259,7 @@ def _resolve_hermes_bin_for_desktop_entry(
     # be checkout-internal (also shortens the window a concurrent reader sees mutated sys.argv).
     primary = resolve_fn()
     # A managed-environment console script is outside the checkout but is not a durable desktop
-    # launcher: its workspace has no apps/desktop (#122438). The same holds for any launcher
+    # launcher: its workspace has no desktop app (#122438). The same holds for any launcher
     # that provably cannot serve `hermes desktop` (another install's managed env, #122485).
     # Fall through so the durable-wrapper probe below can still find a working one.
     if (
@@ -408,6 +408,7 @@ def _wrapper_targets_checkout(wrapper: Path, checkout_root: Path) -> bool:
 
 
 _HERMES_CODE_MARKERS = ("hermes_cli", "workspace/hermes_cli")
+# A desktop workspace beside the code tree.
 _DESKTOP_APP_ENTRIES = ("apps/desktop/package.json", "workspace/apps/desktop/package.json")
 
 

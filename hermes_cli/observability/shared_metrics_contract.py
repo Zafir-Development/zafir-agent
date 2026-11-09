@@ -663,13 +663,12 @@ CACHE_BREAK_CAUSES = frozenset({
 # ---- end v5 efficiency ----
 # ---- v5 desktop ----
 # Desktop love/hate: which areas get used, what gets in the way, where first run stops. Every value
-# is a code-defined Desktop surface id (apps/desktop/src/store/desktop-metrics.ts mirrors these
-# sets); anything the client names outside them collapses to `other` before it is recorded.
+# is a code-defined Desktop surface id; anything the client names outside these sets collapses
+# to `other` before it is recorded.
 DESKTOP_FEATURE_USE_MARK = DESKTOP_FEATURE_USE_METRIC = "hermes.desktop.feature_use"
 DESKTOP_FRICTION_MARK = DESKTOP_FRICTION_METRIC = "hermes.desktop.friction"
 DESKTOP_ONBOARDING_MARK = DESKTOP_ONBOARDING_METRIC = "hermes.desktop.onboarding"
-# Settings views are `SETTINGS_VIEWS` in apps/desktop/src/app/settings/index.tsx (the legacy
-# `connections` tab redirects to `gateway`).
+# Settings views (the legacy `connections` tab redirects to `gateway`).
 DESKTOP_SETTINGS_AREAS = frozenset({
     "settings_about", "settings_billing", "settings_config_advanced", "settings_config_appearance",
     "settings_config_browser", "settings_config_chat", "settings_config_memory", "settings_config_model",
@@ -684,7 +683,7 @@ DESKTOP_FEATURE_AREAS = DESKTOP_SETTINGS_AREAS | {
     "command_palette", "find_in_page", "model_picker", "session_picker", "session_switcher",
     # first-class features
     "bot_mode", "projects", "session_search", "skins", "voice_conversation", "voice_dictation",
-    # full pages (APP_ROUTES in apps/desktop/src/app/routes.ts, plus contributed plugin pages)
+    # full pages, plus contributed plugin pages
     "agents", "artifacts", "capabilities", "command_center", "cron", "extension_page", "kanban", "messaging",
     "profiles", "session_import", "starmap", "webhooks",
     "other",
@@ -697,7 +696,7 @@ DESKTOP_NOTICE_IDS = frozenset({
     "onboarding_handoff", "restored_draft", "runtime_not_ready", "session_compress", "terminal_backend", "tip",
     "update_available", "voice_live_unavailable", "voice_stop_hint", "other",
 })
-# error_toast: the notifyError summary rule that matched (apps/desktop/src/store/notifications.ts).
+# error_toast: the notifyError summary rule that matched.
 DESKTOP_ERROR_TOAST_CATEGORIES = frozenset({
     "api_key_missing", "api_key_rejected", "disk_full", "gateway_auth_failed", "method_not_allowed",
     "microphone_permission", "pool_slot_timeout", "restart_required", "rpc_out_of_sync", "storage_failure",
@@ -736,9 +735,8 @@ def desktop_active_minutes_bucket(active_ms: Any) -> str:
 # ---- end v5 desktop ----
 
 # ---- v5 desktop actions ----
-# Button presses per day. Action ids are the Desktop keybinding registry (KEYBIND_ACTIONS in
-# apps/desktop/src/lib/keybinds/actions.ts) plus the typed button table DESKTOP_BUTTON_ACTIONS in
-# apps/desktop/src/store/desktop-metrics.ts; contributed/plugin actions collapse to `other`.
+# Button presses per day. Action ids are the Desktop keybinding registry plus the typed button
+# table DESKTOP_BUTTON_ACTIONS; contributed/plugin actions collapse to `other`.
 DESKTOP_ACTION_USE_MARK = DESKTOP_ACTION_USE_METRIC = "hermes.desktop.action_use"
 DESKTOP_KEYBIND_ACTION_IDS = frozenset({
     "appearance.toggleMode", "composer.cancel", "composer.dictate", "composer.focus", "composer.help",

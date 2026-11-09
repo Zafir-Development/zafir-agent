@@ -119,50 +119,9 @@ Write-Output 'selection verified'
     assert result.stdout.strip() == "selection verified"
 
 
-def test_observer_preserves_no_desktop_and_refuses_incomplete_app(tmp_path):
-    verify = runpy.run_path(str(ASSETS / "source_driver.py"))["verify_products"]
-    root = tmp_path / "source"
-    root.mkdir()
-    verify(root, "absent")
-    assert list(root.iterdir()) == []
-    with pytest.raises(RuntimeError, match="desktop"):
-        verify(root, "present")
-    release = root / "apps/desktop/release/linux-unpacked"
-    release.mkdir(parents=True)
-    (release / "hermes").write_bytes(b"incomplete fixture")
-    with pytest.raises(RuntimeError, match="desktop"):
-        verify(root, "absent")
-    with pytest.raises(RuntimeError, match="desktop"):
-        verify(root, "present")
-    assert (release / "hermes").read_bytes() == b"incomplete fixture"
-
-
-def test_observer_judges_only_the_live_app_not_rollback_copies_beside_it(tmp_path):
-    # An update from a release whose raw Windows pack kept release/win-unpacked.bak
-    # (the stage-and-swap promotion never touches it) must be judged on the live
-    # win-unpacked the product launches; a rollback copy alone is no desktop at all.
-    driver = runpy.run_path(str(ASSETS / "source_driver.py"))
-    release = tmp_path / "source/apps/desktop/release"
-    for name in ("win-unpacked", "win-unpacked.bak", "win-unpacked.previous", "mac-arm64.previous"):
-        dist = release / name / "resources/app.asar.unpacked/dist"
-        dist.mkdir(parents=True)
-        (dist / "index.html").write_text("<html></html>", encoding="utf-8")
-        (release / name / "Hermes.exe").write_bytes(b"MZ fixture")
-    assert driver["desktop_outputs"](tmp_path / "source") == [
-        release / "win-unpacked/resources/app.asar.unpacked/dist"]
-    driver["verify_products"](tmp_path / "source", "present")
-    (release / "win-unpacked/Hermes.exe").unlink()
-    with pytest.raises(RuntimeError, match="desktop executable is missing or empty"):
-        driver["verify_products"](tmp_path / "source", "present")
-    shutil.rmtree(release / "win-unpacked")
-    with pytest.raises(RuntimeError, match="desktop"):
-        driver["verify_products"](tmp_path / "source", "present")
-
-
 @pytest.mark.platforms("posix")
 @pytest.mark.parametrize("fault,error", [
     ("uv-lock", "dependency generation is not current"),
-    ("no-desktop", "dependency generation is not current"),
     ("foreign-launcher", "belongs to another installation"),
     ("missing-launcher", ""),
     ("incomplete", "incomplete"),
@@ -221,18 +180,14 @@ ensure_install_launchers(root, root / '.hermes/bin')
     record = '''import { mkdirSync, writeFileSync } from 'node:fs';
 import { buildInputs, recordProduct } from './scripts/build/freshness.mjs';
 const source = process.cwd();
-for (const [product, out] of [['tui', 'ui-tui/dist'], ['web', 'hermes_cli/web_dist'], ['desktop', 'apps/desktop/release/linux-unpacked/resources/app.asar.unpacked/dist']]) {
+for (const [product, out] of [['tui', 'ui-tui/dist'], ['web', 'hermes_cli/web_dist']]) {
   mkdirSync(out, { recursive: true }); writeFileSync(out + '/index.html', 'fixture product');
   recordProduct({source, product, out, inputs: buildInputs(source, product)});
 }
 '''
     subprocess.run([node, "--input-type=module", "-e", record], cwd=root, env=env, check=True, timeout=30)
-    (root / "apps/desktop/release/linux-unpacked/hermes").write_bytes(b"fixture executable")
     command = [sys.executable, "-B", str(ASSETS / "source_driver.py"), "--root", str(root),
-               "--launcher", str(root / ".hermes/bin/hermes"), "--desktop", "present"]
-    if fault == "no-desktop":
-        shutil.rmtree(root / "apps/desktop")
-        command[-1] = "absent"
+               "--launcher", str(root / ".hermes/bin/hermes")]
     # The passive query must not write even import caches: -I ignores the
     # environment's bytecode switch, so the published query enforces it.
     def snapshot():
@@ -242,24 +197,24 @@ for (const [product, out] of [['tui', 'ui-tui/dist'], ['web', 'hermes_cli/web_di
     result = subprocess.run(command, env=env, cwd=tmp_path, capture_output=True, text=True, timeout=60, check=False)
     assert result.returncode == 0, result.stdout + result.stderr
     assert snapshot() == before
-    if fault in {"uv-lock", "no-desktop"}:
-        (root / "uv.lock").write_text("changed graph without preparation", encoding="utf-8")
-    elif fault == "foreign-launcher":
+
+    def _damage_foreign_launcher() -> None:
         foreign = tmp_path / "foreign"
         shutil.copytree(root, foreign)
         from hermes_cli._launchers import mint_launcher
         launcher = mint_launcher("hermes", foreign, root / ".hermes/bin", Path(sys.executable), None)
         assert launcher is not None
-    elif fault == "missing-launcher":
-        (root / ".hermes/bin/hermes").unlink()
-    elif fault == "incomplete":
-        (root / ".update-incomplete").write_text("incomplete", encoding="utf-8")
-    else:
-        damaged = root / "hermes_cli/web_dist/index.html"
-        if fault == "web-missing":
-            damaged.unlink()
-        else:
-            damaged.write_bytes(b"damaged")
+
+    damaged = root / "hermes_cli/web_dist/index.html"
+    damage = {
+        "uv-lock": lambda: (root / "uv.lock").write_text("changed graph without preparation", encoding="utf-8"),
+        "foreign-launcher": _damage_foreign_launcher,
+        "missing-launcher": lambda: (root / ".hermes/bin/hermes").unlink(),
+        "incomplete": lambda: (root / ".update-incomplete").write_text("incomplete", encoding="utf-8"),
+        "web-changed": lambda: damaged.write_bytes(b"damaged"),
+        "web-missing": lambda: damaged.unlink(),
+    }
+    damage[fault]()
     before = snapshot()
     result = subprocess.run(command, env=env, cwd=tmp_path, capture_output=True, text=True, timeout=60, check=False)
     assert result.returncode != 0

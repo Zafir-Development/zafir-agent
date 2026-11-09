@@ -30,7 +30,6 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
-from hermes_cli import webapp_sign_in
 from hermes_cli.dashboard_auth import (
     get_provider, list_interactive_providers, list_providers, list_session_providers,
     native_flow)
@@ -100,21 +99,18 @@ def _validate_post_login_target(raw: str) -> str:
 
 
 def _set_pkce(resp, request: Request, payload: dict[str, str]) -> None:
-    set_pkce_cookie(resp, payload=payload, use_https=detect_https(request), prefix=_prefix(request),
-                    gateway=webapp_sign_in.cookie_gateway(request))
+    set_pkce_cookie(resp, payload=payload, use_https=detect_https(request), prefix=_prefix(request))
 
 
 def _clear_pkce(resp, request: Request) -> None:
-    clear_pkce_cookie(resp, use_https=detect_https(request), prefix=_prefix(request),
-                      gateway=webapp_sign_in.cookie_gateway(request))
+    clear_pkce_cookie(resp, use_https=detect_https(request), prefix=_prefix(request))
 
 
 def _set_session(resp, request: Request, session: Session) -> None:
     set_session_cookies(
         resp, access_token=session.access_token, refresh_token=session.refresh_token,
         access_token_expires_in=access_token_max_age(session), use_https=detect_https(request),
-        prefix=_prefix(request), provider=session.provider, gateway=webapp_sign_in.cookie_gateway(request))
-    webapp_sign_in.bind(resp, request)
+        prefix=_prefix(request), provider=session.provider)
 
 
 def _bearer_payload(session: Session) -> dict[str, Any]:
@@ -357,7 +353,7 @@ async def auth_native_authorize(
 async def auth_callback(
     request: Request, code: str = "", state: str = "", error: str = "",
     error_description: str = ""):
-    pkce_raw = read_pkce_cookie(request, webapp_sign_in.cookie_gateway(request))
+    pkce_raw = read_pkce_cookie(request)
     if not pkce_raw:
         _audit(request, AuditEvent.LOGIN_FAILURE, reason="missing_pkce_cookie")
         raise _http(400, "Missing PKCE state cookie")
@@ -392,7 +388,7 @@ async def auth_callback(
         _set_session(resp, request, session)
     _clear_pkce(resp, request)
     # Clear the one-shot auto-SSO loop-guard so it never suppresses a future silent attempt.
-    clear_sso_attempt_cookie(resp, prefix=_prefix(request), gateway=webapp_sign_in.cookie_gateway(request))
+    clear_sso_attempt_cookie(resp, prefix=_prefix(request))
     return resp
 
 
@@ -481,7 +477,7 @@ async def auth_password_login(request: Request, body: _PasswordLoginBody):
     # The native broker handle also records WHICH provider the flow was started for. Enforce
     # equality BEFORE verifying credentials so a flow started for provider A cannot be completed
     # with provider B's credentials.
-    pkce_raw = read_pkce_cookie(request, webapp_sign_in.cookie_gateway(request))
+    pkce_raw = read_pkce_cookie(request)
     pkce_parts = parse_pkce_payload(pkce_raw) if pkce_raw else {}
     broker_state = pkce_parts.get("broker", "")
     if broker_state and pkce_parts.get("provider", "") != body.provider:
@@ -512,7 +508,7 @@ async def auth_password_login(request: Request, body: _PasswordLoginBody):
 
 @router.post("/auth/logout", name="auth_logout")
 async def auth_logout(request: Request):
-    _at, rt = read_session_cookies(request, webapp_sign_in.cookie_gateway(request))
+    _at, rt = read_session_cookies(request)
     # Best-effort revoke on every provider; failures logged, never raised.
     for provider in list_providers() if rt else ():
         try:
@@ -524,7 +520,7 @@ async def auth_logout(request: Request):
            user_id=(sess.user_id if sess else ""))
     prefix = _prefix(request)
     resp = RedirectResponse(url=f"{prefix}/login", status_code=302)
-    clear_session_cookies(resp, prefix=prefix, gateway=webapp_sign_in.cookie_gateway(request))
+    clear_session_cookies(resp, prefix=prefix)
     _clear_pkce(resp, request)
     return resp
 
@@ -576,11 +572,7 @@ async def api_auth_ws_ticket(request: Request):
     ``Authorization`` on the upgrade); one ticket per WS."""
     sess = _require_session(request)
     from hermes_cli.dashboard_auth.ws_tickets import TTL_SECONDS, mint_ticket
-    # On the gateway's Webapp the ticket carries the login's sign-in binding, so the socket it opens
-    # closes at sign-out (``hermes_cli.webapp_sign_in``).
-    signed_in = webapp_sign_in.sign_in_of(request)
-    ticket = mint_ticket(user_id=sess.user_id, provider=sess.provider, issuer=sess.issuer,
-                         extra={"sign_in": signed_in} if signed_in else None)
+    ticket = mint_ticket(user_id=sess.user_id, provider=sess.provider, issuer=sess.issuer)
     _audit(request, AuditEvent.WS_TICKET_MINTED, provider=sess.provider, user_id=sess.user_id)
     return {"ticket": ticket, "ttl_seconds": TTL_SECONDS}
 
@@ -602,7 +594,6 @@ async def auth_native_token(request: Request, body: _NativeTokenBody):
     except native_flow.CodeInvalid:
         _audit(request, AuditEvent.NATIVE_TOKEN_FAILURE, reason="invalid_code_or_pkce")
         raise _http(400, "Invalid or expired authorization code.")
-    webapp_sign_in.gave_native_app(request, session)
     _audit(request, AuditEvent.NATIVE_TOKEN_SUCCESS, provider=session.provider,
            user_id=session.user_id)
     return _bearer_payload(session)
@@ -617,15 +608,9 @@ class _NativeRefreshBody(BaseModel):
 async def auth_native_refresh(request: Request, body: _NativeRefreshBody):
     """Rotate a desktop-held refresh token (mirrors the gate's ``_attempt_refresh``): every
     provider rejecting the RT -> 401 ``session_expired`` (desktop re-logs); none rotated and one
-    unreachable -> 503. On the gateway's Webapp behind the gate it renews only refresh tokens
-    this listener gave a native app's sign-in (``webapp_sign_in.token_works_alone``)."""
+    unreachable -> 503."""
     if not body.refresh_token:
         raise _http(400, "refresh_token required")
-    if not webapp_sign_in.token_works_alone(request, body.refresh_token):
-        _audit(request, AuditEvent.REFRESH_FAILURE, reason="not_a_native_sign_in")
-        return JSONResponse(
-            {"error": "session_expired",
-             "detail": "Refresh token expired or invalid; start a new sign-in."}, status_code=401)
     try:
         # Off the event loop: the provider call is synchronous network I/O and a slow IdP
         # otherwise wedges every public endpoint (/api/status) behind it.
@@ -636,7 +621,6 @@ async def auth_native_refresh(request: Request, body: _NativeRefreshBody):
         raise _http(503, f"Auth provider {str(e)!r} unreachable")
     if refreshed is not None:
         session = refreshed[0]
-        webapp_sign_in.gave_native_app(request, session)
         _audit(request, AuditEvent.REFRESH_SUCCESS, provider=session.provider,
                user_id=session.user_id)
         return _bearer_payload(session)
