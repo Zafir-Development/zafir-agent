@@ -529,7 +529,7 @@ def test_a_claim_cut_before_lanes_existed_reads_as_the_lane_set_that_gated_the_s
     # skipBundles built the image and nothing else a bundle touches, tests included.
     bundleless = {**old, "skipBundles": True}
     assert validate_claim(bundleless, version="0.21.7", attempt=11, commit=commit)["lanes"] == frozenset(
-        {"docker", "ci", "nix", "docker-tests", "windows-live", "install-e2e", "bootstrap-version", "termux-checks"})
+        {"docker", "ci", "nix", "docker-tests", "windows-live", "install-e2e", "termux-checks"})
     # The keys stay exact, never loose: a non-boolean, an unknown key or a mix of shapes is refused.
     new = {k: v for k, v in old.items() if not k.startswith("skip")}
     # A lanes claim without a revision was cut when `windows` also meant the Store bundle (rc.2-v0.22.1).

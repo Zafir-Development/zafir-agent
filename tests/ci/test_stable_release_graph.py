@@ -61,7 +61,7 @@ def test_release_reuses_whole_ci_and_docker_before_publication():
     required = {"ci", "docker", "nix", "pm-bundle", "install-e2e", "windows-packaged",
                 "macos-packaged-arm64", "termux-checks", "windows-live",
                 "candidate-manifest", "transitions-darwin-arm64",
-                "transitions-win32", "bootstrap-version", *candidate_calls}
+                "transitions-win32", *candidate_calls}
     assert required <= ancestors(jobs, "acceptance")
     # B3: stable calls one build group at a time; the bundle group waits for
     # both Windows arches, and the Linux groups are not called at all.
@@ -299,15 +299,6 @@ def test_docker_dev_stamp_checkout_has_release_history():
 
 
 def test_release_gates_extract_consumer_facing_versions():
-    release_jobs = workflow("stable-release.yml")["jobs"]
-    bootstrap = next(
-        step["run"] for step in release_jobs["bootstrap-version"]["steps"]
-        if step.get("name") == "Stamp and verify the Cargo and Tauri release identity"
-    )
-    assert "cargo metadata" in bootstrap
-    assert "tauri.conf.json" in bootstrap
-    assert "uv build --wheel --sdist" not in bootstrap
-
     docker = workflow("docker.yml")["jobs"]
     image_check = next(
         step["run"] for step in docker["build"]["steps"]

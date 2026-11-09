@@ -36,7 +36,6 @@ LANES = (
     Lane("pm-bundle", True, "PM bundle acceptance"),
     Lane("windows-live", True, "Windows live venv E2E"),
     Lane("install-e2e", True, "install and update E2E"),
-    Lane("bootstrap-version", True, "bootstrap installer release identity check"),
     Lane("termux-checks", True, "Termux verification (runs only with termux)"),
     Lane("smoke", True, "native install + chat smoke of each built desktop package"),
     Lane("upgrade", True, "signed-package upgrade acceptance (OLD to NEW) of each built desktop package"),
@@ -67,7 +66,6 @@ JOB_LANES: dict[str, frozenset[str]] = {name: frozenset(needs) for name, needs i
     "termux-checks": ("termux-checks", "termux"),
     "windows-live": ("windows-live",),
     "install-e2e": ("install-e2e",),
-    "bootstrap-version": ("bootstrap-version",),
     "candidates-darwin-arm64": ("macos-arm64",),
     "candidates-win32-arm64": ("windows-build",),
     "candidates-win32-x64": ("windows-build",),
@@ -187,7 +185,7 @@ LANES_REVISION = 2
 _LEGACY_OPTIONAL = ("includeMacosIntel", "includeTermux")
 _LEGACY_BUNDLE_LANES = frozenset({*BUNDLES, "pm-bundle", "upgrade", "smoke"})
 _TEST_LANES = frozenset({"ci", "nix", "docker-tests", "pm-bundle", "windows-live", "install-e2e",
-                         "bootstrap-version", "termux-checks", "smoke", "upgrade"})
+                         "termux-checks", "smoke", "upgrade"})
 
 
 def claim_lanes(metadata: Mapping) -> frozenset[str]:

@@ -419,7 +419,6 @@ Long-form reference: `website/docs/developer-guide/stable-releases.md`.
   | `macos-arm64` (on) | `candidates-darwin-arm64` |
   | `smoke` (on) | native smokes inside the candidate calls |
   | `upgrade` (on) | `transitions-*` and `windows-packaged` / `macos-packaged-*` (signed OLD→NEW). Also skipped when no published baseline exists. |
-  | `bootstrap-version` (on) | `bootstrap-version` |
 
 - **Order:** every gate and candidate starts right after `admit`. CI does not
   block the signed builds. `acceptance` is the single join that blocks

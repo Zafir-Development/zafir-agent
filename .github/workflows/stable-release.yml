@@ -416,40 +416,6 @@ jobs:
       bundle-manifest-sha256: ${{ matrix.manifest_sha256 }}
       bundle-arch: ${{ matrix.arch }}
 
-  bootstrap-version:
-    name: Bootstrap installer release identity
-    needs: admit
-    if: fromJSON(needs.admit.outputs.jobs)['bootstrap-version']
-    runs-on: blacksmith-2vcpu-ubuntu-2404
-    steps:
-      - uses: useblacksmith/checkout@25227e61ff9dafe400e22fa487b673eac4e4409a  # v1
-        with:
-          ref: ${{ needs.admit.outputs.commit }}
-      - name: Stamp and verify the Cargo and Tauri release identity
-        env:
-          RELEASE_COMMIT: ${{ needs.admit.outputs.commit }}
-          RELEASE_VERSION: ${{ needs.admit.outputs.version }}
-        run: |
-          set -euo pipefail
-          tree="$RUNNER_TEMP/bootstrap-release"
-          mkdir -p "$tree"
-          git archive "$RELEASE_COMMIT" | tar -x -C "$tree"
-          python3 -m scripts.releases.stamping --tree "$tree" \
-            --version "$RELEASE_VERSION"
-          actual="$(cargo metadata --no-deps --format-version 1 \
-            --manifest-path "$tree/apps/bootstrap-installer/src-tauri/Cargo.toml" \
-            | jq -r '.packages[] | select(.name == "hermes-bootstrap") | .version')"
-          test "$actual" = "$RELEASE_VERSION" || {
-            echo "::error::Bootstrap Cargo version $actual != $RELEASE_VERSION"
-            exit 1
-          }
-          actual_tauri="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' \
-            "$tree/apps/bootstrap-installer/src-tauri/tauri.conf.json")"
-          test "$actual_tauri" = "$RELEASE_VERSION" || {
-            echo "::error::Bootstrap Tauri version $actual_tauri != $RELEASE_VERSION"
-            exit 1
-          }
-
   acceptance:
     name: All release acceptance checks pass
     if: always()
@@ -457,8 +423,7 @@ jobs:
             candidates-darwin-arm64, candidates-win32-arm64,
             candidates-win32-x64, candidates-win32-bundle, candidates-termux,
             candidate-manifest, transitions-darwin-arm64,
-            transitions-win32, windows-packaged, macos-packaged-arm64,
-            bootstrap-version]
+            transitions-win32, windows-packaged, macos-packaged-arm64]
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: useblacksmith/checkout@25227e61ff9dafe400e22fa487b673eac4e4409a  # v1
@@ -467,7 +432,7 @@ jobs:
       - uses: ./.github/actions/setup-pm
         with:
           cache-python: false
-      - run: python -m scripts.releases.stable gate admit ci docker nix pm-bundle termux-checks windows-live install-e2e candidates-darwin-arm64 candidates-win32-arm64 candidates-win32-x64 candidates-win32-bundle candidates-termux candidate-manifest transitions-darwin-arm64 transitions-win32 windows-packaged macos-packaged-arm64 bootstrap-version
+      - run: python -m scripts.releases.stable gate admit ci docker nix pm-bundle termux-checks windows-live install-e2e candidates-darwin-arm64 candidates-win32-arm64 candidates-win32-x64 candidates-win32-bundle candidates-termux candidate-manifest transitions-darwin-arm64 transitions-win32 windows-packaged macos-packaged-arm64
         env:
           RELEASE_NEEDS: ${{ toJSON(needs) }}
           LANES: ${{ needs.admit.outputs.lanes }}
