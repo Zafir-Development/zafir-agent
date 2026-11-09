@@ -8,8 +8,10 @@ on:
         required: false
         type: string
         default: ''
-  # The success path publishes from Stable Release's own final job; only a
-  # failed run needs this pass, which reruns its failed jobs immediately.
+  # Stable Release's own final job reconciles while its workflow is still
+  # running, so that pass can observe the run as "running" and plan nothing.
+  # Every completed dispatched run is reconciled again here: a success closes
+  # that gap, and a failure also reruns its failed jobs immediately.
   workflow_run:
     workflows: ['Stable Release']
     types: [completed]
@@ -29,8 +31,7 @@ jobs:
   reconcile:
     if: >-
       github.event_name != 'workflow_run' ||
-      (github.event.workflow_run.conclusion != 'success' &&
-       github.event.workflow_run.event == 'workflow_dispatch' &&
+      (github.event.workflow_run.event == 'workflow_dispatch' &&
        github.event.workflow_run.head_repository.full_name == github.repository)
     # GitHub-hosted with docker/setup-buildx-action, as before the runner migration: on
     # Blacksmith `imagetools create` cannot commit a manifest list to Docker Hub (404 on the

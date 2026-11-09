@@ -237,16 +237,19 @@ def test_publication_reconciler_has_every_recovery_trigger_and_shared_lock():
     reconcile = publication["jobs"]["reconcile"]
     assert reconcile["environment"] == "release-signing"
     assert publication["permissions"] == {"contents": "write", "actions": "write"}
-    # Reconcile after a dispatched run of this repository that did not succeed;
-    # a manual dispatch of the reconciler always runs.
+    # Reconcile after any completed dispatched run of this repository. The final
+    # Stable Release job runs while its own workflow is still in progress, so a
+    # success can reach that pass as "running"; the completion event closes the
+    # gap. A failure also reruns its failed jobs; a manual dispatch always runs.
     def run_of(**overrides):
         workflow_run = {"conclusion": "failure", "event": "workflow_dispatch",
                         "head_repository": {"full_name": "o/r"}, **overrides}
         return {"event_name": "workflow_run", "repository": "o/r", "event": {"workflow_run": workflow_run}}
 
     assert gate(reconcile["if"], {}, {}, github=run_of())
+    assert gate(reconcile["if"], {}, {}, github=run_of(conclusion="success"))
     assert gate(reconcile["if"], {}, {}, github={"event_name": "workflow_dispatch"})
-    for refused in ({"conclusion": "success"}, {"event": "push"}, {"head_repository": {"full_name": "fork/r"}}):
+    for refused in ({"event": "push"}, {"head_repository": {"full_name": "fork/r"}}):
         assert not gate(reconcile["if"], {}, {}, github=run_of(**refused)), refused
     checkout = reconcile["steps"][0]
     assert checkout["with"]["ref"] == "${{ github.event.repository.default_branch }}"
