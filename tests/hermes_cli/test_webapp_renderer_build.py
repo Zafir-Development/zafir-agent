@@ -13,6 +13,15 @@ import pytest
 from hermes_cli import webapp
 
 
+def test_renderer_build_fails_before_tool_acquisition_when_compiler_was_removed(tmp_path: Path, monkeypatch):
+    from hermes_cli import source_build
+
+    monkeypatch.setattr(source_build, "source_product_current", lambda *_a: False)
+    monkeypatch.setattr(source_build, "source_build_env", lambda **_k: pytest.fail("tools acquired"))
+    with pytest.raises(webapp.WebappBuildError, match="no longer supported"):
+        webapp.prepare_webapp_renderer(tmp_path)
+
+
 def _workspace_tree(root: Path) -> None:
     (root / "apps" / "desktop").mkdir(parents=True)
     (root / "apps" / "shared").mkdir(parents=True)
@@ -27,6 +36,9 @@ def _workspace_tree(root: Path) -> None:
         root / "ui-tui" / "package.json",
     ):
         path.write_text("{}", encoding="utf-8")
+    compiler = root / "scripts/build/webapp.mjs"
+    compiler.parent.mkdir(parents=True)
+    compiler.write_text("// test compiler\n", encoding="utf-8")
 
 
 def test_skip_build_requires_the_separate_webapp_bundle(tmp_path: Path):
