@@ -249,22 +249,6 @@ def test_discover_reads_an_attempt_ref_and_keeps_the_version():
     assert records[0]["docker_manifest_digest"] == "sha256:" + "b" * 64
 
 
-def test_desktop_era_claims_are_skipped_not_fatal():
-    """Historical tags predate the source-only lanes; walking them must not crash."""
-    from scripts.releases.sequencer import discover
-
-    tags = {
-        "rc.1-v0.21.5": ("1" * 40, COMMIT,
-                         {"schema": 1, "version": "0.21.5", "attempt": 1, "commit": COMMIT,
-                          "autopublish": False, "skipBundles": False, "skipTests": True,
-                          "claimEpoch": 1_790_000_000}),
-        "rc.2-v0.21.6": ("2" * 40, COMMIT,
-                         _claim_message("0.21.6", 2, COMMIT, lanes=("docker", "windows"))),
-    }
-    records = discover("example/project", _discover_run(tags))
-    assert records == []
-
-
 def test_a_marker_ref_clears_the_attempt():
     from scripts.releases.sequencer import discover
 

@@ -222,27 +222,8 @@ def _tag_message(tag: str, expected_object: str, run=output) -> dict:
     return message
 
 
-# Claims cut by the desktop-inclusive pipeline name lanes this pipeline does not have. Their tags
-# stay readable (nothing is rewritten), but they are not part of the source-only release graph.
-_DESKTOP_CLAIM_KEYS = frozenset({"skipBundles", "skipTests", "includeMacosIntel", "includeTermux"})
-
-
-def is_desktop_era_claim(metadata: object) -> bool:
-    """Whether a claim's metadata was written by the removed desktop pipeline."""
-    if not isinstance(metadata, dict):
-        return False
-    if _DESKTOP_CLAIM_KEYS & set(metadata):
-        return True
-    lanes = metadata.get("lanes")
-    return isinstance(lanes, list) and any(name not in lane_set.NAMES for name in lanes)
-
-
 def discover(repository: str, run=output) -> list[dict]:
-    """Derive every stable claim state from remote refs and GitHub objects.
-
-    Desktop-era claims cannot validate under the source-only lanes; they are
-    skipped with a warning instead of failing the pass.
-    """
+    """Derive every stable claim state from remote refs and GitHub objects."""
     from scripts.releases.stable import is_claim_run, tagger_epoch, validate_claim, validate_final
 
     log("Fetching stable receipt tags, attempt refs and abandon markers from origin")
@@ -256,14 +237,18 @@ def discover(repository: str, run=output) -> list[dict]:
     log(f"Found {len(refs)} remote stable refs: {len(attempts)} attempt refs, "
         f"{sum(1 for tag in refs if version_from_tag(tag))} receipt tags, "
         f"{sum(1 for tag in refs if parse_marker_ref(tag))} abandon markers")
+    outstanding = outstanding_attempts(list(refs), lambda v: f"v{v}" in refs)
+    if outstanding:
+        log(f"Outstanding attempts (no receipt tag, not abandoned): "
+            f"{', '.join(ref for *_rest, ref in outstanding)}")
+    if len(outstanding) > 1:
+        named = ", ".join(ref for *_rest, ref in outstanding)
+        raise ValueError(f"more than one outstanding attempt ({named})")
     releases = _release_rows(repository, run)
     log(f"Read {len(releases)} GitHub releases")
     workflow_runs = _workflow_runs(repository, run)
     log(f"Read {len(workflow_runs)} dispatched Stable Release runs")
     records = []
-    # Only a source-only claim counts as outstanding: desktop-era attempt refs stay readable but
-    # are not part of this release graph.
-    source_only_attempts: list[str] = []
 
     for claim_tag, claim_ref in refs.items():
         parsed = parse_attempt_ref(claim_tag)
@@ -278,12 +263,7 @@ def discover(repository: str, run=output) -> list[dict]:
         try:
             claim = validate_claim(raw_claim, version=version, attempt=attempt, commit=commit)
         except ValueError as error:
-            if is_desktop_era_claim(raw_claim):
-                log(f"  skipping {claim_tag} @ {commit[:10]}: desktop-era claim metadata "
-                    "is outside the source-only release graph")
-                continue
             raise ValueError(f"{claim_tag} metadata is invalid") from error
-        source_only_attempts.append(claim_tag)
         claim_epoch = claim["claimEpoch"]
         if tagger_epoch(claim_ref["object"], run) != claim_epoch:
             raise ValueError(f"{claim_tag} epoch differs from its annotated tagger timestamp")
@@ -363,16 +343,6 @@ def discover(repository: str, run=output) -> list[dict]:
             "docker_manifest_digest": final["dockerManifestDigest"] if final else None,
             "retry": retry if final_ref is None else None,
         })
-
-    source_only_refs = [*source_only_attempts,
-                        *(tag for tag in refs if parse_marker_ref(tag))]
-    outstanding = outstanding_attempts(source_only_refs, lambda v: f"v{v}" in refs)
-    if outstanding:
-        log(f"Outstanding attempts (no receipt tag, not abandoned): "
-            f"{', '.join(ref for *_rest, ref in outstanding)}")
-    if len(outstanding) > 1:
-        named = ", ".join(ref for *_rest, ref in outstanding)
-        raise ValueError(f"more than one outstanding attempt ({named})")
 
     # Attempt order inside a version: git lists refs by name (rc.10 before rc.2), and
     # reconcile indexes by version with the last record winning, i.e. the newest attempt.

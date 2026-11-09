@@ -93,7 +93,7 @@ def jobs_to_run(lanes: Iterable[str]) -> dict[str, bool]:
 
 
 # Claims record `lanesRevision` next to `lanes`. A claim cut by an earlier, desktop-inclusive
-# pipeline carries lane names this pipeline no longer has; it is skipped, never translated.
+# pipeline carries lane names this pipeline no longer has; it is refused, never translated.
 LANES_REVISION = 3
 
 
