@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from html.parser import HTMLParser
 import json
 import logging
 import re
@@ -148,6 +147,8 @@ def _resolve_source_target(channel: str, git_cmd=None, cwd=None, *, repository=N
     repository = repository or source_repository(git_cmd, cwd)
     if channel == "stable":
         return _resolve_stable(repository, git_cmd, cwd)
+    if channel == "canary":
+        return _resolve_canary(repository, git_cmd, cwd)
     if channel == "main":
         # main IS the git branch. No R2 record is read: none was ever published, and a
         # network that answers it with 403 instead of 404 (regional WAFs) must not stop
@@ -178,14 +179,14 @@ def _resolve_source_target(channel: str, git_cmd=None, cwd=None, *, repository=N
                         version=request["sourceVersion"], build_id=request["buildId"])
 
 
-def _describe_release_failure(failure: BaseException) -> str:
+def _describe_release_failure(failure: BaseException, channel: str = "stable") -> str:
     """A transport failure names its cause (a rate limit is not "no release")."""
     if isinstance(failure, (urllib.error.URLError, TimeoutError)):
         from hermes_cli.github_api import describe_github_failure
 
         # The request that failed, not the configuration: a rejected token retries anonymously.
         return describe_github_failure(failure, authenticated=getattr(failure, "hermes_authenticated", False))
-    return f"No published stable release could be verified: {failure}"
+    return f"No published {channel} release could be verified: {failure}"
 
 
 def _resolve_stable(repository: str, git_cmd=None, cwd=None) -> SourceTarget:
@@ -199,6 +200,23 @@ def _resolve_stable(repository: str, git_cmd=None, cwd=None) -> SourceTarget:
         logger.warning("Could not resolve the stable source release: %s", exc)
         raise ValueError(_describe_release_failure(exc)) from exc
     return SourceTarget("stable", "stable", repository, commit=commit, version=str(tag).removeprefix("v"))
+
+
+def _resolve_canary(repository: str, git_cmd=None, cwd=None) -> SourceTarget:
+    """Canary IS the repository's newest published GitHub prerelease: the receipt tag
+    ``vX.Y.Z+canary.<UTC>``, non-draft and prerelease, verified against origin.
+
+    ``release.py --canary`` publishes only that tag and that GitHub release; there is
+    no R2 canary record or pointer to read, and a draft or any other tag is never a
+    substitute. Selection is the listing's newest eligible release, so a missing
+    publication fails closed instead of falling back to an arbitrary Git tag.
+    """
+    try:
+        tag, commit = _resolve_release("canary", git_cmd, cwd, repository=repository, pointer=False)
+    except (OSError, ValueError, subprocess.SubprocessError) as exc:
+        logger.warning("Could not resolve the canary source release: %s", exc)
+        raise ValueError(_describe_release_failure(exc, "canary")) from exc
+    return SourceTarget("canary", "canary", repository, commit=commit, version=str(tag).removeprefix("v"))
 
 
 def _refuse_retirement_downgrade(request: dict, terminal: dict, git_cmd, cwd) -> None:
@@ -260,17 +278,6 @@ def _read(url: str, *, missing_ok: bool = False) -> str | None:
         raise
 
 
-class _BuildMetadata(HTMLParser):
-    def __init__(self):
-        super().__init__()
-        self.tags = []
-
-    def handle_starttag(self, tag, attrs):
-        fields = dict(attrs)
-        if tag == "meta" and fields.get("name") == "hermes-build":
-            self.tags.append(fields.get("content"))
-
-
 def _valid_tag(tag, channel: str) -> bool:
     if not isinstance(tag, str):
         return False
@@ -316,25 +323,19 @@ def _published_fallback(channel: str, base: str) -> dict:
     raise ValueError(f"No published {channel} release")
 
 
-def _release_pointer(channel: str) -> tuple[str | None, str | None]:
+def _release_pointer() -> tuple[str | None, str | None]:
     # Stable's completion job writes this before publishing the GitHub draft.
-    # Publication is checked separately, so that interval fails closed.
-    if channel == "stable":
-        text = _read(f"{_PUBLIC_BASE}/releases/stable/release-candidates.json", missing_ok=True)
-        if text is not None:
-            data = json.loads(text)
-            if (not isinstance(data, dict) or not _valid_tag(data.get("tag"), channel)
-                    or not isinstance(data.get("commit"), str) or not _SHA.fullmatch(data["commit"])):
-                raise ValueError("Invalid stable release pointer")
-            return data["tag"], data["commit"]
-    text = _read(f"{_PUBLIC_BASE}/releases/{channel}/index.html", missing_ok=True)
-    if text is None:
-        return None, None
-    page = _BuildMetadata()
-    page.feed(text)
-    if len(page.tags) != 1 or not _valid_tag(page.tags[0], channel):
-        raise ValueError(f"Invalid {channel} release pointer")
-    return page.tags[0], None
+    # Publication is checked separately, so that interval fails closed. Canary has
+    # no pointer: publishing its GitHub prerelease is the only promotion, so its
+    # selection reads the release listing instead (see ``_resolve_canary``).
+    text = _read(f"{_PUBLIC_BASE}/releases/stable/release-candidates.json", missing_ok=True)
+    if text is not None:
+        data = json.loads(text)
+        if (not isinstance(data, dict) or not _valid_tag(data.get("tag"), "stable")
+                or not isinstance(data.get("commit"), str) or not _SHA.fullmatch(data["commit"])):
+            raise ValueError("Invalid stable release pointer")
+        return data["tag"], data["commit"]
+    return None, None
 
 
 def _resolve_release(channel: str, git_cmd=None, cwd=None, *, repository=None,
@@ -344,8 +345,9 @@ def _resolve_release(channel: str, git_cmd=None, cwd=None, *, repository=None,
         raise ValueError(f"Not a release channel: {channel}")
     repository = repository or source_repository(git_cmd, cwd)
     base = f"https://api.github.com/repos/{repository}"
-    tag, pinned_sha = (_release_pointer(channel)
-                       if pointer and repository.lower() == OFFICIAL_REPOSITORY.lower() else (None, None))
+    tag, pinned_sha = (_release_pointer()
+                       if pointer and channel == "stable"
+                       and repository.lower() == OFFICIAL_REPOSITORY.lower() else (None, None))
     if tag is None:
         release = _published_fallback(channel, base)
         tag = release["tag_name"]
@@ -380,9 +382,10 @@ def resolve_source_release(channel: str, git_cmd=None, cwd=None, *, repository=N
                            pointer: bool = True) -> tuple[str | None, str | None]:
     """Read published stable/canary release metadata (not channel discovery).
 
-    The source updater's ``stable`` reads it with ``pointer=False``: GitHub's latest
-    published release only. With ``pointer`` the R2 channel pointers outrank GitHub's
-    release listing. A malformed pointer,
+    Both channels are GitHub releases: stable is the latest published release, canary
+    the newest published prerelease. With ``pointer`` stable's R2 completion pointer
+    outranks GitHub's release listing; canary has no pointer, because publishing its
+    GitHub prerelease is the only promotion. A malformed pointer,
     draft, or tag/commit mismatch is not permission to select a different build.
     ``git_cmd`` resolves the selected tag on origin; ZIP callers omit it and
     resolve the same tag through GitHub's commit endpoint.
