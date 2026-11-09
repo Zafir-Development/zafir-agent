@@ -1475,6 +1475,29 @@ function Stage-Gateway {
     Invoke-InstalledHermes @('gateway', 'install', '--if-missing')
 }
 
+function Stage-Complete {
+    $commit = $Commit
+    if (-not $commit) {
+        # Each -Stage is a fresh process, so prerequisites' PATH is gone: restore
+        # the pinned Git here before it resolves the installed checkout.
+        if (-not (Ensure-Git)) { Fail "no pinned Git artifact for this Windows architecture" unsupported_platform }
+        $commit = Invoke-Native { git -C $InstallDir rev-parse HEAD 2>$null }
+    }
+    if ($commit) {
+        $marker = [ordered]@{
+            schemaVersion = 1
+            pinnedCommit = "$commit"
+            pinnedBranch = $Branch
+            completedAt = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
+        }
+        # The receipt's presence is what marks the checkout a script install; an
+        # update rewrites it to the commit it moved to (hermes_cli/source_stamp.py).
+        $marker | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $InstallDir ".hermes-bootstrap-complete") -Encoding UTF8
+    }
+    if ($Channel) { Invoke-InstalledHermes @('update', '--set-channel', $Channel) }
+    if ($commit) { Write-Ok "Hermes Agent install complete (pinned $commit). Run: hermes" }
+}
+
 function Invoke-StageByName([string]$name) {
     switch ($name) {
         "prerequisites" { Stage-Prerequisites }
