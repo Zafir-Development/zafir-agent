@@ -139,6 +139,11 @@ def _verify_core_dependencies_installed(
     stop_for_relaunch()
 
 
+def _run_npm_install_deterministic(command, project_dir, **kwargs) -> NoReturn:
+    # Shim to stop the old updater doing work until relaunch, not install node deps.
+    stop_for_relaunch()
+
+
 def _web_ui_build_needed(web_dir: Path) -> NoReturn:
     # Shim to stop the old updater doing work until relaunch, not claim an unbuilt UI is current.
     stop_for_relaunch()

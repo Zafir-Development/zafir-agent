@@ -1,4 +1,4 @@
-"""External drain-control marker contract (dashboard → gateway).
+"""External drain-control marker contract (operator tooling → gateway).
 
 No control channel exists into a running gateway, so begin/cancel-drain writes
 (or removes) ``{HERMES_HOME}/.drain_request.json`` and a gateway watcher reacts;
@@ -16,7 +16,6 @@ import contextlib
 import functools
 import json
 import logging
-import re
 from datetime import datetime, timezone, UTC
 from pathlib import Path
 from typing import Any, Optional
@@ -45,22 +44,6 @@ def restart_wait_open(runner) -> bool:
     descriptor = getattr(runner, "session_runtime_descriptor", None) or {}
     return (bool(getattr(runner, "_draining", False)) and bool(getattr(runner, "_running", False))
             and descriptor.get("drain_reason") == RESTART_WAIT_REASON)
-
-
-# The requests a client needs during that wait to find, open and answer the conversation parked on
-# approval/clarify: the GET reads below (Desktop's session picker, the session detail and its
-# transcript pages, and the health probes). They only pass the drain's refusal; the listener's auth
-# gate still runs on them. Every other write and route keeps that refusal. The prompt itself
-# (approval.pending / *.respond) rides the WebSocket.
-_RESTART_WAIT_READS = re.compile(
-    r"/api/(?:health|status|profiles/sessions(?:/sidebar)?"
-    r"|sessions/[^/]+(?:/messages(?:/around)?|/timeline)?)")
-
-
-def restart_wait_read(runner, method, path) -> bool:
-    """True for an allowlisted read request while *runner* is in a restart's after-turn wait."""
-    return (method == "GET" and bool(_RESTART_WAIT_READS.fullmatch(path or ""))
-            and restart_wait_open(runner))
 
 
 # The WebSocket verbs an interactive client may still call during that wait: attach to and read the

@@ -804,7 +804,7 @@ def _sweep_bytecode_after_update(branch: str) -> None:
     Never fails the committed update: a failed sweep is a ``bytecode_sweep`` follow-up and the
     fingerprint stays un-stamped, so the launch-time sweep (fingerprint mismatch) retries it.
     """
-    from hermes_cli.main_web_build import _prune_dropped_directories, _recorded_bytecode_fingerprint
+    from hermes_cli.update_bytecode import _prune_dropped_directories, _recorded_bytecode_fingerprint
     from hermes_cli.update_cmd import _m
     from hermes_cli.update_receipt import record_followup
     # Timestamp-based .pyc validation can accept old bytecode after the source swap.

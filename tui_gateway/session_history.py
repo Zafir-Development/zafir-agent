@@ -185,9 +185,7 @@ def _user_image_display_text(content: Any) -> str | None:
     import base64
     import binascii
     from pathlib import Path
-    from fastapi import HTTPException
-    from hermes_cli.web_routers.files import _fs_regular_file
-    from hermes_cli.web_server import _FS_DATA_URL_MAX_BYTES
+    from hermes_cli.host_files import FS_DATA_URL_MAX_BYTES, HostFileRefused, regular_host_file
     image_parts = content[1:1 + len(paths)]
     if len(image_parts) != len(paths) or len(content) not in (1 + len(paths), 2 + len(paths)):
         return None
@@ -200,13 +198,13 @@ def _user_image_display_text(content: Any) -> str | None:
         if not Path(path).is_absolute() or not isinstance(part, dict) or part.get("type") != "image_url":
             return None
         match = _IMAGE_DATA_RE.fullmatch(_history_part_image_url(part))
-        if not match or len(match[1]) > ((_FS_DATA_URL_MAX_BYTES + 2) // 3) * 4:
+        if not match or len(match[1]) > ((FS_DATA_URL_MAX_BYTES + 2) // 3) * 4:
             return None
         try:
-            target, st = _fs_regular_file(Path(path))
-            if st.st_size > _FS_DATA_URL_MAX_BYTES or target.read_bytes() != base64.b64decode(match[1], validate=True):
+            target, st = regular_host_file(Path(path))
+            if st.st_size > FS_DATA_URL_MAX_BYTES or target.read_bytes() != base64.b64decode(match[1], validate=True):
                 return None
-        except (OSError, ValueError, binascii.Error, HTTPException):
+        except (OSError, ValueError, binascii.Error, HostFileRefused):
             return None
     return projected
 

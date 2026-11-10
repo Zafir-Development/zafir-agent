@@ -168,12 +168,6 @@ method("pdf.attach", params=PdfAttachParams, result=PdfAttachResult,
        doc="Render a PDF's pages to PNG and queue them as images for the next turn.")
 
 
-class StagedFileUpload(Params):
-    """Source identity returned by the browser upload route, checked against the live profile."""
-
-    install_id: str
-    path: str
-    profile_home: str
 
 
 class FileAttachParams(SessionParams):
@@ -183,7 +177,6 @@ class FileAttachParams(SessionParams):
     path: str | None = None
     data_url: str | None = None
     name: str | None = None
-    staged_upload: StagedFileUpload | None = None
 
 
 class FileAttachResult(Result):

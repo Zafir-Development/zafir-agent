@@ -165,6 +165,41 @@ tickets are loopback grants and no browser auth exists to authenticate a remote 
 - Plugin load: the provider registry and protocol types stay (above); no bundled plugin import
   breaks. Verified by import smoke and `tests/plugins/dashboard_auth/*` while the tree is intact.
 - Remaining reference sweep: `grep -rn "web_routers\|hermes_cli.web_server"` is limited to
-  `docs/removal/`, `history/` and the residual files named in §6 (plus the frozen
-  `_UPDATE_CRITICAL_FILES` historical list, which names `hermes_cli/web_server.py` for pre-declaration
-  trees only). Website/skills/tests references belong to Steps 9–10.
+  `docs/removal/`, `history/` and the residual files named in §6. Website/skills/tests references
+  belong to Steps 9–10.
+
+## 8. Post-change verification (recorded)
+
+Measured on this worktree after the change; "before" is the same commands against the Step 4 base
+commit `08229474ac` in a separate `git worktree`, both with the PM-pinned test interpreter and a
+throwaway `HERMES_HOME`.
+
+| Probe (median of 3) | Before | After |
+|---|---:|---:|
+| `from hermes_cli.web_server import app` (the removed app) | 1.25 s | module gone (`ModuleNotFoundError`) |
+| `import hermes_cli.main` | 0.152 s | 0.149 s |
+| `import gateway.run_api` | 0.053 s | 0.059 s |
+| `hermes --help` | 0.514 s | 0.346 s |
+| `start_gateway_api` bind (fake runner, ephemeral loopback port) | 0.039 s | 0.024 s |
+| first native `/api/ws` attach + ticket redeem | 0.011 s | 0.013 s |
+
+Runtime smoke (`HERMES_HOME` in a temp dir, no user state): `hermes gateway run` publishes the
+control socket and one loopback listener on an ephemeral port (`127.0.0.1:<port>`, no 9119/9120
+bind); `GET /`, `/api/status`, `/api/health`, `/api/ws-ticket` → 404; the real client path
+(`hermes_cli.gateway_client.connect_gateway` → control-socket ticket → `/api/ws` →
+`runtime.describe`) answers with the temp home's authority; `hermes chat -q "hi"` attaches over
+`/api/ws` (gateway log: `inbound message: platform=local`, `response ready`, session persisted) and
+then fails only at the deliberately dead model endpoint. `hermes dashboard` / `hermes serve` are
+unknown commands (exit 2, "not a `hermes` command").
+
+Tree at the time of writing (tracked files via `git ls-files`): 17,191 files / 3,716,527 lines,
+from 17,806 / 3,869,883 at the Step 4 base (-615 files, -153,356 lines); Python non-test -
+34,680 lines; tracked bytes 49.4 MB from 56.3 MB (-12.3%); `pnpm-lock.yaml` importers 5
+(`.`, `apps/shared`, `tests-js`, `ui-tui`, `ui-tui/packages/hermes-ink`) and 4,446 lines.
+
+Pre-existing/environment-only test failures (not Step 4): macOS Bash 3.2 lacks `mapfile` for the
+workflow-replay cells (`tests/ci/test_update_ci_routing.py`, `test_update_transitive_routing.py`);
+the pinned optional tool env has no `fal_client` (`tests/tools/test_fal_sdk.py`); bash-3.2 quoting
+differences in `tests/tools/test_terminal_pipeline_status.py`; `/private/var` vs `/var` tmpdir
+symlink assertions (`tests/tools/test_delegate.py`); `tests/tui_gateway/test_show_reasoning_display_gate.py`
+reads a Stage 3-deleted `apps/desktop` source file.

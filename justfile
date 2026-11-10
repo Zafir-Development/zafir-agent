@@ -11,12 +11,9 @@ lint-python-fix:
     @ruff check ./ --fix
 
 [group('lint js')]
-lint-all-js: lint-web lint-tui lint-tests lint-shared
+lint-all-js: lint-tui lint-tests lint-shared
 
 [group('lint js')]
-lint-web:
-    @cd web && pnpm exec eslint ./
-
 [group('lint js')]
 lint-tui:
     @cd ui-tui && pnpm exec eslint ./

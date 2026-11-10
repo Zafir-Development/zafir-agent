@@ -148,9 +148,8 @@ The stage-by-stage contract: `website/docs/developer-guide/cli-internals.md` § 
 
 `_apply_profile_override()` in `hermes_cli/main.py` sets `HERMES_HOME` before any module import for
 single-profile commands (`hermes -p x <cmd>`), so there `get_hermes_home()` scopes to the active
-profile. The multiplex gateway and the Desktop/dashboard `serve` backend instead bind the active
-profile per activity via a contextvar override while `os.environ["HERMES_HOME"]` keeps the launch
-profile — a module constant or import-time read there freezes to the launch profile (rules in
+profile. The multiplex gateway instead binds the active profile per activity via a contextvar override
+while `os.environ["HERMES_HOME"]` keeps the launch profile — a module constant or import-time read there freezes to the launch profile (rules in
 root). Profiles are independent
 islands by design — no live config inheritance; `--clone` copies at creation, minus messaging
 channels (`profile_channels.py`: ownership-based inventory evaluated in the SOURCE's plugin scope —
@@ -183,8 +182,7 @@ Migration from per-profile gateways: `hermes_cli/gateway_migrate.py` (`hermes ga
 --multiplex`, the only mode — `--standalone` is deleted and a per-profile fleet is not a supported
 target; table-driven `_PREFLIGHT_CHECKS`; manifest `<default>/gateway_migration.json` = UNFINISHED,
 a re-run resumes from it; a named profile's `gateway install|start|run` refuse without `--force` via
-`gateway.py::_named_profile_refused_under_multiplexer`, dashboard twin
-`web_server_gateway.py::multiplexed_profile_refusal`);
+`gateway.py::_named_profile_refused_under_multiplexer`);
 `update_cmd_fleet_verify._verify_fleet_after_update` calls `maybe_auto_migrate_after_update` on the success
 path only; `gateway_migrate_guards.py` holds the auto-path-only refusals (table `_AUTO_MIGRATION_GUARDS`:
 other service domain / UNIX user / HERMES_HOME outside `profiles/` — notices for the explicit command,

@@ -110,31 +110,18 @@ def prepare_source_dependencies(project_root: Path, workspaces: tuple[str, ...],
 
 def prepare_launch_dependencies(project_root: Path, *, env: dict) -> None:
     """A launch rebuild must not prune another installed source frontend."""
-    prepare_source_dependencies(project_root, ("ui-tui", "web"), env=env)
+    prepare_source_dependencies(project_root, ("ui-tui",), env=env)
 
 
 def build_source_tui(project_root: Path, *, env: dict) -> None:
     run_source_script(project_root, "scripts/build/tui.mjs", env=env, label="Building the TUI")
 
 
-def build_source_web(project_root: Path, *, env: dict, icons: Path | None = None) -> None:
-    # Bounded build (#63338): the Vite/Rolldown dashboard build saturates small
-    # hosts; cap the V8 heap and the native bundler's rayon thread pool.
-    from hermes_cli.web_build_limits import apply_web_build_limits
-
-    apply_web_build_limits(env)
-    # Default-brand icons are committed; installs never render them.
-    icons = icons or project_root
-    run_source_script(project_root, "scripts/build/web.mjs", "--source", str(project_root),
-                      "--icons", str(icons), "--out", str(project_root / "hermes_cli/web_dist"), env=env,
-                      label="Building the web UI")
-
-
 def source_frontends(project_root: Path) -> tuple[str, ...]:
     """The frontend workspaces this checkout carries. A source slice without them
     (python-only installs, the installer's acceptance fixture) has no products
     to build; it still publishes commands and runs the maintenance tail."""
-    return tuple(name for name in ("ui-tui", "web") if (project_root / name / "package.json").is_file())
+    return tuple(name for name in ("ui-tui",) if (project_root / name / "package.json").is_file())
 
 
 class ProductBuildError(RuntimeError):
@@ -197,7 +184,7 @@ def build_update_products(project_root: Path, *, desktop: bool, after_dependenci
         if after_dependencies is not None:
             after_dependencies()
         if prepared:
-            # An update that changed no TUI/web input reuses the receipted output, as the
+            # An update that changed no TUI input reuses the receipted output, as the
             # launch path already does; recompiling it produces the same bytes.
             if "ui-tui" in frontends:
                 if source_product_current(project_root, "tui", project_root / "ui-tui/dist"):
@@ -205,12 +192,6 @@ def build_update_products(project_root: Path, *, desktop: bool, after_dependenci
                 else:
                     publish_stage("Building the TUI")
                     attempt("TUI build", lambda: build_source_tui(project_root, env=env))
-            if "web" in frontends:
-                if source_product_current(project_root, "web", project_root / "hermes_cli/web_dist"):
-                    print("  ✓ Web UI is up to date")
-                else:
-                    publish_stage("Building the web UI")
-                    attempt("web UI build", lambda: build_source_web(project_root, env=env))
     # A configured memory provider that no longer ships in core is installed from the
     # catalog for every profile home sharing this venv (config, data and tool names
     # unchanged). The update must finish even if the migration blows up.

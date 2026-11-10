@@ -76,8 +76,8 @@ runtime/
 
 # ---------- Not needed inside the Docker image ----------
 
-# Only apps/shared is needed in the Docker build context: web and ui-tui link
-# it as a workspace:* dependency.
+# Only apps/shared is needed in the Docker build context: ui-tui links it as a
+# workspace:* dependency.
 apps/
 !apps/shared/
 !apps/shared/**
@@ -90,15 +90,8 @@ tests/
 # Documentation site (Docusaurus)
 website/
 
-# Keep the source artwork needed by web's icon-generation prebuild.
+# Icon source artwork is render-only; the image renders no icons.
 assets/
-!assets/
-assets/*
-!assets/nous-girl-black.svg
-!assets/nous-girl-white.svg
-!assets/dmg-volume.png
-!assets/backgrounds/
-!assets/backgrounds/**
 infographic/
 
 # Plugin-level docs (hermes-achievements ships docs/ but the runtime doesn't read them)

@@ -109,21 +109,12 @@ let
     inherit uv2nix pyproject-nix pyproject-build-systems;
   };
 
-  # Icons render on the runtime venv: Pillow and resvg-py are core dependencies.
-  generatedIcons = callPackage ./icons.nix {
-    inherit (mkHermesVenv [ ]) venv;
-  };
-
   hermesNpmLib = callPackage ./lib.nix {
     inherit pmPackages;
   };
 
   hermesTui = callPackage ./tui.nix {
     inherit hermesNpmLib;
-  };
-
-  hermesWeb = callPackage ./web.nix {
-    inherit hermesNpmLib generatedIcons;
   };
 
   bundledSkills = lib.cleanSourceWith {
@@ -222,7 +213,6 @@ let
       };
       frontends = {
         tui = "${hermesTui}/lib/hermes-tui";
-        web = toString hermesWeb;
       };
       ref = if dirty then null else rev;
       stamp = toString installStampFile;
@@ -384,7 +374,6 @@ stdenv.mkDerivation {
     {
       inherit
         hermesTui
-        hermesWeb
         hermesNpmLib
         hermesVenv
         agentBuilderSrc

@@ -320,7 +320,6 @@ def authenticated_subject(identity):
 
 def is_authenticated_identity(identity: object) -> bool:
     """True for a server-minted, non-internal ``{user_id, provider}`` WS-upgrade identity."""
-    from hermes_cli.dashboard_auth.ws_tickets import INTERNAL_PROVIDER, INTERNAL_USER_ID
     if not isinstance(identity, dict):
         return False
     user_id, provider = identity.get("user_id"), identity.get("provider")
@@ -328,7 +327,7 @@ def is_authenticated_identity(identity: object) -> bool:
         return False
     if not isinstance(provider, str) or not provider.strip():
         return False
-    return not (user_id == INTERNAL_USER_ID and provider == INTERNAL_PROVIDER)
+    return not (user_id == 'server-internal' and provider == 'server-internal')
 
 
 def authenticated_principal_digest(identity: dict) -> str:
