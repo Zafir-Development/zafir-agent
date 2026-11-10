@@ -76,7 +76,7 @@ def _lanes(python=False, frontend=False, site=False, scan=False, deps=False, uv_
 CASES = {
     # source_build runs it on every source update (tests/ci/test_update_ci_routing.py).
     "shared JS builder → frontend + update suite": (
-        ["scripts/build/web.mjs"],
+        ["scripts/build/tui.mjs"],
         _lanes(python=True, frontend=True, e2e_upgrade=True, docker=True),
     ),
     "root JS tests → frontend": (["tests-js/product-builders.test.mjs"], _lanes(python=True, frontend=True)),
@@ -231,7 +231,7 @@ CASES = {
         _lanes(frontend=True),
     ),
     "web eslint config → frontend": (
-        ["web/eslint.config.js"],
+        ["ui-tui/eslint.config.mjs"],
         _lanes(frontend=True),
     ),
     "shared package eslint config → frontend": (

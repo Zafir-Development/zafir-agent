@@ -52,30 +52,6 @@ def test_desktop_update_returns_findings_then_force_applies(installed, monkeypat
 
 
 @pytest.mark.parametrize("installed", ["custom"], indirect=True)
-def test_dashboard_update_route_returns_the_findings_and_applies_with_force(installed, monkeypatch):
-    """The browser dashboard's update route used to turn a scan block into a bare HTTP 400, so the page
-    could not show the findings or offer the override. It now answers 200 with them, nothing changed,
-    and ``{"force": true}`` applies a caution verdict."""
-    starlette = pytest.importorskip("starlette.testclient")
-    from hermes_cli import plugins_cmd as pc
-    from hermes_cli.web_server import app, _SESSION_HEADER_NAME, _SESSION_TOKEN
-
-    _, _home, repo, target, _state = installed
-    old_head, new_head = _head(target), _caution_release(repo)
-    monkeypatch.setattr(pc, "_scan_on_install_enabled", lambda: True)
-    client = starlette.TestClient(app, raise_server_exceptions=False, headers={_SESSION_HEADER_NAME: _SESSION_TOKEN})
-
-    blocked = client.post("/api/dashboard/agent-plugins/transactional/update", json={})
-    assert blocked.status_code == 200, blocked.text
-    assert blocked.json()["scan_verdict"] == "caution" and blocked.json()["scan_findings"]
-    assert _head(target) == old_head
-
-    applied = client.post("/api/dashboard/agent-plugins/transactional/update", json={"force": True})
-    assert applied.status_code == 200 and applied.json()["ok"] is True, applied.text
-    assert _head(target) == new_head
-
-
-@pytest.mark.parametrize("installed", ["custom"], indirect=True)
 @pytest.mark.parametrize("argv_force, answer, published", [
     (False, "y", True), (False, "n", False), (True, None, True)])
 def test_cli_update_asks_on_caution_and_force_skips_the_question(installed, monkeypatch, argv_force, answer,

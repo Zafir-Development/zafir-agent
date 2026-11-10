@@ -17,7 +17,7 @@ import sys
 def verify_products(root: Path, node: Path | None = None) -> None:
     if node is None:
         return  # Historical builds have no compiler receipt contract.
-    for product, out in (("tui", root / "ui-tui/dist"), ("web", root / "hermes_cli/web_dist")):
+    for product, out in (("tui", root / "ui-tui/dist"),):
         result = subprocess.run(
             [str(node), str(root / "scripts/build/freshness.mjs"),
              "--source", str(root), "--product", product, "--out", str(out)],

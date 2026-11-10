@@ -1,4 +1,4 @@
-"""Real native bootstrap and dashboard login share one canonical worker as one owner identity."""
+"""Two local native surfaces share one canonical worker as one owner identity."""
 import json
 import os
 from pathlib import Path
@@ -9,7 +9,7 @@ import pytest
 
 
 @pytest.mark.platforms("linux")
-@pytest.mark.parametrize('creator', ['native', 'dashboard'])
+@pytest.mark.parametrize('creator', ['cli', 'gui'])
 def test_operator_cross_surface_real_auth_fifo_and_attribution(tmp_path, creator):
     root = Path(__file__).resolve().parents[2]
     home, user = tmp_path / 'state', tmp_path / 'user'

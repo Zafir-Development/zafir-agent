@@ -58,18 +58,6 @@ class TestActiveDetection:
 
 class TestModelPicker:
 
-    def test_every_model_picker_lists_the_runtime_catalog(self):
-        """The dashboard's STT selects offer exactly STT_MODEL_CATALOG per provider."""
-        from hermes_cli.web_server_config import _SCHEMA_OVERRIDES
-        from tools.transcription_common import BUILTIN_STT_PROVIDERS, STT_MODEL_CONFIG_KEY
-
-        for provider, models in STT_MODEL_CATALOG.items():
-            key = f"stt.{provider}.{STT_MODEL_CONFIG_KEY.get(provider, 'model')}"
-            # Local sizes are listed smallest-first in the UI; the catalog puts the default first.
-            same = set if provider == "local" else list
-            assert same(_SCHEMA_OVERRIDES[key]["options"]) == same(models), key
-        assert set(_SCHEMA_OVERRIDES["stt.provider"]["options"]) == BUILTIN_STT_PROVIDERS - {"local_command"}
-
     def test_configure_stt_model_defaults_to_current(self):
         config = {"stt": {"openai": {"model": "gpt-transcribe"}}}
         with patch(

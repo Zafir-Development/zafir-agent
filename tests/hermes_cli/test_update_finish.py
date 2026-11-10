@@ -46,7 +46,7 @@ def completion(tmp_path, monkeypatch):
         shutil.copy2(path, source / path.name)
     for name in ("hermes_cli", "hermes_platform", "pm", "agent", "gateway", "tools", "cron"):
         shutil.copytree(ROOT / name, source / name,
-                        ignore=shutil.ignore_patterns("__pycache__", "web_dist", "tui_dist"))
+                        ignore=shutil.ignore_patterns("__pycache__", "tui_dist"))
     shutil.copytree(ROOT / "scripts/build", source / "scripts/build",
                     ignore=shutil.ignore_patterns("__pycache__"))
     _put(source, "pyproject.toml", '[project]\nname="takeover-fixture"\nversion="2.0"\n')
@@ -179,8 +179,6 @@ def completion(tmp_path, monkeypatch):
                         }))
                         return Runner(name, base_env)
                     pm.ensure = provision
-                    web = source_build.build_source_web
-                    source_build.build_source_web = lambda root, **kwargs: web(root, icons=root, **kwargs)
                     build = source_build.build_update_products
                     def build_products(root, *, desktop):
                         (root / 'desktop-build.json').write_text(json.dumps(desktop), encoding='utf-8')
@@ -381,7 +379,7 @@ def _pnpm_graph(source):
     node, pnpm = shutil.which("node"), shutil.which("pnpm")
     assert node and pnpm, "source completion acceptance requires Node and pnpm"
     # Each compiler resolves from the workspace that declares it, as the builders resolve it.
-    for name, workspace in (("esbuild", "ui-tui"), ("typescript", "web"), ("vite", "web")):
+    for name, workspace in (("esbuild", "ui-tui"),):
         probe = subprocess.run([node, "-p", f"require.resolve('{name}/package.json')"],
                                cwd=ROOT / workspace, capture_output=True, text=True, check=False)
         if probe.returncode:
@@ -391,8 +389,8 @@ def _pnpm_graph(source):
         tools[name] = str(Path(probe.stdout.strip()).parent)
     root = {"name": "completion-graph", "version": "1.0.0", "private": True, "type": "module",
             "scripts": {"postinstall": "node prepare-tools.mjs"}}
-    _put(source, "pnpm-workspace.yaml", "packages:\n  - ui-tui\n  - web\n  - packages/value\n")
-    for directory, name in (("ui-tui", "fixture-tui"), ("web", "fixture-web"),
+    _put(source, "pnpm-workspace.yaml", "packages:\n  - ui-tui\n  - packages/value\n")
+    for directory, name in (("ui-tui", "fixture-tui"),
                             ("packages/value", "fixture-value")):
         manifest = {"name": name, "version": "1.0.0", "type": "module"}
         if name == "fixture-value":
@@ -409,7 +407,7 @@ def _pnpm_graph(source):
         import {{ execFileSync }} from 'node:child_process';
         const tools = {json.dumps(tools)};
         for (const [name, target] of Object.entries(tools)) {{
-          const workspace = name === 'esbuild' ? 'ui-tui' : 'web';
+          const workspace = 'ui-tui';
           mkdirSync(workspace + '/node_modules', {{recursive: true}});
           symlinkSync(target, workspace + '/node_modules/' + name, 'dir');
         }}
@@ -423,13 +421,6 @@ def _pnpm_graph(source):
     # Runtime Python helpers the TUI product ships beside its bundle.
     for helper in ("gateway_bootstrap.py", "clipboard_image.py"):
         _put(source, f"ui-tui/scripts/{helper}", "")
-    _put(source, "web/src/main.ts", "import { value } from 'fixture-value'; document.body.textContent = value;\n")
-    _put(source, "web/index.html", '<html><body><script type="module" src="/src/main.ts"></script></body></html>')
-    _put(source, "web/tsconfig.json", json.dumps({"compilerOptions": {
-        "target": "ES2022", "module": "ESNext", "moduleResolution": "bundler",
-        "types": [], "noEmit": True}, "include": ["src"]}))
-    _put(source, "web/vite.config.ts", "export default {};\n")
-    _put(source, "web/public/favicon.ico", "prepared icon input")
     return node
 
 
@@ -451,8 +442,6 @@ def test_selected_child_builds_and_finalizes_under_parent_lock(completion):
     built = subprocess.run([node, str(source / "ui-tui/dist/entry.js")],
                            capture_output=True, text=True, check=True)
     assert built.stdout.strip() == "compiled local graph"
-    assert (source / "hermes_cli/web_dist/index.html").is_file()
-    assert any("compiled local graph" in p.read_text() for p in (source / "hermes_cli/web_dist/assets").glob("*.js"))
     assert (source / "node_modules/.hermes-node-deps").is_file()
     environment = json.loads((source / "build-environment.json").read_text())
     assert "repairing the recorded dependency environment" not in child.stderr
@@ -489,15 +478,14 @@ def test_real_compiler_failure_is_owed_build_and_completion_continues(completion
 
     source, home, request, context, result, run = completion
     _pnpm_graph(source)
-    # A real TypeScript error: dependency installation and TUI succeed; the web product fails.
-    _put(source, "web/src/main.ts", "const broken: string = 42; document.body.textContent = broken;\n")
+    # A real compiler error: dependency installation succeeds; the TUI product fails.
+    _put(source, "ui-tui/src/entry.tsx", "const broken = ;\n")
     context_before = context.read_bytes()
     child = run()
     assert child.returncode == 0, child.stdout + child.stderr
-    assert "TypeScript build failed" in child.stdout + child.stderr
+    assert "TUI build failed" in child.stdout + child.stderr
     assert (source / "lifecycle-python.json").is_file()
-    assert (source / "ui-tui/dist/entry.js").is_file()
-    assert not (source / "hermes_cli/web_dist/index.html").exists()
+    assert not (source / "ui-tui/dist/entry.js").exists()
     # Maintenance and the fleet restart were not skipped by the build failure.
     config = hermes_yaml.safe_load((home / "config.yaml").read_text())
     assert config["_config_version"] == DEFAULT_CONFIG["_config_version"]

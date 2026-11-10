@@ -55,13 +55,14 @@ async def probe(peer):
     import websockets
     from gateway.run import GatewayRunner
     from gateway.run_api import start_gateway_api, stop_gateway_api
+    from tests.gateway.fixtures.native_ws_auth import prepare_listener, subprotocols, ws_url
     from gateway.session_authority import initialize_session_authority
-    from hermes_cli import web_server
 
     runner = GatewayRunner()
     authority = await initialize_session_authority(runner, profile_id=os.environ['HERMES_HOME'], instance_id='lock')
+    prepare_listener(runner)
     api = await start_gateway_api(runner)
-    url = api.api_origin.replace('http:', 'ws:') + '/api/ws?token=' + web_server._SESSION_TOKEN
+    url = ws_url(api)
     frames = {}
 
     async def rpc(ws, rid, method, **params):
@@ -87,7 +88,8 @@ async def probe(peer):
     a = b = None
     sid = None
     try:
-        a, b = await websockets.connect(url), await websockets.connect(url)
+        a, b = (await websockets.connect(url, subprotocols=subprotocols(runner, subject='owner')),
+                await websockets.connect(url, subprotocols=subprotocols(runner, subject='owner')))
         created = await rpc(a, 1, 'session.create', source='cli', request_id='create-1', cwd=os.getcwd())
         assert 'result' in created, created
         sid = created['result']['session_id']

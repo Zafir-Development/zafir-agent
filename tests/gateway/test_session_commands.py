@@ -43,8 +43,7 @@ def test_ordinary_daemon_slash_skill_uses_durable_fifo(tmp_path):
     env = {k: os.environ[k] for k in ('PATH', 'LANG', 'TZ', 'TIRITH_ENABLED') if k in os.environ}
     env.update(HOME=str(user), USERPROFILE=str(user), HERMES_HOME=str(home),
                PYTHONPATH=str(root), PYTHONUNBUFFERED='1',
-               OPENAI_API_KEY='loopback-only', OPENAI_BASE_URL=url,
-               HERMES_DASHBOARD_SESSION_TOKEN='owned-slash-negative')
+               OPENAI_API_KEY='loopback-only', OPENAI_BASE_URL=url)
     receipts = []
 
     def rows():
@@ -102,9 +101,8 @@ def test_ordinary_daemon_slash_skill_uses_durable_fifo(tmp_path):
                                    ({'command': 'sethome'}, 'unsupported_command')]:
                 denied = await command(**params)
                 assert denied['error']['message'] == reason, denied
-            # A second dashboard operator shares access but still obeys the busy fence.
-            other_url = desc['api_origin'].replace('http:', 'ws:') + '/api/ws?token=owned-slash-negative'
-            async with connect(other_url) as other:
+            # A second native operator connection shares access but still obeys the busy fence.
+            async with websocket(home, desc) as other:
                 for method, payload in [('slash.exec', {'command': 'title stolen'}),
                                         ('command.dispatch', {'name': 'title', 'arg': 'stolen'})]:
                     result = await rpc(other, method, session_id=sid, **payload)

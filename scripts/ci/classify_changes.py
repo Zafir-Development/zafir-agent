@@ -82,7 +82,7 @@ import os
 import subprocess
 import sys
 
-_FRONTEND = ("ui-tui/", "web/", "apps/")  # TS typecheck-matrix packages
+_FRONTEND = ("ui-tui/", "apps/")  # TS typecheck-matrix packages
 # The WhatsApp bridge's ``node --test`` suites run in the JS & TS job, so a
 # change to the bridge or to the Python adapter that speaks its protocol
 # selects ``frontend``.
@@ -204,7 +204,7 @@ _PY_TEST_HARNESS = (
 _UPDATE_PIPELINE = (
     "hermes_cli/main.py",  # cmd_update: lock, pre-update backup, receipt boundary
     "hermes_cli/main_dashboard.py",  # hangup protection + update.log mirror
-    "hermes_cli/main_web_build.py",  # completion's bytecode sweep and dropped-folder prune
+    "hermes_cli/update_bytecode.py",  # completion's bytecode sweep and dropped-folder prune
     # Prefix: main_desktop.py (staged Desktop swap / rebuild in the tail) and the
     # main_desktop_* siblings it imports (macOS signing identity).
     "hermes_cli/main_desktop",
@@ -282,7 +282,6 @@ _UPDATE_DEPENDENCIES = (
     "hermes_cli/memory_provider_migration.py",
     "hermes_cli/left_core_migration.py",  # source_build migrates plugins that left core
     "hermes_cli/config_version_stamp.py",  # post_update converts legacy AGENT_BROWSER_* before stamping
-    "hermes_cli/web_build_limits.py",  # source_build caps the dashboard Node build
     "hermes_cli/desktop_console.py",
     "hermes_cli/bundled_app.py",
     "hermes_cli/gui_uninstall.py",
@@ -323,7 +322,7 @@ _UPDATE_DEPENDENCIES = (
     "tools/skills_sync.py",
     "tools/environments/local_env_policy.py",
     "pm/progress.py",
-    # The compilers source_build runs (freshness, node-deps, tui, web and their
+    # The compilers source_build runs (freshness, node-deps, tui and their
     # shared frontend-common).
     "scripts/build/",
 )
@@ -412,8 +411,8 @@ for _lane in ("e2e_upgrade",):
 _E2E_LANE_EXCLUDES = {
     "e2e": ("tests/e2e/core/upgrade/", "tests/e2e/core/windows_update/"),
 }
-# The image builds the TUI and dashboard frontends from the shared recipe and
-# apps/shared, so those inputs route here.
+# The image builds the TUI frontend from the shared recipe and apps/shared, so
+# those inputs route here.
 _DOCKER_PATHS = (*_DOCKER_META, *_DEP_MANIFESTS, *_NPM_MANIFESTS, "pm/", "tests/docker/",
                  "apps/shared/package.json", "scripts/build/")
 _NIX_LANE_PATHS = (*_NIX_PATHS, *_NIX_FILES, *_DEP_MANIFESTS, *_NPM_MANIFESTS)

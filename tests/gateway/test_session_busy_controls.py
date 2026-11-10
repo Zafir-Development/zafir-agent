@@ -79,8 +79,7 @@ def owner(tmp_path, config=None):
     }))
     env = child_env()
     env.update(HOME=str(user), USERPROFILE=str(user), HERMES_HOME=str(home), PYTHONPATH=str(root),
-        OPENAI_API_KEY='loopback-only', OPENAI_BASE_URL=url, PYTHONUNBUFFERED='1',
-        HERMES_DASHBOARD_SESSION_TOKEN='other-controls-actor')
+        OPENAI_API_KEY='loopback-only', OPENAI_BASE_URL=url, PYTHONUNBUFFERED='1')
     try:
         with daemon(root, home, env, barrier=False) as (_, desc):
             yield home, peer, desc
@@ -128,12 +127,11 @@ def test_busy_policy_is_authorized_session_scoped_and_not_inference(tmp_path):
                 ]:
                     result = await rpc(ws, method, **params)
                     assert result.get('error', {}).get('message') == reason, result
-                other_url = desc['api_origin'].replace('http:', 'ws:') + '/api/ws?token=other-controls-actor'
-                async with connect(other_url) as other:
+                async with websocket(home, desc) as other:
                     for method in ('config.get', 'config.set'):
                         params = {'value': 'queue'} if method == 'config.set' else {}
                         result = await rpc(other, method, session_id=ids[0], key='busy', **params)
-                        # This configured dashboard token is another verified operator.
+                        # This second native connection is another verified operator.
                         assert result.get('result') == {
                             'key': 'busy', 'value': 'queue', 'scope': 'session'}, result
                 assert (await rpc(ws, 'config.get', session_id=ids[0], key='busy'))['result']['value'] == 'queue'
@@ -170,8 +168,7 @@ def test_corrections_are_generation_fenced_and_consumed_by_same_provider_loop(tm
                         params = {'session_id': sid, 'text': 'DENIED_MARKER', 'execution_generation': generation, **extra}
                         denied = await rpc(ws, 'session.' + verb, **params)
                         assert denied.get('error', {}).get('message') == reason, denied
-                    other_url = desc['api_origin'].replace('http:', 'ws:') + '/api/ws?token=other-controls-actor'
-                    async with connect(other_url) as other:
+                    async with websocket(home, desc) as other:
                         # Operator sharing does not bypass the execution-generation fence.
                         denied = await rpc(other, 'session.' + verb, session_id=sid,
                                            execution_generation=generation - 1, text='DENIED_MARKER')

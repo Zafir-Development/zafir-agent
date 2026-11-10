@@ -41,7 +41,7 @@ def test_legacy_models_move_into_the_machine_dir_without_clobbering(tmp_path, mo
 
 def test_boot_and_status_both_adopt_legacy_models(tmp_path, monkeypatch):
     from hermes_cli.local_runtime import binaries
-    from hermes_cli.web_routers import local_models as lm
+    from hermes_cli import local_models_service as lm
 
     monkeypatch.setenv("HERMES_HOME", str(tmp_path))
     monkeypatch.setattr(binaries, "installed_engine", lambda backend="auto": None)
