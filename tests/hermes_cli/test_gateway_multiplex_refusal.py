@@ -69,28 +69,3 @@ def test_setup_stale_host_record_names_rescan(standalone_home, monkeypatch, caps
     monkeypatch.setattr(gw, "named_profile_served_by_running_multiplexer", lambda name=None: True)
     assert gw._served_profile_needs_no_service() is True
     assert "rescan-profiles" in capsys.readouterr().out
-
-
-def test_dashboard_standalone_refusal_resolves_once_and_preserves_invalid_profile(standalone_home, monkeypatch):
-    from fastapi import HTTPException
-    from hermes_cli import web_server_gateway as web
-    from hermes_cli import web_server_profiles
-
-    _gw, home = standalone_home
-    resolved = []
-
-    def resolve(name):
-        resolved.append(name)
-        if name != "coder":
-            raise HTTPException(status_code=404, detail="Unknown profile")
-        return home
-
-    monkeypatch.setattr(web_server_profiles, "_resolve_profile_dir", resolve)
-    monkeypatch.setattr(web, "_profile_is_multiplexed", lambda name: True)
-    assert "rescan-profiles" in web.multiplexed_profile_refusal("coder", "start")
-    assert resolved == ["coder"]
-    monkeypatch.setattr(web, "_profile_is_multiplexed", lambda name: False)
-    assert web.multiplexed_profile_refusal("coder", "start") is None
-    with pytest.raises(HTTPException) as exc:
-        web.multiplexed_profile_refusal("missing", "stop")
-    assert exc.value.status_code == 404

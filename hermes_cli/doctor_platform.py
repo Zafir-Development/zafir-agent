@@ -527,9 +527,6 @@ def _check_windows_gateway_autostart(should_fix: bool, f: Finding) -> None:
 
 
 @doctor_check()
-
-
-@doctor_check()
 def _check_gateway_supervision(should_fix: bool, f: Finding) -> None:
     _check_gateway_service_linger(f.issues)
     _check_s6_supervision(f.issues)

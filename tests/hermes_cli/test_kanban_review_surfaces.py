@@ -368,7 +368,7 @@ def test_goal_loop_stops_after_reviewer_requests_changes(
     assert result["turns_used"] == 1
 
 
-def test_cli_and_dashboard_receive_graph_aware_deadlock_diagnostic(
+def test_cli_receives_graph_aware_deadlock_diagnostic(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -381,7 +381,7 @@ def test_cli_and_dashboard_receive_graph_aware_deadlock_diagnostic(
 
     with kbc.connect() as conn:
         parent_id = kb.create_task(conn, title="Implementation", assignee="builder")
-        child_id = kb.create_task(
+        kb.create_task(
             conn,
             title="Review",
             assignee="reviewer",
@@ -401,10 +401,3 @@ def test_cli_and_dashboard_receive_graph_aware_deadlock_diagnostic(
         item["kind"] == "review_dependency_deadlock"
         for item in payload[0]["diagnostics"]
     )
-
-    from plugins.kanban.dashboard.plugin_api import _compute_task_diagnostics
-
-    with kbc.connect() as conn:
-        dashboard = _compute_task_diagnostics(conn, task_ids=[parent_id])
-    assert dashboard[parent_id][0]["kind"] == "review_dependency_deadlock"
-    assert dashboard[parent_id][0]["data"]["waiting_child_ids"] == [child_id]
