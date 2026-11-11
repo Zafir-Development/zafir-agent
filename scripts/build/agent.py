@@ -42,7 +42,7 @@ def write_metadata(project_path: Path, repo: Path) -> None:
     """Source-layout installs have no wheel; preserve PEP 621 dependency metadata.
 
     This attaches the project's static declarations, not installed-environment
-    guesses. Nix keeps the real wheel's dist-info untouched.
+    guesses. Referenced installs keep their existing dist-info untouched.
     """
     project = tomllib.loads(project_path.read_text(encoding="utf-8-sig"))["project"]
     if project.get("dynamic"):

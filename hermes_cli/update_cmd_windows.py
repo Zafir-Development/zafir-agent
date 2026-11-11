@@ -416,53 +416,6 @@ def _ledger_manual_serve_holders(matches: list[tuple[int, str, str]]) -> list[di
     ]
 
 
-def _serve_relaunch_commands(entries: list[dict]) -> list[list[str]]:
-    """Rebuild launch commands for stopped serves from ledger host/port/profile — never argv parsing
-    (joined argv cannot round-trip Windows paths with spaces). Entries without a port are skipped."""
-    from hermes_cli.update_cmd import _m
-    hermes = "hermes"
-    with suppress(Exception):
-        scripts_dir = _m()._venv_scripts_dir()
-        if scripts_dir is not None:
-            hermes = next((str(scripts_dir / n) for n in ("hermes.exe", "hermes") if (scripts_dir / n).is_file()), hermes)
-    commands: list[list[str]] = []
-    for entry in entries:
-        port = entry.get("port")
-        if not isinstance(port, int) or port <= 0:
-            continue
-        profile, host = str(entry.get("profile") or ""), str(entry.get("host") or "")
-        commands.append(
-            [hermes] + (["--profile", profile] if profile and profile != "default" else [])
-            + [str(entry.get("purpose"))] + (["--host", host] if host else []) + ["--port", str(port)]
-        )
-    return commands
-
-
-def _relaunch_stopped_serves(token: dict) -> None:
-    """Idempotent atexit relaunch of manual serves stopped by the venv guard.
-
-    `pending` flips False on first invocation so explicit call + atexit registration cannot double-spawn."""
-    from hermes_cli.update_cmd import _m, _record_update_step
-    if not token.get("pending"):
-        return
-    token["pending"] = False
-    entries = token.get("entries") or []
-    if not entries:
-        return
-    commands = _serve_relaunch_commands(entries)
-    skipped = len(entries) - len(commands)
-    failed: list = []
-    if commands:
-        print("  ⟲ Relaunching stopped serve/dashboard backend(s)")
-        failed = _m()._respawn_dashboard_processes(commands)
-    if skipped or failed:
-        print("  ⚠ Some stopped backends could not be relaunched automatically; restart them manually (hermes serve --host <ip> --port <port>).")
-    _record_update_step(
-        "serve_relaunch", not failed and not skipped,
-        f"relaunched={len(commands) - len(failed)} failed={len(failed)} skipped={skipped}",
-    )
-
-
 def _is_backend_argv(argv_low: str) -> bool:
     """Whether an argv is a DESKTOP backend — feeds ``taskkill /T`` via ``_orphaned_desktop_backend_pids``.
 

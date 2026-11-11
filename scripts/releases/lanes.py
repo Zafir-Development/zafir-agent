@@ -26,7 +26,6 @@ class Lane:
 LANES = (
     Lane("docker", True, "build and publish the Docker image"),
     Lane("ci", True, "the full CI pipeline"),
-    Lane("nix", True, "Nix checks"),
     Lane("docker-tests", True, "tests of the Docker image before it is published"),
     Lane("pm-bundle", True, "PM bundle acceptance"),
     Lane("windows-live", True, "Windows live venv E2E"),
@@ -39,7 +38,6 @@ DEFAULT = frozenset(lane.name for lane in LANES if lane.default)
 # reports `skipped` when one is off and `success` otherwise; a job not named never skips.
 JOB_LANES: dict[str, frozenset[str]] = {name: frozenset(needs) for name, needs in {
     "ci": ("ci",),
-    "nix": ("nix",),
     "docker": ("docker",),
     "publish-docker": ("docker",),
     "pm-bundle": ("pm-bundle",),
@@ -92,9 +90,8 @@ def jobs_to_run(lanes: Iterable[str]) -> dict[str, bool]:
     return {job: needs <= on for job, needs in JOB_LANES.items()}
 
 
-# Claims record `lanesRevision` next to `lanes`. A claim cut by an earlier, desktop-inclusive
-# pipeline carries lane names this pipeline no longer has; it is refused, never translated.
-LANES_REVISION = 3
+# Claims record `lanesRevision` next to `lanes`; a changed lane set invalidates old claims.
+LANES_REVISION = 4
 
 
 def claim_lanes(metadata: Mapping) -> frozenset[str]:

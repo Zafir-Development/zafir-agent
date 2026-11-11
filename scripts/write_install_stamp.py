@@ -1,9 +1,9 @@
 """Generate canonical install-stamp.json for packaged Hermes builds.
 
-All packagers (Docker, Nix, desktop) call this script to produce the same
+All packagers (Docker, desktop) call this script to produce the same
 ``install-stamp.json`` file. Runtime surfaces (CLI, TUI, desktop) read the
 stamp through ``hermes_cli.version_info`` — no env vars, no separate
-docker/nix code paths.
+distribution-specific code paths.
 
 Usage::
 
@@ -14,7 +14,7 @@ Usage::
     # Override provenance for reproducible/packaged builds:
     python scripts/write_install_stamp.py --output ... \\
         --commit <sha> --branch <name> --dirty \\
-        --base-version 0.19.0 --distance 42 --source nix --distribution nix
+        --base-version 0.19.0 --distance 42 --source ci --distribution docker
 
     # Docker (identity admitted by the workflow; with no reachable release the
     # commit alone is the identity and the runtime reports base "unknown"):
@@ -127,7 +127,7 @@ def build_stamp(
 
     Args override detection.
     ``source`` identifies where the stamp came from (``ci``, ``local``,
-    ``docker``, ``nix``, ``commit-build``, ``fallback``). ``update_mechanism``
+    ``docker``, ``commit-build``, ``fallback``). ``update_mechanism``
     is required: every stamp names who applies the next update (see
     UPDATE_MECHANISMS).
 
@@ -281,7 +281,7 @@ def main() -> int:
     parser.add_argument("--source", default="local", help="Stamp source label")
     parser.add_argument(
         "--distribution",
-        choices=("docker", "nix", "desktop-app", "apt-termux"),
+        choices=("docker", "desktop-app", "apt-termux"),
         help="Package distribution (the steward that replaces this tree)",
     )
     parser.add_argument(
@@ -290,7 +290,7 @@ def main() -> int:
         choices=UPDATE_MECHANISMS,
         help="Who applies the next update: 'self' (hermes update), "
         "'app-installer' (Windows App Installer), 'electron-updater' (in-app updater), "
-        "'external' (nix/docker/store)",
+        "'external' (package manager or store)",
     )
     parser.add_argument(
         "--runtime-dir",
@@ -298,7 +298,7 @@ def main() -> int:
         help="Path RELATIVE to the stamp file's directory, naming where the "
         "pm store (the managed tool bytes) lives. A sealed desktop-app "
         "payload passes '..' (the payload dir is the install root's "
-        "parent). Omitted for source/docker/nix stamps.",
+        "parent). Omitted for source and Docker stamps.",
     )
     args = parser.parse_args()
 

@@ -33,7 +33,6 @@ DEFAULT = {
     "frontend": True,
     "docker": True,
     "docker_meta": True,
-    "nix": True,
     "e2e": True,
     "e2e_upgrade": True,
     "site": True,
@@ -46,18 +45,17 @@ DEFAULT = {
     "catalog": True,
 }
 
-SLOW_LANES = {"docker", "nix", "e2e", "e2e_upgrade"}
+SLOW_LANES = {"docker", "e2e", "e2e_upgrade"}
 
 
-def _lanes(python=False, frontend=False, site=False, scan=False, deps=False, uv_lock=False, npm_lock=False, bootstrap=False, docker_meta=False, nix=False, docker=None, e2e=False, e2e_upgrade=False, remote_backends=False, catalog=False) -> dict[str, bool]:
-    # The slow lanes (docker, nix, the E2E suites) are off unless the case
+def _lanes(python=False, frontend=False, site=False, scan=False, deps=False, uv_lock=False, npm_lock=False, bootstrap=False, docker_meta=False, docker=None, e2e=False, e2e_upgrade=False, remote_backends=False, catalog=False) -> dict[str, bool]:
+    # The slow lanes (docker and the E2E suites) are off unless the case
     # names them: an ordinary product change reaches them on main, not on
     # the PR. Docker meta files are docker-lane paths, so docker follows
     # docker_meta unless the case says otherwise.
     return {
         "python": python,
         "docker": docker_meta if docker is None else docker,
-        "nix": nix,
         "e2e": e2e,
         "e2e_upgrade": e2e_upgrade,
         "frontend": frontend,
@@ -89,19 +87,19 @@ CASES = {
     ),
     "docs-only → nothing heavy": (["README.md", "docs/guide.md"], _lanes()),
     "python source → python": (["run_agent.py"], _lanes(python=True, scan=True)),
-    # The dependency manifests are inputs to the image, the flake and every
+    # The dependency manifests are inputs to the image and every
     # install, so they start those slow lanes on the PR itself.
     "dep manifest → python": (
         ["pyproject.toml"],
-        _lanes(python=True, scan=True, deps=True, uv_lock=True, docker=True, nix=True, e2e_upgrade=True),
+        _lanes(python=True, scan=True, deps=True, uv_lock=True, docker=True, e2e_upgrade=True),
     ),
-    "uv.lock → python": (["uv.lock"], _lanes(python=True, uv_lock=True, docker=True, nix=True, e2e_upgrade=True)),
+    "uv.lock → python": (["uv.lock"], _lanes(python=True, uv_lock=True, docker=True, e2e_upgrade=True)),
     "ts package → frontend": (["apps/shared/src/app.ts"], _lanes(frontend=True)),
     "ui-tui → frontend": (["ui-tui/src/entry.ts"], _lanes(frontend=True)),
     # Lockfile bump shifts every TS package's tree, but not the Python suite.
-    "root lockfile → frontend, not python": (["pnpm-lock.yaml"], _lanes(frontend=True, npm_lock=True, docker=True, nix=True)),
+    "root lockfile → frontend, not python": (["pnpm-lock.yaml"], _lanes(frontend=True, npm_lock=True, docker=True)),
     # The workspace config (overrides, release-age policy) shifts the same trees.
-    "workspace config → frontend, not python": (["pnpm-workspace.yaml"], _lanes(frontend=True, docker=True, nix=True)),
+    "workspace config → frontend, not python": (["pnpm-workspace.yaml"], _lanes(frontend=True, docker=True)),
     "nested lockfile → npm_lock": (["website/package-lock.json"], _lanes(site=True, npm_lock=True)),
     # A website file the Python suite cannot read stays site-only.
     "website config → site": (["website/docusaurus.config.ts"], _lanes(site=True)),
@@ -148,23 +146,6 @@ CASES = {
     # skill edit must still run Python.
     "skill md → python + site": (["skills/github/SKILL.md"], _lanes(python=True, site=True)),
     "dockerfile → docker meta": (["Dockerfile"], _lanes(docker_meta=True)),
-    # Only the flake reads these, so they run nix alone. No Python test opens
-    # them, unlike pyproject.toml and uv.lock below.
-    "nix module → nix only": (["nix/homeManagerModules.nix"], _lanes(nix=True)),
-    "flake.nix → nix only": (["flake.nix"], _lanes(nix=True)),
-    "flake.lock → nix only": (["flake.lock"], _lanes(nix=True)),
-    # A flake-only file must not mask a Python change beside it.
-    "nix + python → both": (["nix/checks.nix", "agent/x.py"], _lanes(python=True, scan=True, nix=True)),
-    # Product Python can still break the flake (nine checks run the built
-    # binary), but the flake meets it on main, not on the PR.
-    "product python → no nix on the PR": (["hermes_cli/config.py"], _lanes(python=True, scan=True)),
-    # tests/ is not packaged, so the built binary cannot change.
-    "tests-only → no nix": (
-        ["tests/agent/test_foo.py"],
-        _lanes(python=True, scan=True),
-    ),
-    # Prose cannot change the closure or the binary.
-    "docs-only → no nix": (["README.md"], _lanes()),
     # install.ps1 and its PowerShell suites are exercised by platforms("windows")
     # pytest files, so they must turn on python (which gates tests-os).
     "install.ps1 → python + e2e_upgrade + bootstrap": (
@@ -212,7 +193,7 @@ CASES = {
     ),
     # Supply-chain lanes
     ".pth file → scan": (["evil.pth"], _lanes(python=True, scan=True)),
-    "setup.py → scan": (["setup.py"], _lanes(python=True, scan=True, docker=True, nix=True, e2e_upgrade=True)),
+    "setup.py → scan": (["setup.py"], _lanes(python=True, scan=True, docker=True, e2e_upgrade=True)),
     # Files CODEOWNERS owns carry no lane of their own: they only route as code.
     "mcp catalog manifest → python only": (
         ["optional-mcps/foo/manifest.yaml"],
@@ -354,7 +335,7 @@ def test_every_slow_lane_path_matches_a_tracked_file():
     if tracked.returncode != 0:
         pytest.skip("not a git checkout")
     files = tracked.stdout.splitlines()
-    tables = {**_mod._E2E_LANES, "docker": _mod._DOCKER_PATHS, "nix": _mod._NIX_LANE_PATHS,
+    tables = {**_mod._E2E_LANES, "docker": _mod._DOCKER_PATHS,
               "remote_backends": _mod._REMOTE_BACKEND_PATHS}
     dead = {
         (lane, prefix)
@@ -417,7 +398,7 @@ def _yaml(rel: str) -> dict:
 
 def test_every_lane_reaches_the_composite_action():
     """The action is the one surface every consumer reads, so it must carry all
-    of them — ci.yaml, nix.yml and docker.yml each re-export a different subset.
+    of them — ci.yaml and docker.yml each re-export a different subset.
     """
     lanes = set(classify(["run_agent.py"]))
     action_outputs = set(_yaml(".github/actions/detect-changes/action.yml")["outputs"])

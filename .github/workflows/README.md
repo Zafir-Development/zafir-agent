@@ -35,17 +35,16 @@ pull_request / push main
  │                             └─ all-checks-pass  ← the ONLY required branch-protection check
  │                                                   (+ the CI timing report steps)
  ├─ docker.yml   (own run; build/test, push :main on main)
- ├─ nix.yml      (own run; nix flake check)
  └─ path-filtered: pm-bundle, termux-verify, plugin-catalog-ci, sandbox-image
 
 workflow_run CI started  → ci-review-comment.yml (live PR comment)
-PR labeled run-e2e       → label-rerun.yml (reruns CI, Docker, Nix)
+PR labeled run-e2e       → label-rerun.yml (reruns CI and Docker)
 
 schedule daily 06:41 UTC → canary-release.yml (tag + publish the source canary)
 
 release.py release       → stable-release.yml ─┬─ ci.yaml (release: true, strict gate)
  (pushes rc.N-vX.Y.Z,                          ├─ docker.yml (release-phase test → publish)
-  dispatches on main)                          ├─ nix.yml, pm-bundle.yml
+  dispatches on main)                          ├─ pm-bundle.yml
                                                ├─ windows-venv-e2e.yml, install-e2e.yml
                                                └─ install-e2e-{windows,macos}-run.yml
 Stable Release completed (failed) → stable-release-publication.yml (rerun failed jobs / publish)
@@ -59,9 +58,9 @@ Stable Release completed (failed) → stable-release-publication.yml (rerun fail
 
 | Kind | What starts it | Files |
 |---|---|---|
-| Entry point | `pull_request`, `push`, `schedule`, `workflow_run`, `workflow_dispatch`, `release` | `ci.yaml`, `docker.yml`, `nix.yml`, `canary-release.yml`, `stable-release.yml`, and the others under the headings below |
+| Entry point | `pull_request`, `push`, `schedule`, `workflow_run`, `workflow_dispatch`, `release` | `ci.yaml`, `docker.yml`, `canary-release.yml`, `stable-release.yml`, and the others under the headings below |
 | Reusable only | Another workflow's `uses: ./.github/workflows/<file>` | Most `ci.yaml` children (`tests.yml`, `lint.yml`, …), `install-e2e-run.yml`, `install-e2e-{windows,macos}-run.yml` |
-| Both | Its own triggers **and** a caller | `nix.yml`, `docker.yml`, `pm-bundle.yml`, `termux-verify.yml`, `windows-venv-e2e.yml`, `windows-install-update-e2e.yml`, `install-e2e.yml`, `ci.yaml`, `archive-inputs.yml` |
+| Both | Its own triggers **and** a caller | `docker.yml`, `pm-bundle.yml`, `termux-verify.yml`, `windows-venv-e2e.yml`, `windows-install-update-e2e.yml`, `install-e2e.yml`, `ci.yaml`, `archive-inputs.yml` |
 
 A reusable workflow does not show up as its own run in the Actions tab. Its
 jobs appear inside the caller's run, under the caller's job name (for example
@@ -168,7 +167,7 @@ The classifier fails **open**:
 - An empty diff (push, dispatch, or a compare-API failure) turns every lane on.
 - Any change under `.github/` turns every lane on.
 - `python` is a denylist. It is off only when every changed file is provably
-  prose, frontend-only, Docker meta, Nix-only, or catalog entry data.
+  prose, frontend-only, Docker meta, or catalog entry data.
 
 Then a gate step in `ci.yaml` rewrites the result:
 
@@ -189,7 +188,7 @@ Then a gate step in `ci.yaml` rewrites the result:
 | `scan` | Python files, `.pth`, setup hooks |
 | `npm_lock` | `pnpm-lock.yaml` or any `package-lock.json` |
 | `docker_meta` | Dockerfiles and Docker scripts |
-| `docker`, `nix` | slow lanes, read by `docker.yml` and `nix.yml` (not by `ci.yaml`) |
+| `docker` | slow lane, read by `docker.yml` (not by `ci.yaml`) |
 | `e2e`, `e2e_upgrade` | computed, then forced off except on release or dispatch |
 
 A cross-language fixture (`_SHARED_FIXTURE_CONSUMERS`) also turns on the lanes
@@ -235,8 +234,8 @@ step fails the job, and the `review-status-*` artifacts the live PR comment read
 their names. The jobs were split only by history: each paid its own checkout and a
 full billed minute for a few seconds of work.
 
-Not part of `ci.yaml`: the Docker image build, `nix flake check`, and the OSV
-scan. Docker and Nix run in their own workflows. A reusable-workflow call
+Not part of `ci.yaml`: the Docker image build and the OSV scan. Docker runs in
+its own workflow. A reusable-workflow call
 keeps the caller run "in progress", and GitHub refuses `gh run rerun` on a run
 that is in progress, so one slow job would block reruns of the fast required
 ones. OSV runs on a weekly schedule.
@@ -281,7 +280,7 @@ gh workflow run ci.yaml --ref my-branch -f release=true
 gh workflow run ci.yaml --ref my-branch -f strict_acceptance=upd-txn
 ```
 
-To get the Docker and Nix slow lanes on a PR without a dispatch, add the
+To get the Docker slow lane on a PR without a dispatch, add the
 `run-e2e` label (see [`label-rerun.yml`](#pr-helpers)). The label does **not**
 turn on the E2E suites. Only a release or a dispatch runs them.
 
@@ -295,7 +294,6 @@ branch protection.
 | Workflow | Triggers | Runs / skips | Manual trigger |
 |---|---|---|---|
 | `docker.yml`, **Docker Build, Test, and Publish** | `pull_request`, `push: main`, `workflow_call` (stable) | **PR:** `mode` (phase + classification, one job) → `build` only when the `docker` slow lane is on (Docker meta, dependency manifests, `pm/`, `tests/docker/`, the frontend build recipes (`scripts/build/`, `apps/shared/`), or the `run-e2e` label). Builds slim+desktop × amd64+arm64 and runs the docker integration tests. Never pushes. **Push to `main` on the upstream repo:** always builds, then `publish` (env `container-publish`) and `merge` push `:main` / `:main-desktop` only (never `:latest`). **Stable `release-phase: test`:** builds the claim commit, tests it (unless the claim has no `docker-tests` lane), and archives the exact image. **`release-phase: publish`:** pushes the archived bytes under the attempt ref and returns the manifest digest. No `release: published` trigger, on purpose. | none (`gh run rerun`) |
-| `nix.yml`, **Nix flake check** | `pull_request`, `push: main`, `workflow_call` | `flake-check` runs when the `nix` lane is on (`nix/`, `flake.*`, dependency/npm manifests, `.github/`, `run-e2e` label). Every push to `main` turns it on. `release: true` forces it. | none |
 | `pm-bundle.yml`, **PM Bundle** | `pull_request` on `pm/**` (not `*.md`), `scripts/bundles/**`, the Windows build deps, `uv.lock`, `pyproject.toml`, itself; `workflow_dispatch`; `workflow_call` (stable) | Stages and smoke-tests `hermes pm bundle` on darwin-arm64, win32-x64, win32-arm64. Linux targets are commented out; there is no Intel macOS leg. | `gh workflow run pm-bundle.yml [-f ref=<sha>]` |
 | `termux-verify.yml`, **Termux verification** | `push: main` / `pull_request` on `scripts/termux/**`, `pm/**` (not `*.md`), `tests/scripts/test_termux*`, itself; `workflow_dispatch`; `workflow_call` (stable) | `contracts` and `tui` always run. `r2-provisioned` is skipped on PRs. `native-runtime` (arm64) runs only when R2 secrets exist or `release: true`. A release run fails loudly without R2. | `gh workflow run termux-verify.yml` |
 | `plugin-catalog-ci.yml`, **Plugin Catalog CI** | `pull_request` on `plugin-catalog/**` | `structural` (schema) and `pinned-source-validate` (the pinned SHA is reachable and the plugin passes `hermes plugins validate`; inner steps skip when no entry file changed). | none |
@@ -308,7 +306,7 @@ branch protection.
 | Workflow | Trigger | What it does / skip conditions |
 |---|---|---|
 | `ci-review-comment.yml`, **CI review comment** | `workflow_run` of `CI`, `types: [in_progress]` | Polls the CI run and the sibling Docker run for up to ~50 min. Keeps one live review comment on the PR up to date. Always runs scripts from the default branch. **Skips** non-PR runs and PRs from forks. A first-time contributor's run starts it only after a maintainer approves it, because `in_progress` fires then. One poller per head repo+branch; a newer CI run cancels the old poller. |
-| `label-rerun.yml`, **Label rerun** | `pull_request: labeled` | Only for the `run-e2e` label. Cancels the head commit's `ci.yaml`, `docker.yml` and `nix.yml` runs if they are still going, then reruns them. Their `detect` reads the live labels, so Docker and Nix build. Exits if the PR head moved. The E2E suites stay off. |
+| `label-rerun.yml`, **Label rerun** | `pull_request: labeled` | Only for the `run-e2e` label. Cancels the head commit's `ci.yaml` and `docker.yml` runs if they are still going, then reruns them. Their `detect` reads the live labels, so Docker builds. Exits if the PR head moved. The E2E suites stay off. |
 
 ---
 
@@ -343,7 +341,7 @@ There are two release paths, and neither starts from a tag push:
 |---|---|---|
 | Entry | `canary-release.yml` (daily cron or dispatch) | `python scripts/release.py release …` → dispatches `stable-release.yml` |
 | Identity | `v<stable>+canary.<UTC>` tag | `rc.<N>-vX.Y.Z` attempt ref, then a `vX.Y.Z` receipt at publish |
-| Tests | none (source-only: tag + prerelease) | full CI (strict) + Docker + Nix + PM bundle + install/update E2E, per the claim's lanes |
+| Tests | none (source-only: tag + prerelease) | full CI (strict) + Docker + PM bundle + install/update E2E, per the claim's lanes |
 | Publishes | annotated canary tag + GitHub prerelease | Docker versioned tag → `stable`/`latest`, GitHub release |
 
 Long-form reference: `website/docs/developer-guide/stable-releases.md`.
@@ -377,7 +375,7 @@ Long-form reference: `website/docs/developer-guide/stable-releases.md`.
 
   ```sh
   python scripts/release.py release --commit "$(git rev-parse origin/main)" --bump patch --remote origin
-  python scripts/release.py release … --only docker,nix      # lane subset
+  python scripts/release.py release … --only docker,ci      # lane subset
   python scripts/release.py release … --without install-e2e
   python scripts/release.py publish --version X.Y.Z --remote origin
   python scripts/release.py abandon --version X.Y.Z --remote origin
@@ -398,7 +396,6 @@ Long-form reference: `website/docs/developer-guide/stable-releases.md`.
   |---|---|
   | `ci` (on) | `ci` → `ci.yaml` with `release: true` |
   | `docker` (on), `docker-tests` (on) | `docker` (test phase), `publish-docker` |
-  | `nix` (on) | `nix` → `nix.yml` with `release: true` |
   | `pm-bundle` (on) | `pm-bundle` |
   | `windows-live` (on) | `windows-live` → `windows-venv-e2e.yml` |
   | `install-e2e` (on) | `install-e2e` → `install-e2e.yml` (route `all`) |
@@ -490,7 +487,6 @@ gh workflow run windows-install-update-e2e.yml --ref <branch> -f strict_acceptan
 | `label-rerun.yml` | Label rerun | PR labeled | none |
 | `lint.yml` | Lint (ruff + ty) | R | ci |
 | `live-providers.yml` | Live provider canaries | tags `v*`, dispatch | none |
-| `nix.yml` | Nix flake check | PR, main, call | stable |
 | `osv-scanner.yml` | OSV-Scanner | cron Mon 09:00, dispatch | none |
 | `plugin-catalog-ci.yml` | Plugin Catalog CI | PR (paths) | none |
 | `pm-bundle.yml` | PM Bundle | PR (paths), dispatch, call | stable |

@@ -99,7 +99,7 @@ def test_contained_cli_assembly_runs_after_move_and_preserves_prepared_state(tmp
 @pytest.mark.platforms("posix")
 def test_referenced_installed_code_uses_derived_command_map_without_copying(tmp_path):
     _, data = inputs_fixture(tmp_path)
-    out = tmp_path / "nix output"
+    out = tmp_path / "referenced output"
     source = Path(data["code"])
     (source / "entry.py").write_text(
         "import json, os\nfrom pathlib import Path\n"
@@ -123,7 +123,7 @@ def test_referenced_installed_code_uses_derived_command_map_without_copying(tmp_
     assert not list(out.rglob("entry.py"))
     assert (out / "share/hermes-agent/skills").is_symlink()
     assert (out / "ui-tui").is_symlink()
-    assert not (out / "bin/probe").exists(), "Nix owns native makeWrapper"
+    assert not (out / "bin/probe").exists(), "referenced placement does not mint launchers"
     run = subprocess.run([mapping["commands"]["probe"]["source"]], cwd=tmp_path,
                          env={"PATH": os.environ["PATH"], "HOME": str(tmp_path / "home"),
                               "PYTHONDONTWRITEBYTECODE": "1", **mapping["env"]},

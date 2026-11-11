@@ -103,7 +103,7 @@ class AgentInputs:
             raise ValueError("prepared PM runtime is incomplete")
         if self.stamp is not None:
             stamp = json.loads(self.stamp.read_text(encoding="utf-8-sig"))
-            if stamp.get("distribution") in ("nix", "docker") and stamp.get("pmRuntime") != str(self.pm_runtime):
+            if stamp.get("distribution") == "docker" and stamp.get("pmRuntime") != str(self.pm_runtime):
                 raise ValueError("install stamp must reference the supplied independent PM runtime")
         if self.placement == "contained":
             for path in (self.python, self.site_packages, self.environment, self.pm_runtime, self.tools):

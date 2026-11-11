@@ -24,9 +24,6 @@ outputs:
   docker:
     description: Build and test the Docker image (docker meta, dependency manifests, PM, tests/docker).
     value: ${{ steps.classify.outputs.docker }}
-  nix:
-    description: Run `nix flake check` (flake files and dependency manifests).
-    value: ${{ steps.classify.outputs.nix }}
   e2e:
     description: Run the Python end-to-end suites (tests/e2e, except upgrade).
     value: ${{ steps.classify.outputs.e2e }}

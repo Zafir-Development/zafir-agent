@@ -726,7 +726,6 @@ from hermes_cli.process_identity import is_desktop_owned_backend as _is_desktop_
 from hermes_cli.main_dashboard import (  # legacy serve-backend support; frozen updater surface
     _finalize_update_output,
     _install_hangup_protection,
-    _respawn_dashboard_processes,
 )
 from hermes_cli.main_provider_setup import (
     _GENERIC_API_KEY_PROVIDERS,
@@ -740,36 +739,6 @@ from hermes_cli.main_provider_setup import (
     _prompt_main_reasoning_effort,
     _prompt_provider_choice,
     _remove_custom_provider,
-)
-# Frozen external updater API: old in-memory siblings still import these names
-# after a checkout swap. Keep their inert shims separate from live launch helpers.
-from hermes_cli.old_updater_main import (
-    ShimQuarantineError,
-    _BYTECODE_FINGERPRINT_FILE,
-    _desktop_stamp_path,
-    _detect_broken_lazy_refresh_imports,
-    _expected_windows_pe_machines,
-    _hermes_exe_shims,
-    _insert_python_pin,
-    _interpreter_scripts_dir,
-    _load_installable_optional_extras,
-    _parse_pe_machine,
-    _quarantine_running_hermes_exe,
-    _repair_broken_lazy_refresh_imports,
-    _resolve_install_target_python,
-    _restore_quarantined_exes,
-    _run_install_with_heartbeat,
-    _run_npm_install_deterministic,
-    _run_package_only_install,
-    _run_quarantined_install,
-    _run_with_idle_timeout,
-    _self,
-    _verify_console_scripts_installed,
-    _verify_core_dependencies_installed,
-    _web_ui_build_needed,
-    _windows_native_machine,
-    _windows_shim_in_process_chain,
-    _write_web_ui_build_stamp,
 )
 from hermes_cli.main_install_repair import _cleanup_quarantined_exes, _recover_update_debts_on_startup
 from hermes_cli.main_install_repair import (  # frozen updater surface: update_cmd*.py resolve these via _m()
@@ -2004,14 +1973,14 @@ _FROZEN_UPDATER_SURFACE: dict[str, tuple[str, ...]] = {
         "_ledger_manual_serve_holders", "_ledger_reapable_backend_pids",
         "_leftover_pausable_gateway_pids", "_npm_lockfile_changed",
         "_orphaned_desktop_backend_pids", "_refresh_active_lazy_features",
-        "_refresh_active_memory_provider_dependencies", "_relaunch_stopped_serves",
+        "_refresh_active_memory_provider_dependencies",
         "_stop_process_trees",
     ),
     "hermes_cli.update_cmd_maint": (
         "_purge_stale_hermes_modules", "_reload_updated_runtime_modules",
     ),
     "hermes_cli.dashboard_procs": (
-        "_detect_concurrent_hermes_instances", "_kill_stale_dashboard_processes",
+        "_detect_concurrent_hermes_instances",
     ),
 }
 _FROZEN_ATTR_SOURCES: dict[str, str] = {

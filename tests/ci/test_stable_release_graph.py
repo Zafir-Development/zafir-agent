@@ -84,9 +84,9 @@ def test_release_reuses_whole_ci_and_docker_before_publication():
     assert jobs["docker"]["uses"] == jobs["publish-docker"]["uses"]
     assert jobs["docker"]["with"]["release-phase"] == "test"
     # Every gate starts straight after admit; the acceptance join is what waits for CI.
-    for parallel in ("docker", "nix", "pm-bundle", "windows-live", "install-e2e"):
+    for parallel in ("docker", "pm-bundle", "windows-live", "install-e2e"):
         assert direct_needs(jobs, parallel) == ["admit"], parallel
-    required = {"ci", "docker", "nix", "pm-bundle", "windows-live", "install-e2e"}
+    required = {"ci", "docker", "pm-bundle", "windows-live", "install-e2e"}
     assert required <= ancestors(jobs, "acceptance")
     # publish-docker starts when the docker tests pass; it does not wait for acceptance.
     assert jobs["publish-docker"]["needs"] == ["admit", "docker"]
@@ -102,7 +102,7 @@ def test_release_reuses_whole_ci_and_docker_before_publication():
 def test_the_graph_is_source_only():
     jobs = workflow("stable-release.yml")["jobs"]
     assert set(jobs) == {
-        "admit", "ci", "docker", "nix", "pm-bundle", "windows-live", "install-e2e",
+        "admit", "ci", "docker", "pm-bundle", "windows-live", "install-e2e",
         "acceptance", "publish-docker", "publication", "complete",
     }
     # No desktop packaging, Store submission, candidate or transition job survives.
@@ -212,7 +212,7 @@ def test_claim_custody_and_final_payload_identity_reach_every_privileged_phase()
     assert inputs == {"tag"}
     assert {"claim-tag", "claim-object", "tag", "commit", "version", "release-id", "release-epoch"} <= \
         set(jobs["admit"]["outputs"])
-    for name in ("docker", "nix"):
+    for name in ("docker",):
         assert jobs[name]["with"]["version"] == "${{ needs.admit.outputs.version }}"
     assert "version" not in jobs["pm-bundle"]["with"]
     for name in ("docker", "publish-docker"):
@@ -291,14 +291,6 @@ def test_no_workflow_references_a_deleted_release_module():
         for module in DELETED_RELEASE_MODULES:
             assert f"scripts/releases/{module}.py" not in text, path.name
         assert "scripts/render-builds-table.py" not in text, path.name
-
-
-def test_the_nix_release_lane_stamps_its_package_version():
-    nix = workflow("nix.yml")["jobs"]
-    prepare = next(step["run"] for step in nix["flake-check"]["steps"]
-                   if step.get("name") == "Prepare isolated release source")
-    assert "scripts/releases/nix_stamp.py" in prepare
-    assert "--version" in prepare
 
 
 def test_every_run_step_receives_the_variables_it_reads():

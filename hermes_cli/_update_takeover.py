@@ -138,22 +138,6 @@ def main() -> int:
     context, result = map(Path, sys.argv[1:3])
     request = json.loads(context.read_text(encoding="utf-8-sig"))
     sys.path.insert(0, request["root"])
-    if "stopped_serves" in request:
-        # Historical atexit cleanup may run after the update's result is fixed.
-        # It must reuse that installation, never start a second update/repair.
-        from hermes_cli._launchers import resolve_store_python
-        from pm.environments import activation_environment
-
-        root = Path(request["root"])
-        python = resolve_store_python(root)
-        if python is None:
-            print("Cannot resume stopped backends: no selected Hermes interpreter", file=sys.stderr)
-            return 1
-        return subprocess.run(
-            [str(python), "-I", "-B", "-X", "utf8", str(root / "hermes_cli/update_serve_resume.py"),
-             str(context), str(result)], cwd=root, env=activation_environment(root),
-             check=False,
-        ).returncode
     from hermes_cli import update_receipt
     from hermes_cli.update_lock import UpdateLock, describe_holder
 

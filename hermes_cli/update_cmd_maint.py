@@ -266,56 +266,6 @@ def _reload_process_scan_modules() -> None:
     stop_for_relaunch(incomplete=True)
 
 
-def _finish_dashboard_update_cleanup(
-    node_failures: list[str], already_restarted_units: set[str] | None = None
-) -> None:
-    """Historical updater hook; do not continue a pre-PM update after the swap."""
-    from hermes_cli._old_updater import stop_for_relaunch
-
-    stop_for_relaunch()
-
-
-def _refresh_dashboard_after_update(*, already_restarted_units: set[str] | None = None) -> set[int]:
-    """Refresh managed dashboards or stop stale manual ones after an update; returns the PIDs it
-    stopped and could not bring back, so the receipt records them ``failed`` (#109290).
-
-    *already_restarted_units*: systemd unit names (no ``.service``) the fleet-restart loop
-    already handled (restarted, declined, or failed; each already reported), so a Serve-only
-    install isn't restarted a second time here and a declined or failed unit isn't retried (#141021).
-
-    See #83595.
-    """
-    from hermes_cli.update_cmd import _m, _record_update_step
-    from hermes_constants import get_hermes_home
-
-    try:
-        stop_result = _m()._kill_stale_dashboard_processes(
-            restart_managed=True, already_restarted_units=already_restarted_units,
-            scope_home=str(get_hermes_home()),
-        )
-    except Exception as exc:
-        # Isolated like every sibling post-update step: a failure here (#112604) used to abort
-        # the fleet matrix, reconciliation and the inner receipt finalize that follow it. A
-        # dashboard/serve left on pre-update code is still caught by the survivor probe →
-        # reconciliation (an owed gateway_restart follow-up).
-        logger.warning("Post-update dashboard cleanup failed: %s", exc)
-        _record_update_step("dashboard_cleanup", False, f"{type(exc).__name__}: {exc}")
-        print()
-        print(f"⚠ Could not refresh running dashboard/serve process(es): {exc}")
-        print("  If one is still running, restart it so it serves the updated code:")
-        print("    hermes dashboard --port <port>   (or: systemctl --user restart hermes-dashboard)")
-        return set()
-    unrecovered = {int(pid) for pid in stop_result.get("unrecovered") or ()}
-    if not unrecovered:
-        return unrecovered
-
-    print()
-    print("⚠ A web dashboard/serve process was stopped during update and could not be auto-restarted.")
-    print("  Re-launch it when you want the web UI back:")
-    print("    hermes dashboard --port <port>")
-    return unrecovered
-
-
 def _print_update_completion(message: str) -> None:
     """Print the outcome (with branch @ sha so drift is visible) plus, when launched by the
     dashboard with an action id, a receipt line the Desktop matches after restart.

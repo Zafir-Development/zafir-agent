@@ -17,7 +17,6 @@ from hermes_cli import main as cli_main
 from hermes_cli import main_desktop
 from hermes_cli import main_desktop_tcc
 from hermes_cli import main_install_repair
-from hermes_cli import main_web_build
 
 
 @pytest.fixture(autouse=True)

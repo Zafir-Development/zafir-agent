@@ -141,7 +141,6 @@ def test_verifier_clears_marker_after_late_current_gateway_state(monkeypatch) ->
         lambda _fleet: False,
     )
     monkeypatch.setattr(fleet_verify, "_print_legacy_units_warning", lambda: None)
-    monkeypatch.setattr(update_cmd, "_finish_dashboard_update_cleanup", lambda *a, **k: None)
     monkeypatch.setattr(update_cmd, "_surviving_pre_update_serve_runtimes", lambda _plan: [])
     monkeypatch.setattr(update_cmd, "_warn_stale_serve_runtimes", lambda _rows: None)
     monkeypatch.setattr(update_cmd, "_m", lambda: SimpleNamespace(_fleet_probe_expected_runtimes=lambda *a: True))

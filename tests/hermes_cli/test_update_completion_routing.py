@@ -4,7 +4,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from hermes_cli import main, main_web_build, update_cmd, update_cmd_zip, update_cmd_maint
+from hermes_cli import main, update_cmd, update_cmd_zip, update_cmd_maint
 from tests.compat.old_updater_support import fresh_child, no_external_work
 
 
@@ -13,17 +13,11 @@ from tests.compat.old_updater_support import fresh_child, no_external_work
     (update_cmd._reload_config_modules, (), {}),
     (update_cmd._reload_process_scan_modules, (), {}),
     (update_cmd._run_pending_fleet_restart, (), {}),
-    (main_web_build._run_with_idle_timeout, (["unused"], "unused"), {"idle_timeout_seconds": 10}),
-    (main_web_build._run_npm_install_deterministic, ("unused", "unused"), {"extra_args": ("arg",)}),
-    (main_web_build._nixos_build_env, (), {}),
     (main._reexec_dependency_sync_off_windows_shim, (), {}),
     (update_cmd_maint._print_update_summary, (), {
         "node_failures": [], "desktop_build_ok": True, "pre_update_version": None}),
     (update_cmd_maint._print_update_summary, (), {
         "node_failures": ["dashboard"], "desktop_build_ok": False, "pre_update_version": "0.20.1"}),
-    (update_cmd_maint._finish_dashboard_update_cleanup, ([],), {}),
-    (update_cmd_maint._finish_dashboard_update_cleanup, (["dashboard"],), {
-        "already_restarted_units": {"hermes-serve"}}),
 ])
 def test_historical_completion_hook_never_reports_success(hook, args, kwargs, fresh_child, capsys):
     if hook in {update_cmd._prepare_updated_checkout, update_cmd._reload_config_modules,

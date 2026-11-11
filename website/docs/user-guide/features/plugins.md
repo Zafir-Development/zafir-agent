@@ -150,7 +150,6 @@ See [Register slash commands](../../developer-guide/plugins/index.md#register-sl
 | User | `~/.hermes/plugins/` | Personal plugins |
 | Project | `.hermes/plugins/` | Not loaded by the gateway that runs sessions; see [Project-local plugins](#project-local-plugins) |
 | pip | `hermes_agent.plugins` entry_points | Distributed packages |
-| Nix | `services.hermes-agent.extraPlugins` / `extraPythonPackages` | NixOS declarative installs — see [Nix Setup](../../getting-started/nix-setup.md#plugins) |
 
 Later sources override earlier ones on name collision, so a user plugin with the same name as a bundled plugin replaces it.
 
@@ -401,23 +400,6 @@ The table above shows the four plugin categories, but within "General plugins" t
 :::note
 Not everything is a Python plugin. Some extension surfaces intentionally use **config-driven shell commands** (TTS, STT, shell hooks) so any CLI you already have becomes a plugin without writing Python. Others are **external servers** (MCP) the agent connects to and auto-registers tools from. And some are **drop-in directories** (gateway hooks) with their own manifest format. Pick the right surface for the integration style that fits your use case; the authoring guides in the table above each cover placeholders, discovery, and examples.
 :::
-
-## NixOS declarative plugins
-
-On NixOS, plugins can be installed declaratively via the module options — no `hermes plugins install` needed. See the **[Nix Setup guide](../../getting-started/nix-setup.md#plugins)** for full details.
-
-```nix
-services.hermes-agent = {
-  # Directory plugin (source tree with plugin.yaml)
-  extraPlugins = [ (pkgs.fetchFromGitHub { ... }) ];
-  # Entry-point plugin (pip package)
-  extraPythonPackages = [ (config.services.hermes-agent.package.python.pkgs.buildPythonPackage { ... }) ];
-  # Enable in config
-  settings.plugins.enabled = [ "my-plugin" ];
-};
-```
-
-Declarative plugins are symlinked with a `nix-managed-` prefix — they coexist with manually installed plugins and are cleaned up automatically when removed from the Nix config.
 
 ## Managing plugins
 

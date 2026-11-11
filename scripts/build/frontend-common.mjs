@@ -8,7 +8,7 @@ import { parseArgs } from 'node:util'
 export const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 
 // Look only in the prepared workspace, not a parent checkout's dependency tree.
-// Package symlinks themselves are valid inputs (including Nix store references).
+// Package symlinks themselves are valid inputs.
 export function workspaceTool(source, workspace, name) {
   for (const root of [path.join(source, workspace), source]) {
     const manifest = path.join(root, 'node_modules', name, 'package.json')

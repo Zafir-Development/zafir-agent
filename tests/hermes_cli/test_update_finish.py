@@ -199,7 +199,6 @@ def completion(tmp_path, monkeypatch):
                     git_commit_graph.spawn_commit_graph_refresh = lambda root: False
                     maint._print_bundled_skills_sync_report = lambda: None
                     fleet_verify._print_legacy_units_warning = lambda: None
-                    maint._refresh_dashboard_after_update = lambda **kwargs: None
                     gateway_migrate.maybe_auto_migrate_after_update = lambda: None
                     update._surviving_pre_update_serve_runtimes = lambda plan: []
                     fleet_verify._collect_fleet_snapshot = lambda *args: []

@@ -12,6 +12,8 @@ from datetime import UTC
 
 import pytest
 
+from scripts.releases import lanes as lane_set
+
 
 def _claims(*rows):
     return [dict(version=version, state=state, autopublish=autopublish)
@@ -182,7 +184,7 @@ def _claim_message(version, attempt, commit, *, autopublish=False,
     message = {"schema": 1, "version": version, "attempt": attempt, "commit": commit,
                "autopublish": autopublish,
                "lanes": sorted(lanes if lanes is not None else ("ci", "docker")),
-               "lanesRevision": 3,
+               "lanesRevision": lane_set.LANES_REVISION,
                "claimEpoch": epoch}
     message.update(extra)
     return message

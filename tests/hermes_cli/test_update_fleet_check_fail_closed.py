@@ -44,7 +44,6 @@ class TestCallSiteWiring:
 
         monkeypatch.setattr(main, "PROJECT_ROOT", tmp_path)
         monkeypatch.setattr(fleet_verify, "_print_legacy_units_warning", lambda: None)
-        monkeypatch.setattr("hermes_cli.update_cmd_maint._refresh_dashboard_after_update", lambda **kw: None)
         monkeypatch.setattr(update_cmd, "_surviving_pre_update_serve_runtimes", lambda plan: [])
         # Reconciliation is a separate guard; it must not supply this test's failure.
         monkeypatch.setattr("hermes_cli.update_inventory.report_unaccounted_runtimes", lambda rows: False)
@@ -121,7 +120,6 @@ def test_unmapped_stop_keeps_the_restart_owed(monkeypatch, tmp_path):
 
     monkeypatch.setattr(main, "PROJECT_ROOT", tmp_path)
     monkeypatch.setattr(fleet_verify, "_print_legacy_units_warning", lambda: None)
-    monkeypatch.setattr("hermes_cli.update_cmd_maint._refresh_dashboard_after_update", lambda **kw: None)
     monkeypatch.setattr(update_cmd, "_surviving_pre_update_serve_runtimes", lambda plan: [])
     monkeypatch.setattr(update_receipt, "collect_fleet_versions", lambda **kw: [])
     cleared = []
@@ -152,7 +150,6 @@ def test_unmapped_stop_debt_survives_startup_until_a_current_gateway_runs(monkey
     monkeypatch.setattr(fleet, "_current_checkout_sha", lambda: "head")
     monkeypatch.setattr(update_cmd, "_current_checkout_sha", lambda: "head")
     monkeypatch.setattr(fleet_verify, "_print_legacy_units_warning", lambda: None)
-    monkeypatch.setattr("hermes_cli.update_cmd_maint._refresh_dashboard_after_update", lambda **kw: None)
     monkeypatch.setattr(update_cmd, "_surviving_pre_update_serve_runtimes", lambda plan: [])
     monkeypatch.setattr(gatewayless, "host_owes_no_gateway_restart", lambda: True)
     fleet_rows: list = []
@@ -211,7 +208,6 @@ def test_same_sha_retry_adds_newly_stopped_unmapped_debt_to_an_existing_inventor
     monkeypatch.setattr(fleet, "_current_checkout_sha", lambda: "head")
     monkeypatch.setattr(update_cmd, "_current_checkout_sha", lambda: "head")
     monkeypatch.setattr(fleet_verify, "_print_legacy_units_warning", lambda: None)
-    monkeypatch.setattr("hermes_cli.update_cmd_maint._refresh_dashboard_after_update", lambda **kw: None)
     monkeypatch.setattr(update_cmd, "_surviving_pre_update_serve_runtimes", lambda plan: [])
     monkeypatch.setattr(fleet_verify, "_FLEET_PROBE_SETTLE_TIMEOUT_SECONDS", 0)  # A stays down: one poll
     # Signal delivery is the external boundary: the down row has no process to drain.

@@ -1,7 +1,7 @@
 # Shared product builders
 
 These modules compile frontends and assemble a runnable agent from prepared
-inputs. They do not replace pnpm, uv, PM, or Nix.
+inputs. They do not replace pnpm, uv, or PM.
 [Shared bundle builds](../../docs/shared-bundle-builds.md) describes the
 providers and distribution adapters.
 
@@ -13,9 +13,9 @@ build or a target-native runtime.
 
 | Layer | Owns | Examples |
 |---|---|---|
-| Dependency provider | Tools, locked dependencies, native libraries and build environments | `node-deps.mjs`, PM Python operations, Nix `fetchPnpmDeps`/uv2nix, Termux wheelhouse |
+| Dependency provider | Tools, locked dependencies, native libraries and build environments | `node-deps.mjs`, PM Python operations, Termux wheelhouse |
 | Product builder | Compilation or application assembly from prepared inputs | `tui.mjs`, `agent.py`, `../generate_icons.py` |
-| Distribution adapter | Product selection, target preparation, package layout, signing and publication | `../bundles/`, `../../Dockerfile`, `../../nix/`, `../termux/` |
+| Distribution adapter | Product selection, target preparation, package layout, signing and publication | `../bundles/`, `../../Dockerfile`, `../termux/` |
 
 `node-deps.mjs` and `pm.build_environment` prepare dependencies. Unlike the product
 builders, they can access package registries. There is no universal installer,
@@ -57,8 +57,6 @@ The prepared source needs these inputs:
 Request the complete workspace union once. A later, narrower install can
 remove dependencies that another product needs. This provider modifies the
 prepared workspace. It does not build a frontend.
-Nix supplies dependencies through `fetchPnpmDeps` (its fixed-output hash is `nix/pnpm-deps-hash`) instead of this command.
-
 `--reuse` opts into reusing a completed dependency install with CI's cached
 `node_modules` tree. The receipt lives inside that tree
 and matches the lockfile, `pnpm-workspace.yaml`, local package manifests,
@@ -204,7 +202,7 @@ PM owns pinned installer acquisition, environment creation, frozen workspace
 sync, dependency checks, and failure cleanup. Callers never resolve or pass a uv
 executable. It preserves project policy, uses the supplied interpreter, and
 disables interpreter downloads. It does not discover user plugins or publish a
-live PM selection. Nix retains its declarative dependency provider. Termux builds
+live PM selection. Termux builds
 native wheels separately, then uses PM's requirements-environment operation with
 an explicit bionic interpreter and an offline wheelhouse. The build cache remains
 available after this call.
@@ -285,7 +283,7 @@ require `dist/entry.js` and `package.json`.
 
 The PM marker supplies `python` and `sitePackages` paths relative to its runtime
 directory, or absolute store references. These paths must resolve to real
-inputs. If a supplied stamp declares `nix` or `docker`, its `pmRuntime` must
+  inputs. If a supplied stamp declares `docker`, its `pmRuntime` must
 match the supplied PM runtime. The assembler does not create that environment.
 
 ### Placement and output
@@ -298,8 +296,7 @@ match the supplied PM runtime. The assembler does not create that environment.
   Docker and Termux use this placement.
 - **`references`:** Assembly references installed code and commands without
   copying Python code or replacing wheel metadata. It links explicit resources
-  and frontends, then emits `command-map.json`. Nix creates its native wrappers
-  from this map.
+  and frontends, then emits `command-map.json`.
 
 Source-layout placement writes project distribution metadata without building
 a Hermes wheel. It also writes `site_packages/hermes-agent.pth` with a relative
@@ -352,8 +349,7 @@ Artifact acceptance still needs these checks:
 - Agent CLI, ACP, plugins, and catalogs from an unrelated working directory.
 - Native payload relocation and offline mutable-environment reconstruction.
 - Docker runtime probes as its non-root user and layer-content inspection.
-- Actual Nix builds and commands through store-reference wrappers.
 - Fresh network-disabled bionic installation and Android device acceptance.
 
-Docker/Nix build execution belongs to the distribution verification work, not
+Docker build execution belongs to the distribution verification work, not
 this documentation pass. No build-pass claim follows from this reference.
