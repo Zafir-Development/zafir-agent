@@ -39,8 +39,7 @@ async def probe():
     from gateway.run import GatewayRunner
     from gateway.session_authority import initialize_session_authority
     from gateway.run_api import start_gateway_api, stop_gateway_api
-    from hermes_cli import web_server
-    from hermes_cli.dashboard_auth.ws_tickets import mint_ticket
+    from tests.gateway.fixtures.native_ws_auth import prepare_listener, subprotocols, ws_url
     import run_agent
     from agent.credits_tracker import AgentNotice
 
@@ -55,12 +54,10 @@ async def probe():
     run_agent.AIAgent.run_conversation = run_conversation
 
     runner = GatewayRunner()
-    await initialize_session_authority(runner, profile_id='fixture', instance_id='local')
+    await initialize_session_authority(runner, profile_id=os.environ['HERMES_HOME'], instance_id='local')
+    prepare_listener(runner)
     api = await start_gateway_api(runner)
-    port = api.socket.getsockname()[1]
-    web_server.app.state.auth_required = True
-    ticket = mint_ticket(user_id='fixture-creator', provider='local-fixture')
-    ws = await websockets.connect(f'ws://127.0.0.1:{port}/api/ws?ticket={ticket}')
+    ws = await websockets.connect(ws_url(api), subprotocols=subprotocols(runner, subject='fixture-creator'))
     frames = []
 
     async def rpc(method, **params):

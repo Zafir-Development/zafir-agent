@@ -698,48 +698,6 @@ def test_write_never_lowers_a_newer_profile_stamp(plane):
     assert plane.profile("default")["writer"] == newer
 
 
-def _dashboard_put(config):
-    import asyncio
-
-    from fastapi import HTTPException
-
-    from hermes_cli.web_routers.config_env import ConfigUpdate, update_config
-    try:
-        asyncio.run(update_config(ConfigUpdate(config=config)))
-    except HTTPException as exc:
-        return exc.status_code, exc.detail
-    return 200, None
-
-
-def test_dashboard_save_of_a_newly_locked_key_returns_the_lock_message(plane):
-    """The lock arrived on the plane after the last poll, so only the server refuses (403)."""
-    from hermes_cli.config import read_raw_config
-    plane.upper = {"display": {"personality": "old"}}
-    read_raw_config()
-    plane.upper_locks = [{"path": "display.personality", "level": "tenant"}]
-
-    status, detail = _dashboard_put({"display": {"personality": "new"}})
-
-    assert status == 403
-    assert "display.personality" in detail and "tenant" in detail
-    assert plane.profile("default")["values"] == {}
-
-
-def test_dashboard_save_secret_literal_is_a_400(plane):
-    status, detail = _dashboard_put({"model": {"api_key": "sk-live-not-a-ref-1234567890"}})
-    assert status == 400
-    assert "secret-shaped" in detail and "sk-live" not in detail
-    assert plane.patches() == []
-
-
-def test_dashboard_unexpected_config_failure_stays_opaque(plane):
-    from hermes_cli.config import read_raw_config
-    read_raw_config()
-    plane.fail_status = 500  # the write reaches the plane, which fails: not an expected refusal
-    status, detail = _dashboard_put({"display": {"personality": "new"}})
-    assert (status, detail) == (500, "Internal server error")
-
-
 # --- review round 2 regressions -----------------------------------------------------------
 
 def test_refused_source_plane_url_is_never_visible_to_a_concurrent_request(plane, monkeypatch):
@@ -848,37 +806,6 @@ def test_migration_of_a_replaced_doc_does_not_touch_the_replacement(plane, monke
     assert plane.patches() == []
 
 
-def test_dashboard_save_refused_by_plane_value_check_is_a_400(plane):
-    """The plane's own value refusal (config_value_invalid too_deep, contract §11.1) reaches the
-    dashboard as a 400 with its reason, not an opaque 500."""
-    from hermes_cli.config import read_raw_config
-    read_raw_config()
-    value = "leaf"
-    for _ in range(33):
-        value = [value]
-
-    status, detail = _dashboard_put({"display": {"custom": value}})
-
-    assert len(plane.patches()) == 1  # client sent it; the server refused
-    assert status == 400
-    assert "too_deep" in detail and "display" in detail  # the plane's reason and path pass through
-
-
-@pytest.mark.parametrize("status,error,expected", [
-    (400, "config_value_invalid", 400), (400, "config_path_invalid", 400), (400, "config_path_reserved", 400),
-    (400, "config_secret_literal", 400), (413, "config_level_too_large", 413), (413, "config_body_too_large", 413),
-    (400, "config_request_invalid", None), (500, "internal", None)])
-def test_plane_refusals_map_to_http(status, error, expected):
-    from hermes_cli.web_routers._common import config_refusal_http
-    from plugins.config_backends.remote import client
-    exc = backend_mod.RemoteBackend._write_error(
-        client.Response(status=status, body={"error": error, "message": "refused", "path": "a.b"},
-                        etag=None, retry_after=None))
-    http = config_refusal_http(exc)
-    assert (http.status_code if http else None) == expected
-    assert exc.code == error
-
-
 # --- portal-groups (multi-group plane, contract fixtureVersion 2 / ETag v2) ------------------
 
 def _multi_group_plane(plane):
@@ -908,10 +835,9 @@ def test_multi_group_response_fields_are_ignored_and_group_lock_refuses_client_s
     assert p["body"]["set"] == {"model.default": "hermes-5"}
 
 
-def test_plane_group_lock_refusal_maps_to_locked_error_and_403():
+def test_plane_group_lock_refusal_maps_to_locked_error():
     """A server-side config_key_locked from a group lock carries lockedByGroupId (portal-groups
-    §6.6); the agent still maps it to ConfigLockedError(path, "group") and the dashboard's 403."""
-    from hermes_cli.web_routers._common import config_refusal_http
+    §6.6); the agent still maps it to ConfigLockedError(path, "group")."""
     from plugins.config_backends.remote import client
     exc = backend_mod.RemoteBackend._write_error(client.Response(
         status=403, body={"error": "config_key_locked", "path": "terminal.backend", "lockedBy": "group",
@@ -919,8 +845,6 @@ def test_plane_group_lock_refusal_maps_to_locked_error_and_403():
         etag=None, retry_after=None))
     assert isinstance(exc, ConfigLockedError)
     assert (exc.path, exc.locked_by) == ("terminal.backend", "group")
-    http = config_refusal_http(exc)
-    assert http is not None and http.status_code == 403 and "locked by group" in http.detail
 
 
 def test_etag_is_opaque_and_echoed_verbatim(plane, monkeypatch):
@@ -1395,7 +1319,7 @@ def test_routed_hydration_refuses_a_source_that_supplies_a_protected_name(profil
     import os
 
     from hermes_cli import env_loader
-    from hermes_cli.web_server_profiles import _config_profile_scope
+    from hermes_cli.profile_scope import config_profile_scope as _config_profile_scope
     monkeypatch.setattr(env_loader, "_APPLIED_HOMES", set())
     monkeypatch.setattr(env_loader, "_SOURCE_SUPPLIED_NAMES", set())
     monkeypatch.delenv("HERMES_PORTAL_BASE_URL", raising=False)
@@ -1754,50 +1678,45 @@ def test_poll_between_read_and_atomic_config_write_sends_only_the_callers_edit(p
     assert plane.profile("default")["values"]["display"] == {"personality": "pirate", "compact": True}
 
 
-def _dashboard_switch(monkeypatch, url):
-    import asyncio
+def _assign_main(monkeypatch, url):
     from hermes_cli.model_switch import ModelSwitchResult
-    from hermes_cli.web_models import ModelAssignment
-    from hermes_cli.web_routers import models
+    from hermes_cli.profile_model_write import assign_main_model
     result = ModelSwitchResult(success=True, new_model="new", target_provider="custom", provider_changed=True,
                                base_url=url, api_mode="chat_completions", is_global=True)
-    monkeypatch.setattr(models, "_dashboard_code_skew_guard", lambda: None)
-    monkeypatch.setattr(models, "_prepare_main_assignment", lambda *a, **kw: (url, result))
-    return asyncio.run(models.set_model_assignment(ModelAssignment(
-        scope="main", provider="custom", model="new", base_url=url, confirm_expensive_model=True)))
+    monkeypatch.setattr("hermes_cli.profile_model_write._prepare_main_assignment",
+                        lambda *a, **kw: (url, result))
+    return assign_main_model("custom", "new", url, "")
 
 
 _OLD_ROUTE = {"default": "old", "provider": "custom:old", "base_url": "https://old.example/v1",
               "api_key": "${OLD_KEY}", "key_env": "OLD_KEY", "api_key_env": "OLD_KEY", "context_length": 123456}
 
 
-def test_dashboard_model_switch_masks_inherited_endpoint_credentials(plane, monkeypatch):
-    """POST /api/model/set saves the whole document. Under Remote Config its model block is the
+def test_model_assignment_masks_inherited_endpoint_credentials(plane, monkeypatch):
+    """The assignment saves the whole document. Under Remote Config its model block is the
     effective one, so the endpoint-bound keys it clears must be masked (null), not dropped from
     the profile, or the old endpoint's key would reach the new endpoint."""
     from hermes_cli.config import read_user_config_raw
     url = "https://new.example/v1"
     plane.upper = {"model": dict(_OLD_ROUTE), "providers": {"known-new": {"base_url": url}}}
-    assert _dashboard_switch(monkeypatch, url)["ok"] is True
+    assert _assign_main(monkeypatch, url)["ok"] is True
     model = read_user_config_raw()["model"]
     assert model["base_url"] == url
     assert all(model.get(k) is None for k in ("api_key", "key_env", "api_key_env", "context_length")), model
 
 
-def test_dashboard_model_switch_refuses_whole_assignment_on_a_locked_route_key(plane, monkeypatch):
-    """A lock on one route key refuses the dashboard assignment entirely (409/403), like
-    persist_model_selection: nothing is sent, so the old route stays whole."""
-    from fastapi import HTTPException
+def test_model_assignment_refuses_whole_assignment_on_a_locked_route_key(plane, monkeypatch):
+    """A lock on one route key refuses the assignment entirely, like persist_model_selection:
+    nothing is sent, so the old route stays whole."""
     url = "https://new.example/v1"
     plane.upper = {"model": dict(_OLD_ROUTE), "providers": {"known-new": {"base_url": url}}}
     plane.upper_locks = [{"path": "model.base_url", "level": "tenant"}]
-    with pytest.raises(HTTPException) as exc:
-        _dashboard_switch(monkeypatch, url)
-    assert exc.value.status_code in (403, 409), exc.value
+    with pytest.raises(ConfigLockedError):
+        _assign_main(monkeypatch, url)
     assert plane.patches() == []
 
 
-def test_dashboard_model_switch_keeps_mask_when_target_provider_carries_key_env(plane, monkeypatch):
+def test_model_assignment_keeps_mask_when_target_provider_carries_key_env(plane, monkeypatch):
     """The target provider's key_env pointer replaces the inline key. Under Remote Config the
     inherited ``model.api_key`` must stay masked (null) after that credential step, or the old
     endpoint's key (which outranks key_env at runtime) reaches the new endpoint."""
@@ -1807,7 +1726,7 @@ def test_dashboard_model_switch_keeps_mask_when_target_provider_carries_key_env(
     monkeypatch.setenv("OLD_KEY", "old-synthetic-key")
     monkeypatch.setenv("NEW_KEY", "new-synthetic-key")
     plane.upper = {"model": dict(_OLD_ROUTE), "providers": {"custom": {"base_url": url, "key_env": "NEW_KEY"}}}
-    assert _dashboard_switch(monkeypatch, url)["ok"] is True
+    assert _assign_main(monkeypatch, url)["ok"] is True
     body = plane.patches()[-1]["body"]
     assert body["set"].get("model.api_key", "absent") is None and "model.api_key" not in body.get("unset", []), body
     model = read_user_config_raw()["model"]
@@ -1817,10 +1736,9 @@ def test_dashboard_model_switch_keeps_mask_when_target_provider_carries_key_env(
 
 
 @pytest.mark.parametrize("conflict_first", [False, True], ids=["poll", "cas-retry"])
-def test_dashboard_model_switch_refuses_when_a_lock_lands_after_the_guard(plane, monkeypatch, conflict_first):
+def test_model_assignment_refuses_when_a_lock_lands_after_the_guard(plane, monkeypatch, conflict_first):
     """A lock published after the preflight guard (seen by a poll right before the save, or by the
     re-read after a 409) refuses the whole assignment: no half route is saved and acknowledged."""
-    from fastapi import HTTPException
     from hermes_cli import config as cfgmod
     url = "https://new.example/v1"
     plane.upper = {"model": dict(_OLD_ROUTE), "providers": {"known-new": {"base_url": url}}}
@@ -1836,47 +1754,9 @@ def test_dashboard_model_switch_refuses_when_a_lock_lands_after_the_guard(plane,
         return orig(cfg, **kw)
 
     monkeypatch.setattr(cfgmod, "save_config", lock_then_save)
-    with pytest.raises(HTTPException) as exc:
-        _dashboard_switch(monkeypatch, url)
-    assert exc.value.status_code == 403, exc.value
+    with pytest.raises(ConfigLockedError):
+        _assign_main(monkeypatch, url)
     if not conflict_first:
         assert plane.patches() == []
     assert plane.profile("default")["values"].get("model") in (None, {}), plane.profile("default")
 
-
-@pytest.mark.parametrize("schedule", ["locked", "late-poll", "late-retry"])
-def test_custom_endpoint_make_default_refuses_when_its_provider_entry_is_locked(plane, monkeypatch, schedule):
-    """Creating a named custom endpoint with make_default writes providers.<id> AND the model route
-    naming it. A lock on providers (present up front, seen by a poll before the save, or by the
-    re-read after a 409) refuses both: never model.provider naming an entry that was not saved."""
-    from fastapi import HTTPException
-    from hermes_cli.model_switch import ModelSwitchResult
-    from hermes_cli.web_models import CustomEndpointUpdate
-    from hermes_cli.web_routers import config_env
-    plane.upper = {"model": {"default": "old-model", "provider": "custom:old", "base_url": "https://old.example/v1"},
-                   "providers": {"custom:old": {"name": "old", "base_url": "https://old.example/v1", "model": "old-model"}}}
-    lock = [{"path": "providers", "level": "tenant"}]
-    if schedule == "locked":
-        plane.upper_locks = lock
-    monkeypatch.setattr(config_env, "_record_custom_endpoint_setup", lambda home: None)
-    monkeypatch.setattr(config_env, "_validated_main_model_selection", lambda cfg, provider, model, base_url: ModelSwitchResult(
-        success=True, new_model=model, target_provider=provider, provider_changed=True, base_url=base_url,
-        api_mode="chat_completions", is_global=True))
-    if schedule != "locked":
-        backend = get_config_backend()
-        orig = config_env.save_config
-
-        def lock_then_save(cfg, **kw):
-            plane.upper_locks = lock
-            if schedule == "late-poll":
-                assert backend.poll_one(backend._state(plane.home))
-            else:
-                plane.profile("default")["version"] += 1
-            return orig(cfg, **kw)
-
-        monkeypatch.setattr(config_env, "save_config", lock_then_save)
-    with pytest.raises(HTTPException) as exc:
-        config_env.upsert_custom_endpoint(CustomEndpointUpdate(
-            id="new-probe", name="new-probe", base_url="https://new.example/v1", model="new-model", make_default=True))
-    assert exc.value.status_code == 403, exc.value
-    assert plane.profile("default")["values"].get("model") in (None, {}), plane.profile("default")

@@ -1,7 +1,7 @@
 # Shared product builders
 
 These modules compile frontends and assemble a runnable agent from prepared
-inputs. They do not replace pnpm, uv, PM, or Nix.
+inputs. They do not replace pnpm, uv, or PM.
 [Shared bundle builds](../../docs/shared-bundle-builds.md) describes the
 providers and distribution adapters.
 
@@ -13,9 +13,9 @@ build or a target-native runtime.
 
 | Layer | Owns | Examples |
 |---|---|---|
-| Dependency provider | Tools, locked dependencies, native libraries and build environments | `node-deps.mjs`, PM Python operations, Nix `fetchPnpmDeps`/uv2nix, Termux wheelhouse |
-| Product builder | Compilation or application assembly from prepared inputs | `tui.mjs`, `web.mjs`, `agent.py`, `../generate_icons.py` |
-| Distribution adapter | Product selection, target preparation, package layout, signing and publication | `../bundles/`, `../../Dockerfile`, `../../nix/`, `../termux/` |
+| Dependency provider | Tools, locked dependencies, native libraries and build environments | `node-deps.mjs`, PM Python operations, Termux wheelhouse |
+| Product builder | Compilation or application assembly from prepared inputs | `tui.mjs`, `agent.py`, `../generate_icons.py` |
+| Distribution adapter | Product selection, target preparation, package layout, signing and publication | `../bundles/`, `../../Dockerfile`, `../termux/` |
 
 `node-deps.mjs` and `pm.build_environment` prepare dependencies. Unlike the product
 builders, they can access package registries. There is no universal installer,
@@ -28,11 +28,11 @@ build-owned paths.
 
 ```sh
 node scripts/build/node-deps.mjs --source /work/source \
-  --workspace ui-tui --workspace web
+  --workspace ui-tui
 ```
 
 `--source` and at least one `--workspace` are required. A workspace is its
-importer path in `pnpm-lock.yaml` (`ui-tui`, `web`); an unknown path
+importer path in `pnpm-lock.yaml` (`ui-tui`); an unknown path
 fails. The provider deduplicates the selection and runs one root
 `pnpm install --frozen-lockfile --trust-lockfile --prod=false` filtered to the
 selected workspaces and their workspace dependencies. The root project is always
@@ -57,8 +57,6 @@ The prepared source needs these inputs:
 Request the complete workspace union once. A later, narrower install can
 remove dependencies that another product needs. This provider modifies the
 prepared workspace. It does not build a frontend.
-Nix supplies dependencies through `fetchPnpmDeps` (its fixed-output hash is `nix/pnpm-deps-hash`) instead of this command.
-
 `--reuse` opts into reusing a completed dependency install with CI's cached
 `node_modules` tree. The receipt lives inside that tree
 and matches the lockfile, `pnpm-workspace.yaml`, local package manifests,
@@ -79,16 +77,13 @@ can mutate it, and before unrelated build/signing failures can discard it.
 
 ```sh
 node scripts/build/tui.mjs --source /work/source --out /work/products/tui
-node scripts/build/web.mjs --source /work/source \
-  --icons /work/products/icons --out /work/products/web
 ```
 
 | Builder | Required CLI arguments | Additional CLI arguments | Product contents |
 |---|---|---|---|
 | `tui.mjs` | `--source`, `--out` | None | `dist/entry.js`, gateway/clipboard Python helpers in `dist/scripts/`, and `package.json` with `type: module` |
-| `web.mjs` | `--source`, `--out`, `--icons` | None | `index.html`, Vite assets, and public assets |
-Each output is the product directory itself. The exported functions are
-`buildTui` and `buildWeb`. They return output paths and publish the build-input
+The output is the product directory itself. The exported function is
+`buildTui`. It returns the output path and publishes the build-input
 receipt described below.
 
 Each compiler publishes `hermes-build.json` inside its output (inside `dist/`
@@ -107,7 +102,6 @@ with the native provider.
 Source launchers query this owner without provisioning tools:
 
 ```sh
-node scripts/build/freshness.mjs --source /work/source --product web --out /work/products/web
 node scripts/build/freshness.mjs --source /work/source --product tui --out /work/products/tui/dist
 ```
 
@@ -126,7 +120,7 @@ alone does not prove that the latest build succeeded.
 
 Existing arbitrary output directories require the builder's `.hermes-product`
 marker. Files, symlinks, and source directories are rejected. The exact pnpm
-destinations (`ui-tui/dist`, `hermes_cli/web_dist`) remain rebuildable without a
+destinations (`ui-tui/dist`) remain rebuildable without a
 prior marker, and other in-tree products live beneath `.build/`.
 `frontend-common.mjs` classifies these destinations independently of which source
 children already exist, so a warm rebuild uses the same rule as a fresh build.
@@ -136,7 +130,6 @@ a generated destination.
 ### Icons and supplied inputs
 
 `--icons` names the generator's output root, not a directory of loose icons.
-The web builder reads `web/public/` beneath it and requires `favicon.ico`.
 
 Run the generator with a Hermes runtime Python (Pillow and resvg-py are core
 dependencies):
@@ -147,7 +140,7 @@ python scripts/generate_icons.py --source /work/source --out /work/products/icon
 ```
 
 The generator reads artwork from `SOURCE/assets` and writes its declared paths
-beneath `OUT` (the dashboard frontend and website artwork). `--check` regenerates
+beneath `OUT` (the website artwork). `--check` regenerates
 targets in memory and checks
 output image properties. It does not compare output bytes with regenerated bytes.
 The generator writes targets directly, not through the frontend
@@ -161,11 +154,8 @@ node scripts/generate-icons.mjs --source /work/source --out /work/products/icons
 ```
 
 Both icon commands accept `--check`. Without explicit paths, they use the
-source checkout as the output root. Builders without a runtime environment
-prepare one with `scripts/build/icon_environment.py`.
+source checkout as the output root.
 
-The web builder always runs its TypeScript project check. The compilers do
-not build the dashboard or sign files.
 
 ### Source-development entrypoints
 
@@ -173,14 +163,12 @@ Existing workspace scripts use these recipes:
 
 ```sh
 pnpm --dir ui-tui run build
-pnpm --dir web run build
 ```
 
 | Command | Output | Preparation outside the product compiler |
 |---|---|---|
 | TUI build | `ui-tui/dist/entry.js` | Existing installed workspace dependencies |
-| Web build | `hermes_cli/web_dist/` | npm `prebuild` prepares icons |
-TUI and web scripts support a no-argument development mode. Explicit product
+The TUI script supports a no-argument development mode. Explicit product
 mode requires the arguments in the earlier table. The Node product parsers
 expose no `--help` flag.
 
@@ -214,7 +202,7 @@ PM owns pinned installer acquisition, environment creation, frozen workspace
 sync, dependency checks, and failure cleanup. Callers never resolve or pass a uv
 executable. It preserves project policy, uses the supplied interpreter, and
 disables interpreter downloads. It does not discover user plugins or publish a
-live PM selection. Nix retains its declarative dependency provider. Termux builds
+live PM selection. Termux builds
 native wheels separately, then uses PM's requirements-environment operation with
 an explicit bionic interpreter and an offline wheelhouse. The build cache remains
 available after this call.
@@ -282,7 +270,7 @@ All supplied filesystem input paths must be absolute and exist. `repo` and
 | `tools` | No | Prepared runtime tool directory. The manifest defaults to `tools` if omitted |
 | `command_dir` | For `references` | Directory of prepared commands declared by the project |
 | `resources` | No | Resource-name to directory mapping |
-| `frontends` | No | `tui` and/or `web` product paths |
+| `frontends` | No | `tui` product path |
 | `ref` | No | Source identity copied to the completion manifest |
 | `stamp` | No | Prepared install stamp copied to `OUT/repo/install-stamp.json` |
 | `features` | No | Prepared feature inventory copied to `OUT/enabled-features.json` |
@@ -291,11 +279,11 @@ All supplied filesystem input paths must be absolute and exist. `repo` and
 Recognized resource names are `skills`, `optional-skills`, `plugins`, `locales`,
 and `optional-mcps`. Distribution adapters supply the required resources.
 The generic assembler does not infer a missing resource mapping. TUI inputs
-require `dist/entry.js` and `package.json`. Web inputs require `index.html`.
+require `dist/entry.js` and `package.json`.
 
 The PM marker supplies `python` and `sitePackages` paths relative to its runtime
 directory, or absolute store references. These paths must resolve to real
-inputs. If a supplied stamp declares `nix` or `docker`, its `pmRuntime` must
+  inputs. If a supplied stamp declares `docker`, its `pmRuntime` must
 match the supplied PM runtime. The assembler does not create that environment.
 
 ### Placement and output
@@ -308,8 +296,7 @@ match the supplied PM runtime. The assembler does not create that environment.
   Docker and Termux use this placement.
 - **`references`:** Assembly references installed code and commands without
   copying Python code or replacing wheel metadata. It links explicit resources
-  and frontends, then emits `command-map.json`. Nix creates its native wrappers
-  from this map.
+  and frontends, then emits `command-map.json`.
 
 Source-layout placement writes project distribution metadata without building
 a Hermes wheel. It also writes `site_packages/hermes-agent.pth` with a relative
@@ -322,9 +309,8 @@ runs the target interpreter and therefore needs a runnable native environment.
 A target label alone does not prove ABI compatibility.
 
 For copied frontends, the assembler places TUI files at
-`OUT/repo/hermes_cli/tui_dist/` and web files at
-`OUT/repo/hermes_cli/web_dist/`. Reference placement links TUI at `OUT/ui-tui`
-and web at `OUT/repo/web_dist` and records their environment bindings.
+`OUT/repo/hermes_cli/tui_dist/`. Reference placement links TUI at `OUT/ui-tui`
+and records its environment binding.
 
 After structural assembly, `manifest.json` records `schema`, `target`, `repo`,
 `venv`, `store`, `launchers`, and `runtime`, plus `ref` when supplied. Its
@@ -346,7 +332,6 @@ These locations define the interfaces described here:
 |---|---|
 | Frontend arguments and publication | `frontend-common.mjs:34–77` |
 | TUI product and development output | `tui.mjs:25–103` |
-| Web inputs and TypeScript check | `web.mjs:8–71` |
 | Locked workspace union | `node-deps.mjs:84–149` |
 | Python provider | `../../pm/operations.py`, `../../pm/environment.py` |
 | Agent input fields and checks | `inputs.py:30–115` |
@@ -360,12 +345,11 @@ They do not establish offline compilation, cache reuse, or runtime success.
 Artifact acceptance still needs these checks:
 
 - Real frontend builds from immutable prepared inputs without network access.
-- Standalone TUI interaction and dashboard assets/backend behavior.
+- Standalone TUI interaction.
 - Agent CLI, ACP, plugins, and catalogs from an unrelated working directory.
 - Native payload relocation and offline mutable-environment reconstruction.
 - Docker runtime probes as its non-root user and layer-content inspection.
-- Actual Nix builds and commands through store-reference wrappers.
 - Fresh network-disabled bionic installation and Android device acceptance.
 
-Docker/Nix build execution belongs to the distribution verification work, not
+Docker build execution belongs to the distribution verification work, not
 this documentation pass. No build-pass claim follows from this reference.

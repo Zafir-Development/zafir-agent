@@ -6,7 +6,6 @@ import { parseArgs } from 'node:util'
 import { isMain } from './frontend-common.mjs'
 
 const receiptName = 'hermes-build.json'
-const workspaces = { tui: 'ui-tui', web: 'web' }
 // Another product's output under a workspace is never this product's input.
 const generated = new Set(['node_modules', 'dist', 'build', 'release', '.cache', '.git', 'coverage', 'test-results', 'playwright-report'])
 
@@ -34,25 +33,16 @@ const tuiInputs = [
 
 function productInputs(product) {
   if (product === 'tui') return tuiInputs
-  const workspace = workspaces[product]
-  if (!workspace) throw new Error(`Unknown frontend product: ${product}`)
-  return [
-    workspace, 'apps/shared', 'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', '.npmrc', 'pm/lock.json',
-    'scripts/build',
-    'scripts/generate-icons.mjs', 'scripts/generate_icons.py',
-    'assets', 'pyproject.toml', 'uv.lock',
-  ]
+  throw new Error(`Unknown frontend product: ${product}`)
 }
 
-function skipInput(product) {
-  return name => {
-    // Build scripts are inputs; workspace build directories are outputs.
-    const parts = name.split('/')
-    return (!name.startsWith('scripts/') && parts.some(part => generated.has(part)))
-      || (product === 'tui' && (parts.includes('__tests__') || /\.(test|spec)(-d)?\.[cm]?[jt]sx?$/.test(name)))
-      || parts.some(part => part.startsWith('.dist-') || part.startsWith('.staging-') || part === '__pycache__')
-      || name.endsWith('.tsbuildinfo') || name.endsWith('.pyc')
-  }
+function skipInput(name) {
+  // Build scripts are inputs; workspace build directories are outputs.
+  const parts = name.split('/')
+  return (!name.startsWith('scripts/') && parts.some(part => generated.has(part)))
+    || parts.includes('__tests__') || /\.(test|spec)(-d)?\.[cm]?[jt]sx?$/.test(name)
+    || parts.some(part => part.startsWith('.dist-') || part.startsWith('.staging-') || part === '__pycache__')
+    || name.endsWith('.tsbuildinfo') || name.endsWith('.pyc')
 }
 
 // Pre-order walk: a directory is reported before its sorted children.
@@ -79,7 +69,7 @@ function treeHash(root, inputs, skip, contents = () => true) {
 }
 
 export function sourceHash(source, product) {
-  return treeHash(source, productInputs(product), skipInput(product))
+  return treeHash(source, productInputs(product), skipInput)
 }
 
 function outputHash(out) {

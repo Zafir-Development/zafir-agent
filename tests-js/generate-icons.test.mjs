@@ -13,11 +13,10 @@ test('the real wrapper builds and checks native icon artifacts in an independent
   try {
     const args = ['--source', fileURLToPath(new URL('..', import.meta.url)), '--out', out]
     expect(generateIcons(args, { env })).toBe(0)
-    // Retained outputs: the shared brand master and the dashboard favicon. The
-    // desktop app icon outputs went with the desktop packaging removal.
+    // Retained outputs: the shared brand master and the website favicon.
     const svg = fs.readFileSync(path.join(out, 'assets/icon-master.svg'), 'utf8')
     expect(svg).toContain('<svg')
-    const ico = fs.readFileSync(path.join(out, 'web/public/favicon.ico'))
+    const ico = fs.readFileSync(path.join(out, 'website/static/img/favicon.ico'))
     expect(ico.subarray(0, 4)).toEqual(Buffer.from([0, 0, 1, 0]))
     expect(generateIcons([...args, '--check'], { env })).toBe(0)
     expect(env.PYTHONPATH).toBe(path.join(out, 'foreign-site'))

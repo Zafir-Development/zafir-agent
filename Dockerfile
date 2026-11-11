@@ -67,7 +67,7 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/opt/hermes/tools
 # ran as PID 1. See #15012. Phase 2 of the s6-overlay supervision plan
 # replaces tini with s6-overlay's /init (PID 1 = s6-svscan), which reaps
 # zombies non-blockingly on SIGCHLD and additionally supervises the main
-# hermes process, the dashboard, and per-profile gateways.
+# hermes process and per-profile gateways.
 # The second package list is the shared libraries the pinned Chromium links
 # against. `npx playwright install --with-deps` used to apt-install them as
 # a side effect; pm stages the pinned browser instead (below), so the libs
@@ -119,8 +119,8 @@ sys.exit('SQLite FTS5 trigram self-test failed') if db.execute(\"SELECT count(*)
 db.close()"
 
 # ---------- s6-overlay install ----------
-# s6-overlay provides supervision for the main hermes process, the dashboard,
-# and per-profile gateways. /init becomes PID 1 below — see ENTRYPOINT.
+# s6-overlay provides supervision for the main hermes process and
+# per-profile gateways. /init becomes PID 1 below — see ENTRYPOINT.
 #
 # Multi-arch: BuildKit auto-populates TARGETARCH (amd64 / arm64). s6-overlay
 # uses tarball names keyed on the kernel arch string (x86_64 / aarch64), so
@@ -305,14 +305,6 @@ RUN python3 -m pm.build_env --source /opt/hermes --python /usr/local/bin/python3
     --extra all --extra messaging --extra otlp --extra anthropic --extra bedrock \
     --extra azure-identity --extra matrix --extra google-chat --extra fal --extra documents
 
-# Icons render on the runtime environment: Pillow and resvg-py are core
-# dependencies. A stage of its own so the frontend stage keeps building its
-# Node dependencies in parallel with the Python ones.
-FROM python_deps AS icons
-COPY scripts/generate_icons.py scripts/
-COPY assets/ assets/
-RUN /opt/hermes/.venv/bin/python -I scripts/generate_icons.py --source /opt/hermes --out /tmp/hermes-icons
-
 # Frontend dependencies never enter the runtime layers.
 FROM runtime_base AS frontend_build
 # pnpm installs the workspaces; nothing in the runtime image runs it, so only
@@ -320,26 +312,20 @@ FROM runtime_base AS frontend_build
 RUN python3 -c 'from pathlib import Path; from pm import ensure, installed_package; ensure("pnpm", explicit=True); Path("/usr/local/bin/pnpm").symlink_to(installed_package("pnpm").binary)' && \
     pnpm --version
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
-COPY web/package.json web/
 COPY ui-tui/package.json ui-tui/
 COPY ui-tui/packages/hermes-ink/ ui-tui/packages/hermes-ink/
 COPY apps/shared/ apps/shared/
 COPY scripts/build/node-deps.mjs scripts/build/pnpm-lock.mjs scripts/build/
 # Root node_modules/typescript is a link into pnpm's virtual store, which never
 # reaches the runtime image: stage a dereferenced copy for it.
-RUN node scripts/build/node-deps.mjs --source /opt/hermes --workspace ui-tui --workspace web && \
+RUN node scripts/build/node-deps.mjs --source /opt/hermes --workspace ui-tui && \
     mkdir -p /opt/products && \
     cp -RL node_modules/typescript /opt/products/typescript
 
 COPY pyproject.toml uv.lock ./
-COPY web/ web/
 COPY ui-tui/ ui-tui/
 COPY scripts/build/*.mjs scripts/build/
-COPY scripts/generate-icons.mjs scripts/generate_icons.py scripts/
-COPY assets/ assets/
-COPY --from=icons /tmp/hermes-icons /tmp/hermes-icons
-RUN node scripts/build/tui.mjs --source /opt/hermes --out /opt/products/tui && \
-    node scripts/build/web.mjs --source /opt/hermes --icons /tmp/hermes-icons --out /opt/products/web
+RUN node scripts/build/tui.mjs --source /opt/hermes --out /opt/products/tui
 
 FROM python_deps AS runtime
 # Standalone TypeScript linting is a runtime feature; Vite/esbuild are not.
@@ -365,7 +351,6 @@ RUN cd plugins/platforms/photon/sidecar && \
 
 # Shared product outputs are independent of application dependency assembly.
 COPY --from=frontend_build /opt/products/tui /opt/hermes/ui-tui
-COPY --from=frontend_build /opt/products/web /opt/hermes/hermes_cli/web_dist
 # ---------- Bot Screen X socket directory ----------
 # Xvnc would create this itself (/tmp is 1777); pre-creating it keeps ownership
 # deterministic when HERMES_UID is remapped between boots.
@@ -438,7 +423,7 @@ RUN set -eu; \
     python3 -c 'import json, pathlib, tomllib; project = tomllib.loads(pathlib.Path("/opt/hermes/pyproject.toml").read_text(encoding="utf-8"))["project"]; stamp = json.loads(pathlib.Path("/opt/hermes/install-stamp.json").read_text(encoding="utf-8")); commit = stamp.get("commit"); revision = commit if commit and set(commit) != {"0"} else None; marker = pathlib.Path("/etc/hermes/image-provenance.json"); marker.write_text(json.dumps({"schema": 1, "deployment_kind": "image", "manager": "docker", "image": "nousresearch/hermes-agent", "version": project["version"], "revision": revision}, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8"); marker.chmod(0o444)'
 
 # ---------- s6-overlay service wiring ----------
-# Static services declared at build time: main-hermes, dashboard and
+# Static services declared at build time: main-hermes and
 # profile-gateways. Per-profile gateway services are registered
 # dynamically at runtime by the profile create/delete hooks (Phase 4);
 # they live under /run/hermes-service/ (tmpfs), supervised by the
@@ -463,7 +448,6 @@ COPY --chmod=0755 docker/cont-init.d/015-supervise-perms /etc/cont-init.d/015-su
 COPY --chmod=0755 docker/cont-init.d/02-reconcile-profiles /etc/cont-init.d/02-reconcile-profiles
 
 # ---------- Runtime ----------
-ENV HERMES_WEB_DIST=/opt/hermes/hermes_cli/web_dist
 # Point the TUI launcher at the prebuilt bundle baked at build time (the
 # frontend_build stage's scripts/build/tui.mjs product). This makes
 # _make_tui_argv take the prebuilt-bundle fast path

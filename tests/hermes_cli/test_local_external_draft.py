@@ -16,10 +16,6 @@ import pytest
 from hermes_cli.local_runtime import bootstrap, catalog, presets
 from hermes_cli.local_runtime.catalog import AssetFile, CatalogEntry, QuantVariant
 from hermes_cli.local_runtime.estimator import HardwareBudget
-from tests.hermes_cli import test_local_download_jobs
-from tests.hermes_cli.test_local_download_jobs import poll
-
-client = test_local_download_jobs.client  # the download-jobs app, for this file's route tests
 
 GIB = 1 << 30
 MIB = 1 << 20
@@ -249,7 +245,7 @@ def test_two_models_stay_resident_where_two_drafted_launches_fit(model):
 
 
 def _staged(monkeypatch, *entries):
-    from hermes_cli.web_routers import local_models as lm
+    from hermes_cli import local_models_service as lm
 
     monkeypatch.setattr(lm.catalog, "CATALOG", entries)
     monkeypatch.setattr(lm.bootstrap, "staged_model_ids", lambda: [e.variants[0].model_id for e in entries])
@@ -274,138 +270,6 @@ def test_installed_models_missing_their_draft_get_it_from_the_engine_update(monk
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.touch()
     assert lm._missing_drafts("b11671") == []
-
-
-def test_the_update_job_downloads_missing_drafts_then_restarts_the_server(client, monkeypatch):
-    lm = _staged(monkeypatch, ENTRY)
-    engine = SimpleNamespace(tag="b11671", backend="cpu")
-    monkeypatch.setattr(lm, "_runtime_target", lambda backend=None: ("b11671", "cpu"))
-    monkeypatch.setattr(lm.binaries, "installed_engine", lambda backend: engine)
-    monkeypatch.setattr(lm, "_install_engine_job", lambda job, backend: engine)
-    fetched, events = [], []
-    monkeypatch.setattr(lm, "_download_job", lambda job, plan: fetched.extend(plan))
-    monkeypatch.setattr(lm.bootstrap, "get_supervisor", lambda: object())
-    monkeypatch.setattr(lm.bootstrap, "refresh_local_runtime", lambda: events.append("restart"))
-
-    job_id = client.post("/api/local-models/runtime/install", json={"backend": "cpu"}).json()["job_id"]
-
-    assert poll(client, job_id, until=("done", "error"))["status"] == "done"
-    assert [dest.name for _, dest, _ in fetched] == [ENTRY.draft.local_name]
-    assert events == ["restart"]
-
-
-def test_a_draft_that_fails_to_download_leaves_the_model_downloaded(client, monkeypatch, tmp_path):
-    """The draft only speeds generation up: a 404 on it costs the user the draft, never the model
-    it was meant to speed up."""
-    lm = _staged(monkeypatch, ENTRY)
-    models, assets = tmp_path / "models", tmp_path / "assets"
-    monkeypatch.setattr(lm.bootstrap, "models_dir", lambda: models)
-    monkeypatch.setattr(lm.bootstrap, "assets_dir", lambda: assets)
-    monkeypatch.setattr(lm, "_refresh_runtime", lambda *args: None)
-
-    def download(job, plan):
-        if any(dest.name == ENTRY.draft.local_name for _, dest, _ in plan):
-            raise RuntimeError("download failed from https://huggingface.co/lab/Hybrid-DFlash-GGUF: HTTP Error 404")
-        for _, dest, _ in plan:
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            dest.touch()
-
-    monkeypatch.setattr(lm, "_download_job", download)
-
-    job_id = client.post("/api/local-models/download", json={"model_id": BUILD.model_id}).json()["job_id"]
-
-    assert poll(client, job_id, until=("done", "error"))["status"] == "done"
-    assert (models / BUILD.files[0].local_name).is_file()
-    assert not (assets / ENTRY.draft.local_name).exists()
-
-
-def _update_job(monkeypatch, *, serving: str, on_download=None):
-    """The engine update over a running server on ``serving``, with b11671 already installed."""
-    lm = _staged(monkeypatch, ENTRY)
-    engine = SimpleNamespace(tag="b11671", backend="cpu")
-    monkeypatch.setattr(lm, "_runtime_target", lambda backend=None: ("b11671", "cpu"))
-    monkeypatch.setattr(lm.binaries, "installed_engine", lambda backend: engine)
-    monkeypatch.setattr(lm, "_install_engine_job", lambda job, backend: engine)
-    monkeypatch.setattr(lm, "_download_job", on_download or (lambda job, plan: None))
-    monkeypatch.setattr(lm.bootstrap, "get_supervisor", lambda: object())
-    monkeypatch.setattr(lm.bootstrap, "serving_engine", lambda: SimpleNamespace(tag=serving, backend="cpu"))
-    events = []
-    monkeypatch.setattr(lm.bootstrap, "refresh_local_runtime", lambda: events.append("restart"))
-    return lm, events
-
-
-def test_a_pause_between_the_drafts_and_the_restart_still_restarts_on_resume(client, monkeypatch):
-    """The pause lands as the last draft finishes. On resume no draft is missing, and the server
-    still needs the restart that loads them."""
-    def download(job, plan):
-        for _, dest, _ in plan:
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            dest.touch()
-        lm._RUNNING[job["job_id"]]["pause"].set()
-
-    lm, events = _update_job(monkeypatch, serving="b11671", on_download=download)
-    job_id = client.post("/api/local-models/runtime/install", json={"backend": "cpu"}).json()["job_id"]
-    assert poll(client, job_id, until=("paused", "done", "error"))["status"] == "paused"
-    assert events == []
-
-    assert client.post("/api/local-models/download/resume", json={"job_id": job_id}).json()["resumed"]
-
-    assert poll(client, job_id, until=("done", "error"))["status"] == "done"
-    assert events == ["restart"]
-
-
-def _failing_download(job, plan):
-    raise RuntimeError("download failed from https://huggingface.co/lab/Hybrid-DFlash-GGUF: HTTP Error 404")
-
-
-def test_a_failed_draft_download_still_switches_the_server_to_the_new_build(client, monkeypatch):
-    """The draft only speeds generation up. A draft that fails to download leaves the model on MTP,
-    and the server still moves to the build the update installed."""
-    _, events = _update_job(monkeypatch, serving="b11370", on_download=_failing_download)
-
-    job_id = client.post("/api/local-models/runtime/install", json={"backend": "cpu"}).json()["job_id"]
-
-    assert poll(client, job_id, until=("done", "error"))["status"] == "done"
-    assert events == ["restart"]
-
-
-def test_a_failed_draft_download_alone_leaves_the_server_running(client, monkeypatch):
-    """Nothing new landed for a restart to load, so a server already on the installed build keeps
-    serving."""
-    _, events = _update_job(monkeypatch, serving="b11671", on_download=_failing_download)
-
-    job_id = client.post("/api/local-models/runtime/install", json={"backend": "cpu"}).json()["job_id"]
-
-    assert poll(client, job_id, until=("done", "error"))["status"] == "done"
-    assert events == []
-
-
-def test_a_pause_during_the_draft_download_pauses_the_update(client, monkeypatch):
-    from pm.downloader import DownloadPaused
-
-    def paused(job, plan):
-        raise DownloadPaused("download paused")
-
-    _, events = _update_job(monkeypatch, serving="b11370", on_download=paused)
-
-    job_id = client.post("/api/local-models/runtime/install", json={"backend": "cpu"}).json()["job_id"]
-
-    assert poll(client, job_id, until=("paused", "done", "error"))["status"] == "paused"
-    assert events == []
-
-
-def test_the_update_restarts_a_server_still_on_an_older_build(client, monkeypatch):
-    """An earlier update installed b11671 and stopped before its restart: the server still runs
-    the old build, and the next update switches it over."""
-    draft = bootstrap.assets_dir() / ENTRY.draft.local_name
-    draft.parent.mkdir(parents=True, exist_ok=True)
-    draft.touch()
-    _, events = _update_job(monkeypatch, serving="b11370")
-
-    job_id = client.post("/api/local-models/runtime/install", json={"backend": "cpu"}).json()["job_id"]
-
-    assert poll(client, job_id, until=("done", "error"))["status"] == "done"
-    assert events == ["restart"]
 
 
 def test_an_installed_model_without_its_draft_still_reads_as_downloaded(monkeypatch):

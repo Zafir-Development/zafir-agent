@@ -7,7 +7,10 @@ boundary.
 The compatibility contract covers only updaters shipped before the PM migration,
 not imports introduced on the unshipped migration branch or in the working tree.
 `old_updater_surface.json` retains an existing history-plus-tree superset; keep
-every frozen name, without continually adding new PM updater imports.
+every frozen name, without continually adding new PM updater imports. The
+removal plan's D9 exception retires only the old web-build updater shims; the
+exact exports are listed in `tests/test_old_updater_compat_surface.py` and are
+no longer required after a checkout swap.
 
 One exception grows the list: updaters from v0.21.6 on still import from the
 new tree after the swap (a Ctrl-C after the commit point, a lost completion,

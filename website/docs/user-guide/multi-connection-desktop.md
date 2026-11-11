@@ -322,7 +322,7 @@ connection in parallel:
   note: the platform manages their versions.
 
 Each instance reports independently, so one unreachable box never wedges the
-batch. Backends that manage updates externally (Docker, Nix) refuse politely
+batch. Backends that manage updates externally (Docker) refuse politely
 with their own message, per row.
 
 You rarely need the Settings button, though: once more than one update target

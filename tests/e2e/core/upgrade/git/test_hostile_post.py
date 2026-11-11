@@ -4,11 +4,11 @@ One real HEAD install (``_git_world``: the real ``scripts/install.sh`` over real
 command in a ``bwrap`` sandbox) is shared by the cells. Each cell publishes a hostile upstream
 release and breaks something that runs AFTER the checkout moved, for real:
 
-(a) the web UI build fails: the release's own ``scripts/build/web.mjs`` exits 1 while
-    ``$HOME/.e2e-break-web-build`` exists, and the release changes a web build input (``web.mjs``
-    itself lives under ``scripts/build``, plus a new file under ``web/``) so ``freshness.mjs`` reports
-    the web UI stale and the updater must build it. A config migration is owed too
-    (``_config_version`` lowered by one): one failed step must not skip later independent ones.
+(a) the TUI build fails: the release's own ``scripts/build/tui.mjs`` exits 1 while
+    ``$HOME/.e2e-break-tui-build`` exists, and the release changes a TUI build input (``tui.mjs``
+    itself lives under ``scripts/build``, plus a new file under ``ui-tui/src/``) so
+    ``freshness.mjs`` reports the TUI stale and the updater must build it. A config migration is
+    owed too (``_config_version`` lowered by one): one failed step must not skip later independent ones.
 (b) a gateway that refuses to restart: a credential-free, platform-less (cron-only) ``hermes
     gateway run`` lives in the same PID namespace as the updater (``handoff._nshost``). The release
     makes ``hermes_cli.gateway.run_gateway`` exit 1 before booting while
@@ -16,8 +16,8 @@ release and breaks something that runs AFTER the checkout moved, for real:
     no fault) and its relaunch boots the NEW code, which refuses to start: the restart fails for real,
     no gateway serves the new commit. Removing the toggle and updating again must retry the owed
     restart.
-(c) SIGKILL during the post-commit tail: the release's ``web.mjs`` writes
-    ``$HOME/.e2e-web-build-started`` and sleeps 120 s while ``$HOME/.e2e-slow-web-build`` exists. The
+(c) SIGKILL during the post-commit tail: the release's ``tui.mjs`` writes
+    ``$HOME/.e2e-tui-build-started`` and sleeps 120 s while ``$HOME/.e2e-slow-tui-build`` exists. The
     update runs in the shared namespace; once the slow build started, every process born after the
     update was spawned is SIGSTOPped then SIGKILLed (that is the whole update tree, including a
     completion child in its own session or reparented to the namespace init).
@@ -29,7 +29,7 @@ release and breaks something that runs AFTER the checkout moved, for real:
     the completion bootstrap from the NEW tree, after the checkout moved. Exit 0, a ``dependencies``
     follow-up, the tail obligation armed; the next update completes it.
 (f) Ctrl-C after the commit point: SIGINT (what a terminal's Ctrl-C delivers to the foreground
-    ``hermes update``; the completion child runs in its own session) while the slow web build runs.
+    ``hermes update``; the completion child runs in its own session) while the slow TUI build runs.
     The user must read that the new code is in place and the rest is owed, never a failure.
 
 What is asserted is what the user sees: the exit code, ``⚠`` lines, the receipt at
@@ -63,36 +63,36 @@ from tests.e2e.core.upgrade.handoff._nshost import NamespaceHost
 pytestmark = G.PYTESTMARK
 
 WARN = "⚠"
-BREAK_WEB = ".e2e-break-web-build"
-SLOW_WEB = ".e2e-slow-web-build"
-WEB_STARTED = ".e2e-web-build-started"
+BREAK_TUI = ".e2e-break-tui-build"
+SLOW_TUI = ".e2e-slow-tui-build"
+TUI_STARTED = ".e2e-tui-build-started"
 BREAK_GATEWAY = ".e2e-break-gateway-boot"
 BREAK_DEPS = ".e2e-break-deps-sync"
-TOGGLES = (BREAK_WEB, SLOW_WEB, WEB_STARTED, BREAK_GATEWAY, BREAK_DEPS)
+TOGGLES = (BREAK_TUI, SLOW_TUI, TUI_STARTED, BREAK_GATEWAY, BREAK_DEPS)
 DEPS_FAULT_TEXT = "e2e: dependency sync fails on purpose"
 DEPS_OWED = "dependencies not installed yet"  # update_completion._settle_after_commit
 INTERRUPTED_AFTER_COMMIT = "Interrupted after the code was updated"  # update_receipt
-WEB_FAULT_TEXT = "e2e: the web build fails on purpose"
+TUI_FAULT_TEXT = "e2e: the TUI build fails on purpose"
 GATEWAY_FAULT_TEXT = "e2e: gateway boot refused on purpose"
 OWED_RESTART = "did not restart running gateways"  # update_cmd_fleet._warn_pending_fleet_restart
 PROFILE = "e2epost"
 UPDATE_TIMEOUT = 1500
-_WEB_MARK = "// e2e (test_hostile_post): hostile build toggles"
+_TUI_MARK = "// e2e (test_hostile_post): hostile build toggles"
 _GATEWAY_MARK = "# e2e (test_hostile_post): hostile gateway boot toggle"
 _DEPS_MARK = "# e2e (test_hostile_post): hostile dependency sync toggle"
 
-_HOSTILE_WEB = f"""{_WEB_MARK}, keyed on files in $HOME.
+_HOSTILE_TUI = f"""{_TUI_MARK}, keyed on files in $HOME.
 import {{ existsSync as e2eExists, writeFileSync as e2eWrite }} from 'node:fs'
 import {{ homedir as e2eHomedir }} from 'node:os'
 const e2eHomes = [...new Set([process.env.HOME, e2eHomedir()].filter(Boolean))]
 const e2eToggle = name => e2eHomes.some(home => e2eExists(`${{home}}/${{name}}`))
-if (e2eToggle('{BREAK_WEB}')) {{
-  console.error('{WEB_FAULT_TEXT} ({BREAK_WEB})')
+if (e2eToggle('{BREAK_TUI}')) {{
+  console.error('{TUI_FAULT_TEXT} ({BREAK_TUI})')
   process.exit(1)
 }}
-if (e2eToggle('{SLOW_WEB}')) {{
-  for (const home of e2eHomes) {{ try {{ e2eWrite(`${{home}}/{WEB_STARTED}`, String(process.pid)) }} catch {{}} }}
-  console.log('e2e: slow web build started ({SLOW_WEB})')
+if (e2eToggle('{SLOW_TUI}')) {{
+  for (const home of e2eHomes) {{ try {{ e2eWrite(`${{home}}/{TUI_STARTED}`, String(process.pid)) }} catch {{}} }}
+  console.log('e2e: slow TUI build started ({SLOW_TUI})')
   await new Promise(resolve => setTimeout(resolve, 120000))
 }}
 """
@@ -230,25 +230,25 @@ def _head_file(w: G.World, rel: str) -> str:
     return w.git("show", f"HEAD:{rel}") + "\n"
 
 
-def _hostile_web_mjs(w: G.World) -> str:
-    """The checkout's ``scripts/build/web.mjs`` with the toggle block after its imports."""
-    text = _head_file(w, "scripts/build/web.mjs")
-    if _WEB_MARK in text:
+def _hostile_tui_mjs(w: G.World) -> str:
+    """The checkout's ``scripts/build/tui.mjs`` with the toggle block after its imports."""
+    text = _head_file(w, "scripts/build/tui.mjs")
+    if _TUI_MARK in text:
         return text
     lines = text.splitlines(keepends=True)
     last_import = max(i for i, line in enumerate(lines) if line.startswith("import "))
     while " from " not in lines[last_import] and last_import + 1 < len(lines):  # a multi-line import
         last_import += 1
-    out = "".join(lines[:last_import + 1]) + _HOSTILE_WEB + "".join(lines[last_import + 1:])
-    assert out.count(_WEB_MARK) == 1
+    out = "".join(lines[:last_import + 1]) + _HOSTILE_TUI + "".join(lines[last_import + 1:])
+    assert out.count(_TUI_MARK) == 1
     return out
 
 
-def _publish_web_release(w: G.World, tag: str) -> str:
-    """A release whose web build obeys the toggles and whose web inputs changed (web UI stale)."""
-    return w.publish(f"release: e2e hostile post web {tag}", {
-        "scripts/build/web.mjs": _hostile_web_mjs(w),
-        f"web/e2e-hostile-post-{tag}.txt": f"web input changed by release {tag}\n",
+def _publish_tui_release(w: G.World, tag: str) -> str:
+    """A release whose TUI build obeys the toggles and whose TUI inputs changed (TUI stale)."""
+    return w.publish(f"release: e2e hostile post tui {tag}", {
+        "scripts/build/tui.mjs": _hostile_tui_mjs(w),
+        f"ui-tui/src/e2e-hostile-post-{tag}.txt": f"TUI input changed by release {tag}\n",
     })
 
 
@@ -346,7 +346,7 @@ def _gateway_logs(w: G.World) -> str:
 # -- cells ---------------------------------------------------------------------------------------
 
 
-def test_failed_web_build_after_commit_is_a_followup_not_a_failed_update(w):
+def test_failed_tui_build_after_commit_is_a_followup_not_a_failed_update(w):
     w.reset_clean()
     _clear_toggles(w)
     latest = _config_version(w)
@@ -356,14 +356,14 @@ def test_failed_web_build_after_commit_is_a_followup_not_a_failed_update(w):
         latest = int(DEFAULT_CONFIG["_config_version"])
     owed = latest - 1
     _edit_config(w, lambda cfg: cfg.update(_config_version=owed))
-    target = _publish_web_release(w, "a")
+    target = _publish_tui_release(w, "a")
     log0 = len(_read(_update_log(w)))
 
-    _toggle(w, BREAK_WEB, True)
+    _toggle(w, BREAK_TUI, True)
     try:
         cp = w.update("--no-gateway-restart")
     finally:
-        _toggle(w, BREAK_WEB, False)
+        _toggle(w, BREAK_TUI, False)
     out = G.output(cp)
     log = _read(_update_log(w))[log0:]
     rec = w.receipt()
@@ -371,14 +371,14 @@ def test_failed_web_build_after_commit_is_a_followup_not_a_failed_update(w):
     diag = facts + w.diag(cp)
 
     assert w.head() == target, f"premise: the release never committed, so this is no post-commit cell:\n{diag}"
-    assert WEB_FAULT_TEXT in out + log, f"premise: the hostile web build never ran (web UI not seen stale?):\n{diag}"
-    assert cp.returncode == 0, f"the code committed, yet a failed web build failed `hermes update`:\n{diag}"
-    assert _warn_lines(out), f"the failed web build was not surfaced with a ⚠ line:\n{diag}"
+    assert TUI_FAULT_TEXT in out + log, f"premise: the hostile TUI build never ran (TUI not seen stale?):\n{diag}"
+    assert cp.returncode == 0, f"the code committed, yet a failed TUI build failed `hermes update`:\n{diag}"
+    assert _warn_lines(out), f"the failed TUI build was not surfaced with a ⚠ line:\n{diag}"
     assert rec.get("outcome") == "success", f"receipt outcome is not success after the commit:\n{diag}"
     assert "build" in _followup_steps(rec), f"receipt followups do not name the failed `build` step:\n{diag}"
     assert _pending_markers(w), f"the failed build disarmed the source-completion obligation:\n{diag}"
     assert (_config_version(w) or 0) >= latest, (
-        f"the failed web build skipped the independent config migration (_config_version still "
+        f"the failed TUI build skipped the independent config migration (_config_version still "
         f"{_config_version(w)}, latest {latest}):\n{diag}")
 
     # The fault clears; the next plain update (no new release) pays the owed tail.
@@ -388,8 +388,8 @@ def test_failed_web_build_after_commit_is_a_followup_not_a_failed_update(w):
     assert cp.returncode == 0 and w.head() == target, f"the healing update failed:\n{diag}"
     assert not _followups(rec), f"the healing update still reports followups:\n{diag}"
     assert not _pending_markers(w), f"the healing update left the completion obligation armed:\n{diag}"
-    assert (w.checkout / "hermes_cli" / "web_dist" / "index.html").is_file(), \
-        f"the healing update did not build the web UI:\n{diag}"
+    assert (w.checkout / "ui-tui" / "dist" / "entry.js").is_file(), \
+        f"the healing update did not build the TUI:\n{diag}"
 
 
 def test_gateway_that_cannot_reboot_is_an_owed_restart_not_a_failed_update(w):
@@ -461,10 +461,10 @@ def test_sigkill_during_post_commit_tail_leaves_a_running_receipt(w):
     w.reset_clean()
     _clear_toggles(w)
     prev = w.receipt()
-    target = _publish_web_release(w, "c")
+    target = _publish_tui_release(w, "c")
     log0 = len(_read(_update_log(w)))
-    started = w.sb.home / WEB_STARTED
-    _toggle(w, SLOW_WEB, True)
+    started = w.sb.home / TUI_STARTED
+    _toggle(w, SLOW_TUI, True)
     killed: list[int] = []
     try:
         with _namespace(w) as host:
@@ -477,22 +477,22 @@ def test_sigkill_during_post_commit_tail_leaves_a_running_receipt(w):
                 if started.is_file():
                     return True
                 if not host.alive(upd):
-                    raise AssertionError(f"premise: the update exited before the slow web build started:\n"
+                    raise AssertionError(f"premise: the update exited before the slow TUI build started:\n"
                                          f"{_read(spawn_log)[-6000:]}\n{w.diag()}")
                 return False
 
-            H.wait_for(_slow_build_running, timeout=1200, interval=1.0, what="the slow web build to start")
+            H.wait_for(_slow_build_running, timeout=1200, interval=1.0, what="the slow TUI build to start")
             with contextlib.suppress(AssertionError):
-                H.wait_for(lambda: re.search(r"web UI|slow web build", _read(_update_log(w))[log0:]),
-                           timeout=30, interval=0.5, what="update.log to show the web build")
-            log_shows_build = bool(re.search(r"web UI|slow web build", _read(_update_log(w))[log0:]))
+                H.wait_for(lambda: re.search(r"Building the TUI|slow TUI build", _read(_update_log(w))[log0:]),
+                           timeout=30, interval=0.5, what="update.log to show the TUI build")
+            log_shows_build = bool(re.search(r"Building the TUI|slow TUI build", _read(_update_log(w))[log0:]))
             killed = _kill_born_after(host, before)
             rec = w.receipt()
-            facts = _facts(w, killed=killed, update_spawn_pid=upd, log_shows_web_build=log_shows_build,
+            facts = _facts(w, killed=killed, update_spawn_pid=upd, log_shows_tui_build=log_shows_build,
                            previous_update_id=prev.get("update_id"))
             diag = facts + w.diag() + "\n--- spawned update output ---\n" + _read(spawn_log)[-6000:]
     finally:
-        _toggle(w, SLOW_WEB, False)
+        _toggle(w, SLOW_TUI, False)
         started.unlink(missing_ok=True)
 
     assert killed, f"premise: nothing was killed:\n{diag}"
@@ -611,9 +611,9 @@ def test_ctrl_c_after_commit_reports_the_new_code_not_a_failed_update(w):
     w.reset_clean()
     _clear_toggles(w)
     prev = w.receipt()
-    target = _publish_web_release(w, "f")
-    started = w.sb.home / WEB_STARTED
-    _toggle(w, SLOW_WEB, True)
+    target = _publish_tui_release(w, "f")
+    started = w.sb.home / TUI_STARTED
+    _toggle(w, SLOW_TUI, True)
     try:
         with _namespace(w) as host:
             spawn_log = w.sb.root / "update-f.log"  # sandbox-writable
@@ -624,11 +624,11 @@ def test_ctrl_c_after_commit_reports_the_new_code_not_a_failed_update(w):
                 if started.is_file():
                     return True
                 if not host.alive(upd):
-                    raise AssertionError(f"premise: the update exited before the slow web build started:\n"
+                    raise AssertionError(f"premise: the update exited before the slow TUI build started:\n"
                                          f"{_read(spawn_log)[-6000:]}\n{w.diag()}")
                 return False
 
-            H.wait_for(_slow_build_running, timeout=1200, interval=1.0, what="the slow web build to start")
+            H.wait_for(_slow_build_running, timeout=1200, interval=1.0, what="the slow TUI build to start")
             interrupted = _foreground_group(host, upd)
             for pid in interrupted:
                 host.kill(pid, signal.SIGINT)
@@ -643,7 +643,7 @@ def test_ctrl_c_after_commit_reports_the_new_code_not_a_failed_update(w):
                     + w.diag() + "\n--- sandbox ---\n" + host.ps_text()
                     + "\n--- interrupted update output ---\n" + out[-6000:])
     finally:
-        _toggle(w, SLOW_WEB, False)
+        _toggle(w, SLOW_TUI, False)
         started.unlink(missing_ok=True)
 
     assert w.head() == target, f"premise: the SIGINT landed before the release committed:\n{diag}"

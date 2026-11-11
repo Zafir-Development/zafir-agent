@@ -267,7 +267,7 @@ def test_every_set_lane_reaches_its_consumer_whatever_the_other_lanes_say(combo)
 # One-file changes from the review's direct classifier run (acceptance/classifier.json),
 # and the suites each must dispatch on a pull request.
 _R15_CASES = {
-    "scripts/build/web.mjs": ("e2e_upgrade",),
+    "scripts/build/tui.mjs": ("e2e_upgrade",),
     "hermes_cli/_subprocess_compat.py": ("e2e_upgrade",),
     "hermes_cli/desktop_build_lock.py": ("e2e_upgrade",),
     "hermes_cli/memory_provider_migration.py": ("e2e_upgrade",),
@@ -305,18 +305,6 @@ def test_update_path_change_selects_every_suite_that_exercises_it(path, lanes):
         if lane.startswith("e2e"):
             reached = _consumers_reached(run, lane)
             assert all(reached.values()), f"{path}: {lane}=true never reaches {reached}"
-
-
-# Review CI2/CI3: update-path files the classifier sent to the wrong suites.
-_CI3_CASES = {
-    # /api/health `commit` is read on the update path.
-    "hermes_cli/web_routers/status.py": ("python",),
-}
-
-
-@pytest.mark.parametrize("path,lanes", list(_CI3_CASES.items()))
-def test_update_path_change_reaches_the_suites_that_consume_it(path, lanes):
-    test_update_path_change_selects_every_suite_that_exercises_it(path, lanes)
 
 
 def test_gateway_status_routing_names_the_stamp_not_its_prefix_siblings():
@@ -703,7 +691,7 @@ def _python_script_seeds(entries: tuple[str, ...]) -> set[str]:
 
 def test_build_scripts_the_update_runs_start_the_upgrade_suite():
     reached = _js_closure(_python_script_seeds(cc._UPDATE_ENTRY_POINTS))
-    assert "scripts/build/web.mjs" in reached, "seed scan broke: source_build runs web.mjs"
+    assert "scripts/build/tui.mjs" in reached, "seed scan broke: source_build runs tui.mjs"
     unowned = sorted(f for f in reached if not cc.classify([f])["e2e_upgrade"])
     assert unowned == []
 

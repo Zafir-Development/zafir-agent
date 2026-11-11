@@ -39,7 +39,7 @@ def _lazy(module, name):
 
 
 def _pin_profile_model(profile_dir, provider, model, base_url="") -> None:
-    _lazy("hermes_cli.web_routers.profiles", "_write_profile_model")(
+    _lazy("hermes_cli.profile_model_write", "write_profile_model")(
         profile_dir, provider, model, base_url=base_url)
 
 

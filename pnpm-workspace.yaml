@@ -2,7 +2,6 @@ packages:
   - apps/*
   - ui-tui
   - ui-tui/packages/*
-  - web
   - tests-js
 
 engineStrict: true

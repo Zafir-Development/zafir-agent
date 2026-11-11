@@ -169,30 +169,6 @@ def test_stop_all_leaves_another_homes_gateway_process_alone(monkeypatch, record
     assert recorded == [("kill", 111)]
 
 
-def test_dashboard_stop_refuses_while_sessions_are_live(monkeypatch):
-    pytest.importorskip("fastapi")
-    from fastapi.testclient import TestClient
-    from gateway import host_attach
-    from hermes_cli import web_server, web_server_gateway
-
-    _live_gateway(monkeypatch, _WORK)
-    monkeypatch.setattr(host_attach, "host_gateway", lambda **kw: None)
-    monkeypatch.setattr(web_server_gateway, "multiplexed_profile_refusal", lambda *a: None)
-    spawned: list = []
-    monkeypatch.setattr(web_server_gateway, "_spawn_hermes_action",
-                        lambda argv, name: spawned.append(argv) or SimpleNamespace(pid=1))
-    client = TestClient(web_server.app)
-    client.headers[web_server._SESSION_HEADER_NAME] = web_server._SESSION_TOKEN
-
-    refused = client.post("/api/gateway/stop")
-    assert refused.status_code == 409
-    assert "chat turn agent:main:telegram:dm:7" in refused.json()["detail"]
-    assert spawned == []
-
-    assert client.post("/api/gateway/stop?interrupt=true").status_code == 200
-    assert spawned and spawned[0][-1] == "--interrupt"
-
-
 @pytest.mark.platforms("linux")
 def test_sudo_system_stop_checks_the_units_home_not_roots(tmp_path, monkeypatch, recorded, capsys):
     """``sudo hermes gateway stop --system``: HOME=/root and HERMES_HOME stripped, while the system unit

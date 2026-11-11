@@ -22,7 +22,6 @@ from types import SimpleNamespace
 import pytest
 
 from hermes_cli import main as hermes_main
-from hermes_cli import main_web_build
 from hermes_cli import main_install_repair
 from hermes_cli import update_cmd
 from hermes_cli import update_cmd_fleet
@@ -96,8 +95,10 @@ def _patch_update_deps(monkeypatch, tmp_path, run_side_effect):
     # would miss. Fake the runner itself so the seam holds on every OS.
     from hermes_cli import update_custody
 
-    monkeypatch.setattr(update_custody, "run",
-                        lambda argv, *, inherit_lock=False, **kw: run_side_effect(list(argv), **kw))
+    monkeypatch.setattr(
+        update_custody, "run_git",
+        lambda git_cmd, args, **kw: run_side_effect([*git_cmd, *args], **kw),
+    )
     monkeypatch.setattr(hermes_main, "PROJECT_ROOT", tmp_path)
     monkeypatch.setattr(update_cmd, "_prepare_updated_checkout", lambda *a, **k: None)
     (tmp_path / ".git").mkdir()
@@ -122,9 +123,6 @@ def _patch_update_deps(monkeypatch, tmp_path, run_side_effect):
     monkeypatch.setattr(hermes_main, "_clear_bytecode_cache", lambda *a, **k: 0)
     monkeypatch.setattr(
         hermes_main, "_record_bytecode_fingerprint", lambda *a, **k: None
-    )
-    monkeypatch.setattr(
-        main_web_build, "_record_bytecode_fingerprint", lambda *a, **k: None
     )
     monkeypatch.setattr(hermes_main, "_run_pre_update_backup", lambda *a, **k: None)
     monkeypatch.setattr(
@@ -152,9 +150,6 @@ def _patch_update_deps(monkeypatch, tmp_path, run_side_effect):
     monkeypatch.setattr(
         "hermes_cli.update_cmd._reload_config_modules",
         lambda *a, **k: None,
-    )
-    monkeypatch.setattr(
-        "hermes_cli.update_cmd_maint._refresh_dashboard_after_update", lambda **k: None,
     )
     # The startup version-info probe runs git rev-parse HEAD (and the
     # result is cached per-process, so whether it runs depends on test

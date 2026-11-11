@@ -13,8 +13,6 @@ Lanes:
 * ``docker_meta`` — Dockerfiles etc.
 * ``docker``      — the image build: docker meta, the dependency manifests, PM,
   and the image's own tests.
-* ``nix``         — ``nix flake check``: the flake files and the dependency
-  manifests.
 * ``e2e``, ``e2e_upgrade`` — the end-to-end suites. The classifier still says
   which suites a diff touches (``_E2E_LANES``, the ``run-e2e`` label), but
   ci.yaml's ``detect`` gate forces these lanes off on pull requests and pushes
@@ -42,7 +40,7 @@ Lanes:
   other test of those backends is mocked, so a change to the backends, the
   terminal tool, or the real-backend tests runs it on the PR.
 
-``docker``, ``nix`` and the E2E lanes take most of the larger-runner minutes.
+``docker`` and the E2E lanes take most of the larger-runner minutes.
 An ordinary product change does not start them on a pull request. Every push
 to main runs them all (a push has no diff, so every lane is on), so a
 regression they catch shows up on main after the merge. A stable-release run
@@ -59,10 +57,6 @@ must never skip one a change could break:
   or a frontend-only package; an unrecognized path keeps it on.
 * ``skills/`` (incl. ``SKILL.md``) is python-relevant — the skill-doc tests
   read that tree, so a doc-looking edit can still break Python.
-* ``nix/``, ``flake.nix`` and ``flake.lock`` are the exception the other way:
-  only the flake reads them, so they skip the Python lanes and run ``nix``
-  alone. ``pyproject.toml`` and ``uv.lock`` are flake inputs too, but the
-  packaging tests read them, so they keep every Python lane.
 * ``website/static/oauth/`` is python-relevant too: it publishes the OAuth
   Client ID Metadata Document that ``tests/tools/test_mcp_cimd.py`` checks
   against the pinned callback ports in ``tools/mcp_oauth.py``.
@@ -82,7 +76,7 @@ import os
 import subprocess
 import sys
 
-_FRONTEND = ("ui-tui/", "web/", "apps/")  # TS typecheck-matrix packages
+_FRONTEND = ("ui-tui/", "apps/")  # TS typecheck-matrix packages
 # The WhatsApp bridge's ``node --test`` suites run in the JS & TS job, so a
 # change to the bridge or to the Python adapter that speaks its protocol
 # selects ``frontend``.
@@ -90,8 +84,6 @@ _WHATSAPP_BRIDGE = ("scripts/whatsapp-bridge/", "plugins/platforms/whatsapp/")
 # Shift every package's tree (pnpm-workspace.yaml carries the overrides).
 _ROOT_NPM = {"package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml"}
 _DOCKER_META = ("docker/", ".hadolint.yaml", "Dockerfile", ".dockerignore") # docker setup
-_NIX_PATHS = ("nix/",) # nix files
-_NIX_FILES = {"flake.nix", "flake.lock"} # base nix files
 _SITE = ("website/", "skills/", "optional-skills/")  # docs site + skill pages
 # Prose/frontend trees that can't touch Python. skills/ is excluded on purpose.
 _PY_SKIP = ("docs/", "website/") + _FRONTEND
@@ -204,7 +196,7 @@ _PY_TEST_HARNESS = (
 _UPDATE_PIPELINE = (
     "hermes_cli/main.py",  # cmd_update: lock, pre-update backup, receipt boundary
     "hermes_cli/main_dashboard.py",  # hangup protection + update.log mirror
-    "hermes_cli/main_web_build.py",  # completion's bytecode sweep and dropped-folder prune
+    "hermes_cli/update_bytecode.py",  # completion's bytecode sweep and dropped-folder prune
     # Prefix: main_desktop.py (staged Desktop swap / rebuild in the tail) and the
     # main_desktop_* siblings it imports (macOS signing identity).
     "hermes_cli/main_desktop",
@@ -282,7 +274,6 @@ _UPDATE_DEPENDENCIES = (
     "hermes_cli/memory_provider_migration.py",
     "hermes_cli/left_core_migration.py",  # source_build migrates plugins that left core
     "hermes_cli/config_version_stamp.py",  # post_update converts legacy AGENT_BROWSER_* before stamping
-    "hermes_cli/web_build_limits.py",  # source_build caps the dashboard Node build
     "hermes_cli/desktop_console.py",
     "hermes_cli/bundled_app.py",
     "hermes_cli/gui_uninstall.py",
@@ -323,7 +314,7 @@ _UPDATE_DEPENDENCIES = (
     "tools/skills_sync.py",
     "tools/environments/local_env_policy.py",
     "pm/progress.py",
-    # The compilers source_build runs (freshness, node-deps, tui, web and their
+    # The compilers source_build runs (freshness, node-deps, tui and their
     # shared frontend-common).
     "scripts/build/",
 )
@@ -412,11 +403,10 @@ for _lane in ("e2e_upgrade",):
 _E2E_LANE_EXCLUDES = {
     "e2e": ("tests/e2e/core/upgrade/", "tests/e2e/core/windows_update/"),
 }
-# The image builds the TUI and dashboard frontends from the shared recipe and
-# apps/shared, so those inputs route here.
+# The image builds the TUI frontend from the shared recipe and apps/shared, so
+# those inputs route here.
 _DOCKER_PATHS = (*_DOCKER_META, *_DEP_MANIFESTS, *_NPM_MANIFESTS, "pm/", "tests/docker/",
                  "apps/shared/package.json", "scripts/build/")
-_NIX_LANE_PATHS = (*_NIX_PATHS, *_NIX_FILES, *_DEP_MANIFESTS, *_NPM_MANIFESTS)
 
 # A pull request with this label runs every slow lane, whatever it touches.
 RUN_E2E_LABEL = "run-e2e"
@@ -427,10 +417,6 @@ def _is_docs(p: str) -> bool:
     return p.endswith((".md", ".mdx")) or p.startswith("docs/") or p.startswith("LICENSE")
 
 
-def _is_nix(p: str) -> bool:
-    return p.startswith(_NIX_PATHS) or p in _NIX_FILES
-
-
 def _py_irrelevant(p: str) -> bool:
     if p.startswith(_PY_RELEVANT_SITE) or p in _PY_RELEVANT_CONTRACT_FILES:
         return False
@@ -439,7 +425,6 @@ def _py_irrelevant(p: str) -> bool:
         or p in _ROOT_NPM
         or p.startswith(_PY_SKIP)
         or p.startswith(_DOCKER_META)
-        or _is_nix(p)
     )
 
 
@@ -461,7 +446,6 @@ def _slow_lanes(files: list[str]) -> dict[str, bool]:
         for lane, paths in _E2E_LANES.items()
     }
     lanes["docker"] = any(f.startswith(_DOCKER_PATHS) for f in files)
-    lanes["nix"] = any(f.startswith(_NIX_LANE_PATHS) for f in files)
     return lanes
 
 

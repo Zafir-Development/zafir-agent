@@ -1,46 +1,17 @@
-"""The gateway-restart flow refuses BEFORE it stops anything (#125394, #77276).
+"""The CLI gateway-restart flow refuses BEFORE it stops anything (#125394, #77276).
 
-The Desktop backend's ``_spawn_gateway_restart`` used to reap "orphan" gateways
-before spawning ``hermes gateway restart``; when that child then refused (a
-named profile under the host multiplexer) the profile had already lost its
-gateway. The reap belongs to the child, after its refusal guard.
+``hermes gateway restart`` used to reap "orphan" gateways before dispatching the
+restart; when the child then refused (a named profile under the host multiplexer)
+the profile had already lost its gateway. The reap belongs to the child, after
+its refusal guard.
 """
 from __future__ import annotations
 
-import subprocess
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
 
 import pytest
 
 from hermes_cli import gateway as gw
-
-
-@pytest.fixture(autouse=True)
-def reset_restart_cooldown():
-    from hermes_cli import web_server
-
-    web_server._LAST_GATEWAY_RESTART = None
-    yield
-    web_server._LAST_GATEWAY_RESTART = None
-
-
-@patch("hermes_cli.web_server_gateway._gateway_subcommand", return_value=["gateway", "restart"])
-@patch("hermes_cli.web_server_gateway._spawn_hermes_action")
-@patch("hermes_cli.web_server_gateway._ACTION_PROCS", {})
-def test_backend_spawns_restart_without_stopping_anything(mock_spawn, mock_subcmd):
-    mock_proc = MagicMock(spec=subprocess.Popen)
-    mock_proc.poll.return_value = None
-    mock_spawn.return_value = mock_proc
-
-    from hermes_cli.web_server import _spawn_gateway_restart
-
-    with patch("hermes_cli.gateway._reap_unsupervised_gateway_orphans") as reap:
-        proc, reused = _spawn_gateway_restart()
-
-    reap.assert_not_called()
-    mock_spawn.assert_called_once()
-    assert proc is mock_proc and not reused
 
 
 def test_cli_restart_reaps_after_the_refusal_guard(monkeypatch):

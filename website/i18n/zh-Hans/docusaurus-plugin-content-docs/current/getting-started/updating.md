@@ -196,26 +196,6 @@ python -m pm.cli install
 如果新增了配置选项，回滚可能导致配置不兼容。回滚后运行 `hermes config check`，如果遇到错误，请从 `config.yaml` 中删除无法识别的选项。
 :::
 
-### Nix 用户注意事项
-
-如果你通过 Nix flake 安装，更新由 Nix 包管理器负责：
-
-```bash
-# Update the flake input
-nix flake update hermes-agent
-
-# Or rebuild with the latest
-nix profile upgrade hermes-agent
-```
-
-Nix 安装是不可变的 — 回滚由 Nix 的 generation 系统处理：
-
-```bash
-nix profile rollback
-```
-
-详情参见 [Nix 安装](./nix-setup.md)。
-
 ---
 
 ## 卸载

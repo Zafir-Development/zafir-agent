@@ -363,20 +363,10 @@
     "kind": "bare_which"
   },
   {
-    "path": "hermes_cli/update_abort_recovery.py",
-    "symbol": "_serve_unit_recovery_available",
-    "kind": "bare_which"
-  },
-  {
     "path": "hermes_cli/update_cmd_commit.py",
     "symbol": "_absolute_git",
     "kind": "bare_which",
     "reason": "records, as an absolute path, the git this updater already runs (git_cmd[0] on the PATH expose_pm_git extended) so the launch-time repair can rerun it without importing pm"
-  },
-  {
-    "path": "hermes_cli/update_restart_recovery.py",
-    "symbol": "_systemctl_scopes",
-    "kind": "bare_which"
   },
   {
     "path": "hermes_cli/update_restart_recovery.py",

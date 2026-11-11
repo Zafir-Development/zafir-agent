@@ -108,23 +108,6 @@ def hosted_home(request, tmp_path, monkeypatch):
     plugins_mod._reset_plugin_managers_for_tests()
 
 
-@pytest.mark.platforms("any")  # the host is a child process
-def test_a_refused_save_crosses_the_host_as_a_400_with_no_secret_saved(hosted_home):
-    from starlette.testclient import TestClient
-    from hermes_cli.config import load_env
-    from hermes_cli.web_server import _SESSION_HEADER_NAME, _SESSION_TOKEN, app
-
-    (hosted_home / "hostedprov.json").write_text("{not json", encoding="utf-8")
-    client = TestClient(app, headers={_SESSION_HEADER_NAME: _SESSION_TOKEN})
-
-    resp = client.put("/api/memory/providers/hostedprov/config?surface=declared",
-                      json={"values": {"workspace": "w", "apiKey": "hp-key"}})
-
-    assert resp.status_code == 400
-    assert "HOSTEDPROV_API_KEY" not in load_env()
-    assert (hosted_home / "hostedprov.json").read_text(encoding="utf-8") == "{not json"
-
-
 @pytest.mark.platforms("any")
 def test_a_profile_hook_runs_in_the_host_and_its_host_is_stopped(hosted_home):
     from hermes_cli.profiles import create_profile

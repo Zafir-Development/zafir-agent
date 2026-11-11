@@ -27,46 +27,46 @@ _log = logging.getLogger(__name__)
 # Scale-to-zero: tell the (separate) gateway process a dashboard/desktop/TUI client is attached via
 # the mtime of a marker file it reads in its idle predicate (gateway/scale_to_zero.py). Clients ping
 # every 15s; one write per 5s per process is plenty.
-_DASHBOARD_CLIENT_TOUCH_MIN_INTERVAL_S = 5.0
-_dashboard_client_touched_at = 0.0
-_dashboard_client_touch_lock = threading.Lock()
+_SESSION_CLIENT_TOUCH_MIN_INTERVAL_S = 5.0
+_session_client_touched_at = 0.0
+_session_client_touch_lock = threading.Lock()
 # The touch is file I/O and every caller sits on the event loop, where a slow disk stalls every
 # connection, managed-worker RPCs included (#139011). It runs on its own single worker so it never
 # ties up the pool asyncio.to_thread shares, and at most one write per path waits behind a slow one.
-_dashboard_client_touch_pool = concurrent.futures.ThreadPoolExecutor(
+_session_client_touch_pool = concurrent.futures.ThreadPoolExecutor(
     max_workers=1, thread_name_prefix="dashboard-client-touch")
-_dashboard_client_touch_pending: set = set()
+_session_client_touch_pending: set = set()
 
 
-def _touch_dashboard_client_marker(path) -> None:
-    with _dashboard_client_touch_lock:
+def _touch_session_client_marker(path) -> None:
+    with _session_client_touch_lock:
         # Cleared before the write: activity during a slow write queues exactly one follow-up.
-        _dashboard_client_touch_pending.discard(path)
-    from gateway.scale_to_zero import touch_dashboard_client_heartbeat
-    touch_dashboard_client_heartbeat(path)  # best-effort, never raises
+        _session_client_touch_pending.discard(path)
+    from gateway.scale_to_zero import touch_session_client_heartbeat
+    touch_session_client_heartbeat(path)  # best-effort, never raises
 
 
-def _note_dashboard_client_activity(*, force: bool = False) -> None:
-    """Refresh the dashboard-client liveness marker (throttled, best-effort, never blocks the caller)."""
-    global _dashboard_client_touched_at
+def _note_session_client_activity(*, force: bool = False) -> None:
+    """Refresh the session-client liveness marker (throttled, best-effort, never blocks the caller)."""
+    global _session_client_touched_at
     now = time.monotonic()
-    with _dashboard_client_touch_lock:
-        if not force and now - _dashboard_client_touched_at < _DASHBOARD_CLIENT_TOUCH_MIN_INTERVAL_S:
+    with _session_client_touch_lock:
+        if not force and now - _session_client_touched_at < _SESSION_CLIENT_TOUCH_MIN_INTERVAL_S:
             return
-        _dashboard_client_touched_at = now
+        _session_client_touched_at = now
     path = None
     try:
-        from gateway.scale_to_zero import dashboard_client_heartbeat_path
+        from gateway.scale_to_zero import session_client_heartbeat_path
         # The process's own home, whatever profile scope the socket runs in (the watcher reads it).
-        path = dashboard_client_heartbeat_path()
-        with _dashboard_client_touch_lock:
-            if path in _dashboard_client_touch_pending:
+        path = session_client_heartbeat_path()
+        with _session_client_touch_lock:
+            if path in _session_client_touch_pending:
                 return
-            _dashboard_client_touch_pending.add(path)
-        _dashboard_client_touch_pool.submit(_touch_dashboard_client_marker, path)
-    except Exception:
-        _dashboard_client_touch_pending.discard(path)  # a refused submit (shutdown) must not wedge it
-        _log.debug("dashboard client heartbeat touch failed", exc_info=True)
+            _session_client_touch_pending.add(path)
+        _session_client_touch_pool.submit(_touch_session_client_marker, path)
+    except Exception:  # health: allow BLE001 -- best-effort liveness marker; must never break the socket reader
+        _session_client_touch_pending.discard(path)  # a refused submit (shutdown) must not wedge it
+        _log.debug("session client heartbeat touch failed", exc_info=True)
 
 
 def _sanitize_ws_text(text: str) -> str:
@@ -643,7 +643,7 @@ async def handle_ws(ws: Any, *, auth_identity: dict | None = None, subprotocol: 
         await (ws.accept(subprotocol=subprotocol) if subprotocol else ws.accept())
         disconnect_reason = "connected"
         # Mark the client attached before the (possibly slow) ready/skin setup so scale-to-zero sees it.
-        _note_dashboard_client_activity(force=True)
+        _note_session_client_activity(force=True)
         _disable_nagle(ws)
         _log.info("ws accepted peer=%s", peer)
         transport = WSTransport(ws, asyncio.get_running_loop(), peer=peer, auth_identity=auth_identity)
@@ -683,7 +683,7 @@ async def handle_ws(ws: Any, *, auth_identity: dict | None = None, subprotocol: 
         while True:
             try:
                 raw = await _unless_dispatch_failed(ws.receive_text())
-                _note_dashboard_client_activity()
+                _note_session_client_activity()
             except _SendFailed:
                 raise
             except _WebSocketDisconnect as exc:

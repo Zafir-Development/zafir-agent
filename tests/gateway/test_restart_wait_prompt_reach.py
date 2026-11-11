@@ -120,44 +120,6 @@ async def test_restart_wait_commits_new_input_queued_and_never_claims_it(tmp_pat
 
 
 @pytest.mark.asyncio
-async def test_restart_wait_serves_only_the_reads_that_open_the_parked_session():
-    """Desktop finds and opens the parked conversation over HTTP (sidebar, detail, transcript); every
-    write and unrelated route keeps the drain's 503, and stop() withdraws the reads too."""
-    from gateway.run_api import GatewayRuntimeAPI
-
-    reached = []
-
-    async def app(scope, receive, send):
-        reached.append((scope['method'], scope['path']))
-        await send({'type': 'http.response.start', 'status': 200, 'headers': []})
-        await send({'type': 'http.response.body', 'body': b'{}'})
-
-    runner = SimpleNamespace(_draining=True, _running=True,
-                             session_runtime_descriptor={'state': 'draining', 'drain_reason': 'restart_wait'})
-    api = GatewayRuntimeAPI(app, runner, SimpleNamespace(state=None))
-
-    async def status(method, path):
-        sent = []
-
-        async def receive():
-            return {'type': 'http.request', 'body': b''}
-
-        async def send(message):
-            sent.append(message)
-        await api({'type': 'http', 'method': method, 'path': path, 'headers': [], 'query_string': b'',
-                   'client': ('127.0.0.1', 1)}, receive, send)
-        return sent[0]['status']
-
-    reads = ['/api/profiles/sessions/sidebar', '/api/profiles/sessions', '/api/sessions/s1',
-             '/api/sessions/s1/messages', '/api/sessions/s1/messages/around', '/api/sessions/s1/timeline',
-             '/api/health', '/api/status']
-    assert [await status('GET', path) for path in reads] == [200] * len(reads)
-    refused = [('PATCH', '/api/sessions/s1'), ('DELETE', '/api/sessions/s1'), ('POST', '/api/sessions'),
-               ('GET', '/api/config'), ('GET', '/api/sessions/s1/export/x'), ('POST', '/api/model/set')]
-    assert [await status(m, path) for m, path in refused] == [503] * len(refused)
-    del runner.session_runtime_descriptor['drain_reason']  # stop() began: nothing is served anymore
-    assert await status('GET', '/api/profiles/sessions/sidebar') == 503
-    assert reached == [('GET', path) for path in reads]
 
 
 @pytest.mark.asyncio
@@ -252,12 +214,11 @@ async def test_restart_wait_cuts_sockets_opened_before_it(tmp_path, monkeypatch,
 
     from gateway.run_api import GatewayRuntimeAPI
     from gateway.runtime_bootstrap import TicketStore
-    from hermes_cli import web_server as web
-    from hermes_cli import web_server_chat
+    from types import SimpleNamespace as _NS
 
     tickets = TicketStore("owner", [str(tmp_path)])
     ticket = tickets.mint(profile_id=str(tmp_path), subject="human", purpose="interactive")
-    authority = SimpleNamespace(db=SimpleNamespace(db_path=tmp_path / "state.db"), profile_id=str(tmp_path), runner=None)
+    authority = SimpleNamespace(db=SimpleNamespace(db_path=tmp_path / "state.db"), profile_id=str(tmp_path), instance_id="owner", runner=None)
     runner = SimpleNamespace(_draining=False, _running=True, session_runtime_descriptor={"state": "ready"},
                              session_authority=authority, session_ticket_store=tickets)
 
@@ -283,8 +244,6 @@ async def test_restart_wait_cuts_sockets_opened_before_it(tmp_path, monkeypatch,
         pytest.fail("a ticketed native socket must not enter the legacy fallback")
 
     monkeypatch.setattr("tui_gateway.ws.handle_ws", handle)
-    monkeypatch.setattr(web, "_DASHBOARD_EMBEDDED_CHAT_ENABLED", True)
-    monkeypatch.setattr(web_server_chat, "_ws_request_is_allowed", lambda ws: True)
     frame = json.dumps({"method": "prompt.receipt"})
     incoming = iter([{"type": "websocket.connect"}, {"type": "websocket.receive", "text": frame},
                      {"type": "websocket.disconnect", "code": 1000}])
@@ -297,9 +256,10 @@ async def test_restart_wait_cuts_sockets_opened_before_it(tmp_path, monkeypatch,
 
     scope = {"type": "websocket", "path": "/api/ws", "scheme": "ws", "query_string": b"",
              "client": ("127.0.0.1", 1234), "server": ("127.0.0.1", 9999),
-             "headers": [(b"sec-websocket-protocol", ("hermes-gateway-v1, hermes-gateway-ticket." + ticket).encode())],
+             "headers": [(b"host", b"127.0.0.1:9999"),
+                         (b"sec-websocket-protocol", ("hermes-gateway-v1, hermes-gateway-ticket." + ticket).encode())],
              "subprotocols": ["hermes-gateway-v1", "hermes-gateway-ticket." + ticket]}
-    await GatewayRuntimeAPI(fallback, runner, web.app)(scope, receive, send)
+    await GatewayRuntimeAPI(fallback, runner, _NS(bound_host="127.0.0.1"))(scope, receive, send)
     if opened_in_wait:
         assert received == [("text", frame), ("disconnect", 1000)], received
     else:

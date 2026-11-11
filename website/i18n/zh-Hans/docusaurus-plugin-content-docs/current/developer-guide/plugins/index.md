@@ -1084,43 +1084,6 @@ my-plugin = "my_plugin_package"
 `hermes plugins install` / `enable` 进行事务式准入。新环境选定后重启 Hermes。
 `hermes pm install` 接受托管工具名称，不接受任意 PyPI 包名。
 
-## 为 NixOS 分发
-
-如果你提供了带有 entry points 的 `pyproject.toml`，NixOS 用户可以声明式安装你的插件：
-
-**Entry-point 插件**（推荐用于分发）：
-```nix
-# User's configuration.nix
-services.hermes-agent.extraPythonPackages = [
-  (config.services.hermes-agent.package.python.pkgs.buildPythonPackage {
-    pname = "my-plugin";
-    version = "1.0.0";
-    src = pkgs.fetchFromGitHub {
-      owner = "you";
-      repo = "hermes-my-plugin";
-      rev = "v1.0.0";
-      hash = "sha256-...";  # nix-prefetch-url --unpack
-    };
-    format = "pyproject";
-    build-system = [ config.services.hermes-agent.package.python.pkgs.setuptools ];
-  })
-];
-```
-
-**目录插件**（无需 `pyproject.toml`）：
-```nix
-services.hermes-agent.extraPlugins = [
-  (pkgs.fetchFromGitHub {
-    owner = "you";
-    repo = "hermes-my-plugin";
-    rev = "v1.0.0";
-    hash = "sha256-...";
-  })
-];
-```
-
-完整文档（包括 overlay 用法和冲突检查）见 [Nix 设置指南](../../getting-started/nix-setup.md#插件)。
-
 ## 常见错误
 
 **处理器未返回 JSON 字符串：**

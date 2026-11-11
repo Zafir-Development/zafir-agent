@@ -80,7 +80,7 @@ class AgentInputs:
             raise ValueError("bin_dir must be one output-relative directory")
         if self.resources.keys() - RESOURCE_ENV.keys():
             raise ValueError("unknown resource names")
-        if self.frontends.keys() - {"tui", "web"}:
+        if self.frontends.keys() - {"tui"}:
             raise ValueError("unknown frontend names")
         paths = [self.project, self.code, self.python, self.site_packages, self.environment,
                  self.pm_runtime, *self.resources.values(), *self.frontends.values()]
@@ -103,7 +103,7 @@ class AgentInputs:
             raise ValueError("prepared PM runtime is incomplete")
         if self.stamp is not None:
             stamp = json.loads(self.stamp.read_text(encoding="utf-8-sig"))
-            if stamp.get("distribution") in ("nix", "docker") and stamp.get("pmRuntime") != str(self.pm_runtime):
+            if stamp.get("distribution") == "docker" and stamp.get("pmRuntime") != str(self.pm_runtime):
                 raise ValueError("install stamp must reference the supplied independent PM runtime")
         if self.placement == "contained":
             for path in (self.python, self.site_packages, self.environment, self.pm_runtime, self.tools):
@@ -115,8 +115,7 @@ class AgentInputs:
 
 
 def validate_frontends(frontends: dict[str, Path]) -> None:
-    for name, path in frontends.items():
-        required = ("dist/entry.js", "package.json") if name == "tui" else ("index.html",)
-        for entry in required:
+    for path in frontends.values():
+        for entry in ("dist/entry.js", "package.json"):
             if not (path / entry).is_file():
                 raise FileNotFoundError(path / entry)

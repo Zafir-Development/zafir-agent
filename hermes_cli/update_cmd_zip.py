@@ -37,14 +37,13 @@ _ZIP_PRESERVED_TOP_LEVEL = {"venv", ".venv", "node_modules", ".git", ".env"}
 
 # Gitignored build outputs the source ZIP never ships, nested under top-level entries the swap replaces
 # (so `_ZIP_PRESERVED_TOP_LEVEL` cannot shield them): the packaged Desktop app, its renderer bundle,
-# the TUI and dashboard bundles, and the WhatsApp bridge's npm install. The dirty-tree guard admits them
+# the TUI bundle, and the WhatsApp bridge's npm install. The dirty-tree guard admits them
 # and `_stage_entries` grafts the live copies into the staged tree so the swap keeps them (#90495).
 # Workspace node_modules are not carried: they hold only pnpm's links into the root virtual store, and
 # Windows links are junctions, which the copy turns into real directories that no longer resolve their
 # own dependencies. The next build relinks them from pnpm's store.
 _ZIP_PRESERVED_NESTED = {
     "apps": ("desktop/release", "desktop/dist", "desktop/dist-webapp", "desktop/build"),
-    "hermes_cli": ("web_dist",),
     "scripts": ("whatsapp-bridge/node_modules",),
     "ui-tui": ("dist", "packages/hermes-ink/dist"),
 }
@@ -447,7 +446,7 @@ def _stage_entries(extracted: str, entries: list[str], project_root: str,
                 os.path.join(extracted, item), dst,
                 None if on_created is None else (lambda path, i=index: on_created(i, path))), dst))
             # The source ZIP carries only source; the built outputs (#70337/#87331 release/, then
-            # dist/ and web_dist — #90495) exist only in the LIVE tree. Graft
+            # dist/ — #90495) exist only in the LIVE tree. Graft
             # them into the staged copy BEFORE the swap so the commit preserves them atomically.
             _graft_nested_artifacts(item, dst, staged[-1][0])
     except Exception:

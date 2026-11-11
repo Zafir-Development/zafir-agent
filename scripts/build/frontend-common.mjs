@@ -8,7 +8,7 @@ import { parseArgs } from 'node:util'
 export const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 
 // Look only in the prepared workspace, not a parent checkout's dependency tree.
-// Package symlinks themselves are valid inputs (including Nix store references).
+// Package symlinks themselves are valid inputs.
 export function workspaceTool(source, workspace, name) {
   for (const root of [path.join(source, workspace), source]) {
     const manifest = path.join(root, 'node_modules', name, 'package.json')
@@ -31,7 +31,7 @@ function contains(parent, child) {
 
 const productMarker = '.hermes-product'
 const productOwner = 'hermes-frontend-product-v1\n'
-const developerOutputs = ['ui-tui/dist', 'hermes_cli/web_dist']
+const developerOutputs = ['ui-tui/dist']
 
 function developerOutput(source, out) {
   if (!source) return false

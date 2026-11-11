@@ -2,7 +2,7 @@
 
 Two properties that a "keep the read-only handle for the process lifetime"
 optimisation silently destroys. Both are asserted against the real
-``_open_session_db_at_path`` read path the sidebar poll uses, because both
+``open_session_db_at_path`` read path the sidebar poll uses, because both
 failures are invisible in a unit test that mocks the store.
 
 1. **The store on disk is the truth.** Recovering a corrupt ``state.db``
@@ -27,7 +27,7 @@ from __future__ import annotations
 import shutil
 
 from hermes_cli.sqlite_safe_read import LiveConnectionError, offline_file_access
-from hermes_cli.web_server_sessions import _open_session_db_at_path
+from hermes_cli.session_db_browse import open_session_db_at_path
 from hermes_state import SessionDB
 from hermes_state_repair import _db_fingerprint
 
@@ -42,7 +42,7 @@ def test_poll_observes_a_replaced_state_db(tmp_path):
     old.create_session("before-recovery", source="cli")
     old.close()
 
-    first = _open_session_db_at_path(db_path, read_only=True)
+    first = open_session_db_at_path(db_path, read_only=True)
     try:
         assert _ids(first) == ["before-recovery"]
     finally:
@@ -62,7 +62,7 @@ def test_poll_observes_a_replaced_state_db(tmp_path):
     db_path.unlink()
     shutil.copy2(recovered, db_path)
 
-    second = _open_session_db_at_path(db_path, read_only=True)
+    second = open_session_db_at_path(db_path, read_only=True)
     try:
         assert _ids(second) == ["after-recovery"]
     finally:
@@ -78,7 +78,7 @@ def test_poll_leaves_forensic_backup_reachable(tmp_path):
     baseline = _db_fingerprint(db_path)
     assert baseline is not None
 
-    poll = _open_session_db_at_path(db_path, read_only=True)
+    poll = open_session_db_at_path(db_path, read_only=True)
     try:
         assert _ids(poll) == ["s1"]
     finally:

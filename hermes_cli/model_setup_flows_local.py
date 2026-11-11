@@ -1,7 +1,7 @@
-"""``hermes model`` → Local models: the desktop's Local Models setup, in the terminal.
+"""``hermes model`` → Local models: the managed llama.cpp setup, in the terminal.
 
-The flow drives the handlers behind the desktop's Local Models pane
-(``hermes_cli/web_routers/local_models.py``) in-process, so both surfaces run one code path:
+The flow drives the Local Models service in-process
+(``hermes_cli/local_models_service.py``) so the terminal and the desktop pane run one code path:
 the catalog priced for this machine, quickstart (pinned engine via PM, model download, server
 start, default assignment) and activate for a model already on disk. Progress renders from the
 same job view the desktop polls; Ctrl+C pauses a download, and the next run resumes from the
@@ -94,14 +94,12 @@ def _follow_job(lm, job_id: str) -> str:
 
 
 def _start(lm, start) -> str | None:
-    """Run a route handler that starts a job; its HTTP refusal becomes a printed line."""
-    from fastapi import HTTPException
-
+    """Run a service entry point that starts a job; its refusal becomes a printed line."""
     try:
         result = start()
         if asyncio.iscoroutine(result):
             result = asyncio.run(result)
-    except HTTPException as exc:
+    except lm.LocalModelsError as exc:
         print(f"  ✗ {exc.detail}")
         return None
     return result.get("job_id")
@@ -122,7 +120,7 @@ def _model_flow_local(config, current_model=""):
     del config, current_model
     from hermes_cli.main_provider_setup import _prompt_provider_choice
     from hermes_cli.setup import prompt_yes_no
-    from hermes_cli.web_routers import local_models as lm
+    from hermes_cli import local_models_service as lm
 
     hw = lm.local_models_hardware()
     status = lm.local_models_status()

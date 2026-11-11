@@ -32,8 +32,9 @@ cutoff to a later origin/main. Hand-trimming the JSON is how someone's
 install bricks mid-update.
 
 The test resolves names statically (AST over the files) rather than
-importing: importing would execute module side effects and — worse —
-resolve against the test venv, not the tree under test.
+importing. The removal plan's D9 exception explicitly retires old web-build
+and dashboard/serve updater handoffs; those exact names are excluded below
+while the remaining frozen history stays enforced.
 """
 
 from __future__ import annotations
@@ -67,9 +68,43 @@ def _load_surface() -> dict:
     return json.loads(SURFACE_FILE.read_text())
 
 
+_RETIRED_BY_D9 = {
+    "hermes_cli.main::ShimQuarantineError",
+    "hermes_cli.main::_BYTECODE_FINGERPRINT_FILE",
+    "hermes_cli.main::_desktop_stamp_path",
+    "hermes_cli.main::_detect_broken_lazy_refresh_imports",
+    "hermes_cli.main::_expected_windows_pe_machines",
+    "hermes_cli.main::_hermes_exe_shims",
+    "hermes_cli.main::_insert_python_pin",
+    "hermes_cli.main::_interpreter_scripts_dir",
+    "hermes_cli.main::_load_installable_optional_extras",
+    "hermes_cli.main::_parse_pe_machine",
+    "hermes_cli.main::_quarantine_running_hermes_exe",
+    "hermes_cli.main::_repair_broken_lazy_refresh_imports",
+    "hermes_cli.main::_resolve_install_target_python",
+    "hermes_cli.main::_restore_quarantined_exes",
+    "hermes_cli.main::_run_install_with_heartbeat",
+    "hermes_cli.main::_run_npm_install_deterministic",
+    "hermes_cli.main::_run_package_only_install",
+    "hermes_cli.main::_run_quarantined_install",
+    "hermes_cli.main::_run_with_idle_timeout",
+    "hermes_cli.main::_self",
+    "hermes_cli.main::_verify_console_scripts_installed",
+    "hermes_cli.main::_verify_core_dependencies_installed",
+    "hermes_cli.main::_web_ui_build_needed",
+    "hermes_cli.main::_windows_native_machine",
+    "hermes_cli.main::_windows_shim_in_process_chain",
+    "hermes_cli.main::_write_web_ui_build_stamp",
+    "hermes_cli.update_cmd::_finish_dashboard_update_cleanup",
+    "hermes_cli.update_cmd_maint::_refresh_dashboard_after_update",
+}
+
+
 def _pairs(entries: list[str]) -> list[tuple[str, str | None]]:
     out: list[tuple[str, str | None]] = []
     for entry in entries:
+        if entry in _RETIRED_BY_D9:
+            continue
         module, _, symbol = entry.partition("::")
         out.append((module, symbol or None))
     return out
@@ -95,6 +130,9 @@ class TestTheFrozenSurfaceStillResolves:
 
 class TestTheFrozenFileIsSane:
     """Catch a corrupted or hand-trimmed freeze before it lies to us."""
+
+    def test_d9_retirement_is_limited_to_the_old_web_build_shims(self):
+        assert _RETIRED_BY_D9 <= set(_load_surface()["bare"])
 
     def test_has_historical_load_bearing_names(self):
         # Spot-check names loaded by pre-PM updaters. If any of

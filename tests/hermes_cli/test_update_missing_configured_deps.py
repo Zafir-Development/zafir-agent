@@ -55,7 +55,6 @@ def configured_update(source_launch, tmp_path, monkeypatch):
             "source_build.source_build_env = lambda **kwargs: {}\n"
             "source_build.prepare_source_dependencies = lambda *args, **kwargs: None\n"
             "source_build.build_source_tui = lambda *args, **kwargs: None\n"
-            "source_build.build_source_web = lambda *args, **kwargs: None\n"
             f"source_build.build_update_products(Path({str(root)!r}), desktop=False)\n"
             "print('TARGET=' + json.dumps({'prefix': sys.prefix, 'python': sys.executable}))\n"
         )

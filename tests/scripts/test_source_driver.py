@@ -125,7 +125,7 @@ Write-Output 'selection verified'
     ("foreign-launcher", "belongs to another installation"),
     ("missing-launcher", ""),
     ("incomplete", "incomplete"),
-    ("web-changed", "web output"), ("web-missing", "web output"),
+    ("tui-changed", "tui output"), ("tui-missing", "tui output"),
 ])
 def test_pm_observer_accepts_ready_fixture_and_leaves_failed_fixture_untouched(tmp_path, fault, error):
     # This exercises the complete observer process, not a whole install. The
@@ -180,7 +180,7 @@ ensure_install_launchers(root, root / '.hermes/bin')
     record = '''import { mkdirSync, writeFileSync } from 'node:fs';
 import { buildInputs, recordProduct } from './scripts/build/freshness.mjs';
 const source = process.cwd();
-for (const [product, out] of [['tui', 'ui-tui/dist'], ['web', 'hermes_cli/web_dist']]) {
+for (const [product, out] of [['tui', 'ui-tui/dist']]) {
   mkdirSync(out, { recursive: true }); writeFileSync(out + '/index.html', 'fixture product');
   recordProduct({source, product, out, inputs: buildInputs(source, product)});
 }
@@ -205,14 +205,14 @@ for (const [product, out] of [['tui', 'ui-tui/dist'], ['web', 'hermes_cli/web_di
         launcher = mint_launcher("hermes", foreign, root / ".hermes/bin", Path(sys.executable), None)
         assert launcher is not None
 
-    damaged = root / "hermes_cli/web_dist/index.html"
+    damaged = root / "ui-tui/dist/index.html"
     damage = {
         "uv-lock": lambda: (root / "uv.lock").write_text("changed graph without preparation", encoding="utf-8"),
         "foreign-launcher": _damage_foreign_launcher,
         "missing-launcher": lambda: (root / ".hermes/bin/hermes").unlink(),
         "incomplete": lambda: (root / ".update-incomplete").write_text("incomplete", encoding="utf-8"),
-        "web-changed": lambda: damaged.write_bytes(b"damaged"),
-        "web-missing": lambda: damaged.unlink(),
+        "tui-changed": lambda: damaged.write_bytes(b"damaged"),
+        "tui-missing": lambda: damaged.unlink(),
     }
     damage[fault]()
     before = snapshot()

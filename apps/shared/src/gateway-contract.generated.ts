@@ -1454,33 +1454,6 @@ export interface DisplayStopResult {
   profile_key: string
   stopped: boolean
 }
-export interface DisplayObserveParams {
-  profile?: string | null
-  viewer_id?: string | null
-}
-export interface DisplayObserveResult {
-  profile: string
-  supported: boolean
-  installed: boolean
-  missing: string[]
-  running: boolean
-  pid?: number | null
-  display?: string | null
-  socket?: string | null
-  geometry: string
-  install_command?: string | null
-  browser?: string | null
-  blocker?: string | null
-  memory_available_mb?: number | null
-  memory_limit_mb?: number | null
-  placement?: string
-  image_switch?: DisplayImageSwitch | null
-  lease: DisplayLease
-  profile_key: string
-  ticket: string
-  path: string
-  viewer_id: string
-}
 export interface DisplaySwitchSandboxImageParams {
   profile?: string | null
   approve?: boolean
@@ -2928,13 +2901,6 @@ export interface FileAttachParams {
   path?: string | null
   data_url?: string | null
   name?: string | null
-  staged_upload?: StagedFileUpload | null
-}
-/** Source identity returned by the browser upload route, checked against the live profile. */
-export interface StagedFileUpload {
-  install_id: string
-  path: string
-  profile_home: string
 }
 export interface FileAttachResult {
   attached: boolean
@@ -6359,8 +6325,6 @@ export interface RpcMethods {
   'display.lease.acquire': { params: DisplayLeaseAcquireParams; result: DisplayLeaseResult }
   /** Hand back. Without a viewer id the release is refused while a human holds unless force. */
   'display.lease.release': { params: DisplayLeaseReleaseParams; result: DisplayLeaseResult }
-  /** Mint a single-use ticket for /api/display/ws and the server-minted viewer id for this connection. */
-  'display.observe': { params: DisplayObserveParams; result: DisplayObserveResult }
   /** Start this profile's Xvnc + Xfce (idempotent); blocks until the display is published. */
   'display.start': { params: ProfileParams; result: DisplayStatus }
   /** Runtime + lease snapshot for this profile's screen. */
@@ -6840,7 +6804,6 @@ export const RPC_METHODS = [
   'display.install',
   'display.lease.acquire',
   'display.lease.release',
-  'display.observe',
   'display.start',
   'display.status',
   'display.stop',

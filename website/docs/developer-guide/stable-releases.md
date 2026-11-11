@@ -33,7 +33,7 @@ files on `main`.
    `main`'s tip, never the commit under test. Every lane that tests or builds the
    payload is passed the admitted commit, and the commit-threading lint in
    `tests/ci/test_stable_release_commit_threading.py` enforces that.
-4. Run the lanes the claim records: by default the whole source, Docker, Nix,
+4. Run the lanes the claim records: by default the whole source, Docker,
    PM bundle, install/update, Windows, signed-package, and native-upgrade
    acceptance graph, without Termux.
 5. Push immutable versioned Docker and R2 artifacts from the tested bytes. The
@@ -134,7 +134,7 @@ lists every lane.
 | `windows-store` | on | the unsigned Microsoft Store bundle, submitted to Partner Center (needs no Azure signing) |
 | `macos-arm64` | on | macOS Apple Silicon DMG and ZIP |
 | `termux` | off | Termux (Android aarch64) APT package |
-| `ci`, `nix`, `docker-tests`, `pm-bundle`, `windows-live`, `install-e2e` | on | the standalone suites |
+| `ci`, `docker-tests`, `pm-bundle`, `windows-live`, `install-e2e` | on | the standalone suites |
 | `termux-checks` | on | Termux verification; runs only with `termux` |
 | `smoke` | on | native install and chat smoke of each built desktop package |
 | `upgrade` | on | signed-package upgrade acceptance (OLD to NEW) of each built desktop package |
@@ -261,7 +261,7 @@ stable Windows quad from that epoch and rejects a merely well-formed but incorre
 MSIX, executable VERSIONINFO, or App Installer version. Native admission also
 reads the Electron artifact filename and macOS plist from the built packages. The
 acceptance graph builds and inspects Python wheel/sdist metadata and filenames,
-and checks the Nix and Docker runtime identities. Any consumer-facing `0.0.0` or
+and checks the Docker runtime identity. Any consumer-facing `0.0.0` or
 mismatched version fails the gate.
 
 The draft stays on the attempt ref until publish. Deleting it is `abandon`, and
@@ -513,7 +513,7 @@ See [the bundled update contract](https://github.com/NousResearch/hermes-agent/b
 - OSV vulnerability findings retain their existing advisory policy. Required
   scanner execution failures are failures, not advisory findings.
 - Disabled Linux desktop packaging is not claimed as shipped. Native Linux
-  PM bundles, Docker, Nix and install/update checks remain required.
+  PM bundles, Docker and install/update checks remain required.
 - Housekeeping, autofix, comment and skills-index/deploy workflows are not
   release acceptance suites.
 

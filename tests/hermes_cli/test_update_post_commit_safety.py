@@ -66,7 +66,6 @@ _CHILD = textwrap.dedent('''
         failed_or_stale_units=[], relaunched_profiles=[], externally_supervised_profiles=[], killed_pids=set())
     update_cmd._fleet_restart_skip_reason = lambda plan: None
     update_cmd._surviving_pre_update_serve_runtimes = lambda plan: []
-    maint._refresh_dashboard_after_update = lambda **kwargs: None
     # A detached git writer would outlive the test in its deleted tmp checkout.
     from hermes_cli import git_commit_graph
     git_commit_graph.spawn_commit_graph_refresh = lambda root: False

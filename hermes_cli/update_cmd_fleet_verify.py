@@ -272,7 +272,7 @@ _GATEWAY_OWED_REASON = "gateways may still run pre-update code or were stopped w
 _GATEWAY_RECOVERY = "; recover with `hermes gateway restart`"
 
 
-def _owed_restart_reason(restart, stopped, *, gateway_owed: bool, stale_serves: set, down_serves: set) -> str:
+def _owed_restart_reason(restart, stopped, *, gateway_owed: bool, stale_serves: set) -> str:
     """The ``gateway_restart`` follow-up's reason, naming what is actually owed (#141021).
 
     The step id stays ``gateway_restart`` (Desktop hand-offs parse it); only the text changes. A run
@@ -289,21 +289,17 @@ def _owed_restart_reason(restart, stopped, *, gateway_owed: bool, stale_serves: 
         parts.append(
             f"{SERVE_ONLY_REASON_PREFIX}unit(s) {', '.join(units)} were not restarted onto the new code;"
             " see the systemctl advice above")
-    if down_serves:
+    if stale_serves:
         parts.append(
-            f"{SERVE_ONLY_REASON_PREFIX}process(es) {', '.join(map(str, sorted(down_serves)))} were stopped during the"
-            " update and not brought back; relaunch `hermes serve` / `hermes dashboard`")
-    if stale_serves - down_serves:
-        parts.append(
-            f"{SERVE_ONLY_REASON_PREFIX}process(es) {', '.join(map(str, sorted(stale_serves - down_serves)))} still run"
+            f"{SERVE_ONLY_REASON_PREFIX}process(es) {', '.join(map(str, sorted(stale_serves)))} still run"
             " pre-update code; restart them as advised above")
     # Nothing classified (an unknown incompleteness): keep the historical, conservative wording.
     return "; ".join(parts) or (_GATEWAY_OWED_REASON + _GATEWAY_RECOVERY)
 
 
 def _verify_fleet_after_update(restart, *, _pre_update_plan, _windows_gateway_resume, update_complete):
-    """Post-restart verification: legacy-unit warning, dashboard cleanup, stale serve
-    probe, fleet version matrix, plan-vs-execution reconciliation, receipt finalize.
+    """Post-restart verification: legacy-unit warning, stale serve probe, fleet version
+    matrix, plan-vs-execution reconciliation, receipt finalize.
 
     Never fails the committed update (contract C3): when any gateway may still be stale it
     records a ``gateway_restart`` follow-up and leaves ``fleet_restart_pending`` armed for the
@@ -313,35 +309,13 @@ def _verify_fleet_after_update(restart, *, _pre_update_plan, _windows_gateway_re
     from hermes_cli.update_cmd import (
         _m, _surviving_pre_update_serve_runtimes, _warn_stale_serve_runtimes,
     )
-    from hermes_cli.update_cmd_maint import _refresh_dashboard_after_update
     with _best_effort('Legacy unit check during update failed: %s'):
         _print_legacy_units_warning()
 
-    # Restart a managed dashboard via systemd or stop stale manual ones (raw-killing
-    # a systemd-owned PID reads as clean stop and leaves the Cloudflare origin dead).
-    # Which family is owed decides what the follow-up tells the user to run (#141021). Read before the
-    # dashboard pass can flip ``incomplete``.
     _gateway_owed = _restart_phase_owes_gateway(restart)
-    # Units the fleet loop already attempted aren't redone — restarted ones, and failed ones too: the
-    # loop already reported each failure (with its systemctl advice), and a second attempt only
-    # duplicates it or, for a system unit without root, adds a polkit/tty error (#141021).
-    # A dashboard it stopped and could not bring back is a promised restart that did not happen.
-    _dashboards_down = _refresh_dashboard_after_update(
-        already_restarted_units=set(restart.restarted_services) | set(restart.failed_or_stale_units))
-    if _dashboards_down:
-        restart.incomplete = True
     _stale_serves_owed: set = set()
 
-    # Success-path twin of the abort-recovery probe: the restart phase only touches
-    # units, so a unit-less `hermes serve` keeps stale sys.modules. Runs AFTER
-    # dashboard cleanup so a respawned manual dashboard isn't a survivor. Rows feed
-    # reconciliation (survivor → owed restart); ``None`` = probe failed, stays fail-closed.
-    # Check if any pre-update serve/dashboard runtimes survived on pre-update code generations (#100479).
-    # This is the SUCCESS-path twin of the abort-recovery probe above: the restart phase only restarts
-    # units, so an sshd-spawned `serve --isolated` or a manual `hermes serve` (no unit) is left running its
-    # pre-update sys.modules graph — and its cron ticker keeps firing agent jobs that ImportError on every
-    # symbol added in the pulled range. The rows also feed the plan-vs-execution reconciliation below, so a
-    # survivor is escalated (an owed gateway_restart follow-up) instead of merely printed.
+    # A surviving pre-update runtime is unaccounted and keeps the gateway restart obligation armed.
     _stale_serve_rows: list | None = None
     with _best_effort('Failed to check for surviving serve runtimes: %s'):
         _stale_serve_rows = _surviving_pre_update_serve_runtimes(_pre_update_plan)
@@ -374,7 +348,6 @@ def _verify_fleet_after_update(restart, *, _pre_update_plan, _windows_gateway_re
         _units_settled = _settle_units_proven_current(restart, _fleet_snapshot)
         if _units_settled:
             _gateway_owed = _restart_phase_owes_gateway(restart)
-            restart.incomplete = restart.incomplete or bool(_dashboards_down)
         if print_fleet_version_matrix(_fleet_snapshot):
             restart.incomplete = _gateway_owed = True
             # A proven-stale survivor must not keep running (its ticker yields every tick and
@@ -420,14 +393,13 @@ def _verify_fleet_after_update(restart, *, _pre_update_plan, _windows_gateway_re
                 externally_supervised_profiles=restart.externally_supervised_profiles,
                 killed_pids=restart.killed_pids,
                 failed_units=restart.failed_or_stale_units,
-                # Serve/dashboard reconcile by incarnation liveness, not unit names.
+                # Legacy serve runtimes reconcile by incarnation liveness, not unit names.
                 # See #100479.
                 stale_serve_pids=(
                     {row.get("pid") for row in _stale_serve_rows}
                     if _stale_serve_rows is not None
                     else None
                 ),
-                failed_respawn_pids=_dashboards_down,
                 # A symlinked profile served by another install's checkout (#120240).
                 external_gateway_pids={row.get("pid") for row in _fleet_snapshot if row_is_external(row)},
                 live_gateway_pids=_live_gateway_pids,
@@ -471,7 +443,7 @@ def _verify_fleet_after_update(restart, *, _pre_update_plan, _windows_gateway_re
         stopped = sorted(getattr(restart, "stopped_unmapped_pids", None) or ())
         record_followup("gateway_restart", _owed_restart_reason(
             restart, stopped, gateway_owed=_gateway_owed, stale_serves=_stale_serves_owed,
-            down_serves=set(_dashboards_down or ())))
+        ))
         with _best_effort('Fleet restart inventory not recorded: %s'):
             _record_owed_gateway_inventory(_pre_update_plan, stopped)
     if _units_settled:

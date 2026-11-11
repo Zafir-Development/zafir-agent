@@ -50,9 +50,9 @@ async def probe(peer):
     from gateway.platforms.base import BasePlatformAdapter, SendResult
     from gateway.run import GatewayRunner
     from gateway.run_api import start_gateway_api, stop_gateway_api
+    from tests.gateway.fixtures.native_ws_auth import prepare_listener, subprotocols, ws_url
     from gateway.session import SessionSource
     from gateway.session_authority import initialize_session_authority
-    from hermes_cli import web_server
     from tools import clarify_gateway
 
     class Adapter(BasePlatformAdapter):
@@ -70,12 +70,13 @@ async def probe(peer):
             return SendResult(success=True, message_id='owned-card')
 
     runner = GatewayRunner()
-    authority = await initialize_session_authority(runner, profile_id='fixture', instance_id='clarify')
+    authority = await initialize_session_authority(runner, profile_id=os.environ['HERMES_HOME'], instance_id='clarify')
+    prepare_listener(runner)
     runner.adapters[Platform.TELEGRAM] = Adapter(PlatformConfig(enabled=True, token='fixture'), Platform.TELEGRAM)
     ref = authority.register(SessionSource(platform=Platform.TELEGRAM, chat_id='clarify-chat',
                                            chat_type='dm', user_id='fixture-user'))
     api = await start_gateway_api(runner)
-    url = api.api_origin.replace('http:', 'ws:') + '/api/ws?token=' + web_server._SESSION_TOKEN
+    url = ws_url(api)
 
     async def rpc(ws, rid, method, **params):
         await ws.send(json.dumps({'jsonrpc': '2.0', 'id': rid, 'method': method,
@@ -88,7 +89,8 @@ async def probe(peer):
 
     a = b = None
     try:
-        a, b = await websockets.connect(url), await websockets.connect(url)
+        a, b = (await websockets.connect(url, subprotocols=subprotocols(runner, subject='owner')),
+                await websockets.connect(url, subprotocols=subprotocols(runner, subject='owner')))
         await rpc(a, 1, 'session.resume')
         await rpc(b, 1, 'session.resume')
         assert 'result' in await rpc(a, 2, 'prompt.submit', input_id='clarify-first', text='Ask my color')

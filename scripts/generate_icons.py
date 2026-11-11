@@ -24,7 +24,7 @@ Sources of truth — two axes, composed per target:
   its icns targets render from an in-memory mac master that puts the same
   squircle on Apple's 824x824 (r=185.4) grid — centered in 1024 with 100px
   margins — so the icon matches the size of Apple-template neighbors.
-The shared brand master SVGs feed the website and dashboard surfaces; the
+The shared brand master SVGs feed the website surfaces; the dashboard and
 desktop app icon outputs are no longer produced.
 
 The girl's position and uniform scale are registered to the reference artwork.
@@ -43,7 +43,7 @@ Dependencies:
     Pillow and resvg-py are core runtime dependencies; run this file with a
     Hermes runtime interpreter (scripts/generate-icons.mjs uses HERMES_PYTHON).
 
-Outputs (12 files):
+Outputs (11 files):
   assets/icon-master.svg                              generated light master
   assets/icon-master-dark.svg                         generated dark master
   website/static/img/logo.png                     1772x1799 girl alone, transparent (light)
@@ -55,7 +55,6 @@ Outputs (12 files):
   website/static/img/apple-touch-icon.png         180x180
   website/static/img/favicon.ico                  16,32,48
   website/static/img/favicon.svg                  copy of the light master
-  web/public/favicon.ico                          16,32,48
 """
 
 from __future__ import annotations
@@ -123,7 +122,6 @@ TARGETS: list[tuple[str, str, object]] = [
     ("website/static/img/apple-touch-icon.png", "png", 180),
     ("website/static/img/favicon.ico", "ico", [16, 32, 48]),
     ("website/static/img/favicon.svg", "svg_copy", None),
-    ("web/public/favicon.ico", "ico", [16, 32, 48]),
 ]
 
 # ─── girl art extraction ────────────────────────────────────────────────────

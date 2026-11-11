@@ -14,7 +14,6 @@ from types import SimpleNamespace
 import pytest
 
 from hermes_cli import main as hermes_main
-from hermes_cli import main_web_build
 from hermes_cli import main_install_repair
 from hermes_cli import update_cmd
 
@@ -65,9 +64,6 @@ def _patch_update_deps(monkeypatch, tmp_path, run_side_effect):
         hermes_main, "_record_bytecode_fingerprint", lambda *a, **k: None
     )
     monkeypatch.setattr(
-        main_web_build, "_record_bytecode_fingerprint", lambda *a, **k: None
-    )
-    monkeypatch.setattr(
         hermes_main, "_run_pre_update_backup", lambda *a, **k: None
     )
     monkeypatch.setattr(
@@ -81,7 +77,6 @@ def _patch_update_deps(monkeypatch, tmp_path, run_side_effect):
     monkeypatch.setattr(hermes_main, "_clear_update_incomplete_marker", lambda: None)
     monkeypatch.setattr(main_install_repair, "_clear_update_incomplete_marker", lambda: None)
     # Gateway restart path (called after a successful update).
-    monkeypatch.setattr(update_cmd, "_finish_dashboard_update_cleanup", lambda *a, **k: None)
     # Keep the (now surfaced — #78574) gateway auto-restart phase away from
     # this machine's real gateways: discovery returns nothing, systemd is
     # unsupported, so the phase is a clean no-op for both snapshots.

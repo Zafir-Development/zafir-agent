@@ -9,8 +9,7 @@ import { parseArgs } from 'node:util'
 import { lockImporters } from './pnpm-lock.mjs'
 
 // pnpm 12 is a native executable (pnpm.exe on Windows, never a .cmd shim), so it
-// runs without a shell and paths stay argv. Nix's pnpm is a shell wrapper that
-// execFile runs through its shebang.
+// runs without a shell and paths stay argv.
 export function pnpmCommand({ env = process.env } = {}) {
   const name = process.platform === 'win32' ? 'pnpm.exe' : 'pnpm'
   for (const dir of (env.PATH || env.Path || '').split(delimiter)) {
@@ -23,9 +22,8 @@ export function pnpmCommand({ env = process.env } = {}) {
   throw new Error('pnpm is required on PATH')
 }
 
-// The native package ships its manifest beside the executable: no child spawn,
-// which runs before the reuse short-circuit. Layouts without one (Nix) fall back
-// to asking pnpm.
+// The native package ships its manifest beside the executable. Other package
+// layouts fall back to asking pnpm.
 function pnpmVersion(pnpm, { source, env }) {
   try {
     return JSON.parse(readFileSync(join(dirname(realpathSync(pnpm)), 'package.json'), 'utf8')).version

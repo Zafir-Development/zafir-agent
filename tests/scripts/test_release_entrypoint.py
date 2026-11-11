@@ -190,7 +190,7 @@ def test_release_output_names_the_ci_run_and_the_publish_step():
 
     # --only docker: the source gates are named as not run.
     docker = next_steps({**result, "lanes": lane_set.select(only=["docker"])})
-    assert "Not run: ci, nix, docker-tests, pm-bundle, windows-live, install-e2e." in docker
+    assert "Not run: ci, docker-tests, pm-bundle, windows-live, install-e2e." in docker
 
 
 def test_an_unlisted_run_points_at_the_workflow_page():

@@ -135,34 +135,6 @@ class TestModelSwitchPicker:
         assert row is not None
         assert "vendor/blocked" not in row["models"]
 
-class TestRecommendedDefaultEndpoint:
-    """This endpoint picks a model the user never sees chosen."""
-
-    def _call(self, monkeypatch):
-        import hermes_cli.auth as auth_mod
-        from hermes_cli.web_routers.models import get_recommended_default_model
-
-        # Blocked first, so an unfiltered list would make it the silent
-        # default — otherwise this passes whether or not the filter runs.
-        monkeypatch.setattr(
-            models_mod, "get_curated_nous_model_ids",
-            lambda: ["vendor/blocked", "vendor/allowed"],
-        )
-        monkeypatch.setattr(models_pricing, "get_pricing_for_provider", lambda _p: {})
-        monkeypatch.setattr(models_mod, "check_nous_free_tier", lambda **_k: None)
-        monkeypatch.setattr(
-            models_mod,
-            "union_with_portal_paid_recommendations",
-            lambda ids, pricing, _portal: (list(ids), pricing),
-        )
-        monkeypatch.setattr(auth_mod, "get_provider_auth_state", lambda _p: {})
-        return get_recommended_default_model(provider="nous")
-
-    def test_hidden_model_is_never_the_silent_default(self, monkeypatch, policy):
-        assert self._call(monkeypatch)["model"] == "vendor/allowed"
-
-    def test_unrestricted_org_is_unaffected(self, monkeypatch, no_policy):
-        assert self._call(monkeypatch)["model"] == "vendor/blocked"
 
 class TestAuxiliaryFastModel:
     """``_fast_model_from_catalog`` uses the catalog's keys as a source of ids."""

@@ -87,16 +87,6 @@ jobs:
       tag: ${{ needs.admit.outputs.claim-tag }}
       version: ${{ needs.admit.outputs.version }}
 
-  nix:
-    needs: admit
-    # The claim's policy removes it, not a gate it happens to need.
-    if: fromJSON(needs.admit.outputs.jobs)['nix']
-    uses: ./.github/workflows/nix.yml
-    with:
-      commit: ${{ needs.admit.outputs.commit }}
-      release: true
-      version: ${{ needs.admit.outputs.version }}
-
   pm-bundle:
     needs: admit
     if: fromJSON(needs.admit.outputs.jobs)['pm-bundle']
@@ -131,7 +121,7 @@ jobs:
   acceptance:
     name: All release acceptance checks pass
     if: always()
-    needs: [admit, ci, docker, nix, pm-bundle, windows-live, install-e2e]
+    needs: [admit, ci, docker, pm-bundle, windows-live, install-e2e]
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: useblacksmith/checkout@25227e61ff9dafe400e22fa487b673eac4e4409a  # v1
@@ -140,7 +130,7 @@ jobs:
       - uses: ./.github/actions/setup-pm
         with:
           cache-python: false
-      - run: python -m scripts.releases.stable gate admit ci docker nix pm-bundle windows-live install-e2e
+      - run: python -m scripts.releases.stable gate admit ci docker pm-bundle windows-live install-e2e
         env:
           RELEASE_NEEDS: ${{ toJSON(needs) }}
           LANES: ${{ needs.admit.outputs.lanes }}

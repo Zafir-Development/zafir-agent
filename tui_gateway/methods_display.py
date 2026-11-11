@@ -1,9 +1,7 @@
 """Bot Desktop JSON-RPC handlers: the Desktop app's door to a profile's headless screen.
 
 ``display.status`` reports runtime + lease; ``display.start`` / ``display.stop`` manage the Xvnc/Xfce
-process; ``display.observe`` mints a single-use ticket the renderer redeems on ``/api/display/ws``
-(``hermes_cli.web_routers.display``) to stream raw RFB; ``display.lease.acquire`` / ``release`` are
-Take over / Hand back. ``display.install`` runs the distro package install on the gateway host: sudo
+process; ``display.lease.acquire`` / ``release`` are Take over / Hand back. ``display.install`` runs the distro package install on the gateway host: sudo
 privilege is asked for through the masked ``display.install.sudo`` server→client request (same ``_ask``
 bridge as the terminal tool's sudo prompt), stdout streams as ``display.install.log`` and the run ends with
 ``display.install.done`` carrying a fresh status snapshot. Every handler is profile-scoped so a multiplexed gateway answers for the bot
@@ -144,28 +142,6 @@ def _foreign_viewer_id(rid, viewer_id: str):
         return None
     return _err(rid, _DISPLAY_ERR, "viewer_id was not minted for this connection; call display.observe first",
                 data={"code": "viewer_mismatch"})
-
-
-@method("display.observe")
-@_profile_scoped
-def _(rid, params: dict) -> dict:
-    """Mint a single-use, 30 s ticket for ``/api/display/ws``. The ticket carries the profile home so
-    the bridge dials THIS profile's RFB socket, and a server-minted viewer id (returned to the caller,
-    who passes it to ``display.lease.acquire`` / ``release``) so the lease can name the holder."""
-    from hermes_constants import get_hermes_home
-    from hermes_cli.dashboard_auth.ws_tickets import mint_ticket
-    from tools.bot_desktop import runtime as _bd_runtime
-    try:
-        # The bridge dials either the host RFB socket or the sandbox relay; neither exists before start.
-        if _bd_runtime.rfb_socket_path() is None and not _bd_runtime.sandbox_screen_running():
-            return _err(rid, _DISPLAY_ERR, "this profile's Bot Desktop is not running; call display.start first")
-        viewer_id = _mint_viewer_id(str(params.get("viewer_id") or "").strip())
-        extra = {"hermes_home": str(get_hermes_home()), "viewer_id": viewer_id}
-        ticket = mint_ticket(user_id=f"display:{viewer_id}", provider="bot-desktop", extra=extra)
-        return _ok(rid, {"ticket": ticket, "path": "/api/display/ws", "viewer_id": viewer_id,
-                         **_display_snapshot()})
-    except Exception as e:
-        return _err(rid, _DISPLAY_ERR, str(e))
 
 
 @method("display.switchSandboxImage")
