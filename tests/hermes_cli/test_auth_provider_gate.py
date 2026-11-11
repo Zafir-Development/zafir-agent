@@ -213,7 +213,7 @@ def test_profile_dotenv_key_counts_as_explicit_when_process_env_lacks_it(tmp_pat
     monkeypatch.setattr(lpp, "_snapshot", None)
 
     from hermes_cli.auth import is_provider_explicitly_configured
-    from hermes_cli.web_server_profiles import _config_profile_scope
+    from hermes_cli.profile_scope import config_profile_scope as _config_profile_scope
 
     assert is_provider_explicitly_configured("deepseek") is False
     with _config_profile_scope("content-studio"):

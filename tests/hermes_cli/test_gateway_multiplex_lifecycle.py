@@ -196,9 +196,8 @@ def test_separate_gateway_beside_the_host_keeps_its_own_lifecycle(homes, monkeyp
     assert profile_lifecycle('stop', SimpleNamespace()) is False
 
 
-def test_parked_status_and_topology_keep_roster(homes, monkeypatch, capsys):
+def test_parked_status_keeps_roster(homes, monkeypatch, capsys):
     from hermes_cli import gateway as gw, profiles
-    from hermes_cli.web_server_gateway import _collect_profile_gateway_topology
     _root, secondary = homes
     (secondary / 'gateway.parked').touch()
     monkeypatch.setenv('HERMES_HOME', str(secondary))
@@ -207,9 +206,6 @@ def test_parked_status_and_topology_keep_roster(homes, monkeypatch, capsys):
     monkeypatch.setattr(profiles, '_check_gateway_running', lambda home: False)
     gw._cmd_status(SimpleNamespace())
     assert 'parked (hermes -p worker gateway start)' in capsys.readouterr().out
-    topology = _collect_profile_gateway_topology()
-    assert topology['profiles'] == ['default', 'worker']
-    assert topology['parked_profiles'] == ['worker']
 
 
 def test_parked_profile_keeps_implicit_host_multiplexed(homes, monkeypatch):
@@ -223,27 +219,6 @@ def test_parked_profile_keeps_implicit_host_multiplexed(homes, monkeypatch):
         standalone_secondaries=[], blocked=False))
     config = GatewayConfig()
     assert resolve_multiplex_mode(config).enabled
-
-
-def test_dashboard_exposes_parked_profile_and_start_unparks_it(homes, monkeypatch):
-    from types import SimpleNamespace
-    from fastapi.testclient import TestClient
-    from gateway import host_attach
-    from hermes_cli import web_server, profiles
-    from hermes_cli.web_server_gateway import multiplexed_profile_refusal
-    root, secondary = homes
-    (secondary / 'gateway.parked').touch()
-    monkeypatch.setattr(profiles, '_check_gateway_running', lambda home: False)
-    with TestClient(web_server.app) as client:
-        response = client.get('/api/status')
-    assert response.status_code == 200
-    assert response.json()['parked_profiles'] == ['worker']
-    # The Start button: refused while no host can unpark it, allowed (spawns `-p worker gateway start`)
-    # once the host multiplexer is live; a parked profile is not served, so this is not the served path.
-    monkeypatch.setattr(host_attach, 'host_gateway', lambda: None)
-    assert multiplexed_profile_refusal('worker', 'start')
-    monkeypatch.setattr(host_attach, 'host_gateway', lambda: SimpleNamespace(home=root, pid=1))
-    assert multiplexed_profile_refusal('worker', 'start') is None
 
 
 @pytest.mark.parametrize('host_running', [False, True])

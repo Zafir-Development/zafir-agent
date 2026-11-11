@@ -8,9 +8,8 @@ Two failure modes this file pins (independent review R15):
   update entry points' real imports are read from the source (Python AST, ESM
   ``import``/``step()`` literals) and every module they reach must start the
   suite that runs it, or be one of the classifier's declared shared hubs.
-* **Dead dispatch.** A lane the classifier sets can still never reach its job:
-  ``desktop_updater=true`` with ``python=false`` used to skip ``tests-os``
-  entirely. Here the REAL classifier's output is replayed through the REAL
+* **Dead dispatch.** A lane the classifier sets can still never reach its job.
+  Here the REAL classifier's output is replayed through the REAL
   workflow files (composite action -> ``ci.yaml`` detect outputs -> job
   ``if:``/``with:`` -> the called workflow's job ``if:`` -> the rendered step),
   so a gate that does not consume a lane fails here, not on a PR.
@@ -189,7 +188,7 @@ def _reached(run: dict, *path: str) -> dict | None:
     return node
 
 
-def _selected_test_files(node: dict, name: str, *, windows_only: bool = False) -> set[str]:
+def _selected_test_files(node: dict, name: str) -> set[str]:
     body, ctx = node["body"], node["ctx"]
     steps = [s for s in body["steps"] if s.get("name", "").startswith(name)]
     assert len(steps) == 1, f"missing/ambiguous required step: {name}"
@@ -198,8 +197,6 @@ def _selected_test_files(node: dict, name: str, *, windows_only: bool = False) -
         cells = [{"shard": s} for s in gha.render(matrix["shard"], ctx)]
     else:
         cells = matrix.get("include", [{}])
-    if windows_only:
-        cells = [cell for cell in cells if cell.get("marker") == "windows"]
     assert cells, f"{name}: empty matrix"
     selected = set()
     for cell in cells:
@@ -213,18 +210,6 @@ def _selected_test_files(node: dict, name: str, *, windows_only: bool = False) -
     return selected
 
 
-def _windows_desktop_updater_tests_selected(run: dict) -> bool:
-    """tests-os os-tests runs, and its Windows step keeps the desktop-update hand-off files."""
-    os_tests = _reached(run, "tests-os", "os-tests")
-    if os_tests is None:
-        return False
-    selected = _selected_test_files(os_tests, "Run ${{ matrix.marker }} tests", windows_only=True)
-    expected = {p.relative_to(_REPO).as_posix() for p in
-                (_REPO / "tests/scripts/desktop_update").glob("test_desktop_update_windows_*.py")}
-    assert expected, "no Windows hand-off consumers exist"
-    return expected <= selected
-
-
 # Each real consumer of a lane, as a path of job names from ci.yaml down.
 _CONSUMERS: dict[str, tuple[tuple[str, ...], ...]] = {
     "e2e_upgrade": (
@@ -233,14 +218,10 @@ _CONSUMERS: dict[str, tuple[tuple[str, ...], ...]] = {
         ("tests-os", "install-update-e2e", "install-update"),
     ),
     "e2e": (("tests", "e2e"), ("tests-os", "e2e-windows")),
-    "e2e_desktop_update": (("e2e-desktop-update", "update"),),
 }
 
 
 def _consumers_reached(run: dict, lane: str) -> dict[str, bool]:
-    if lane == "desktop_updater":
-        return {"tests-os/os-tests[windows] keeps test_desktop_update_windows_*":
-                _windows_desktop_updater_tests_selected(run)}
     reached = {}
     for path in _CONSUMERS[lane]:
         node = _reached(run, *path)
@@ -252,7 +233,7 @@ def _consumers_reached(run: dict, lane: str) -> dict[str, bool]:
     return reached
 
 
-_GATED = ("python", "desktop_updater", "e2e", "e2e_upgrade", "e2e_desktop_update")
+_GATED = ("python", "e2e", "e2e_upgrade")
 
 
 def test_replay_evaluator_follows_actions_semantics():
@@ -270,31 +251,28 @@ def test_replay_evaluator_follows_actions_semantics():
 @pytest.mark.parametrize("combo", list(itertools.product((False, True), repeat=len(_GATED))),
                          ids=lambda c: "-".join(n for n, on in zip(_GATED, c) if on) or "none")
 def test_every_set_lane_reaches_its_consumer_whatever_the_other_lanes_say(combo):
-    """The R15 hole was a parent ``if:`` keyed on ``python`` alone: a TypeScript-only
-    change to the hand-off's marker reader set ``desktop_updater`` and nothing ran it."""
+    """The R15 hole was a parent ``if:`` keyed on ``python`` alone: a lane that
+    only starts an E2E suite must still reach that suite."""
     lanes = {k: False for k in cc.classify(["README.md"])}
     lanes.update(zip(_GATED, combo))
     run = _ci_run(lanes)
-    for lane in ("desktop_updater", "e2e", "e2e_upgrade", "e2e_desktop_update"):
+    for lane in ("e2e", "e2e_upgrade"):
         reached = _consumers_reached(run, lane)
         if lanes[lane]:
             assert all(reached.values()), f"{lane}=true but not dispatched: {reached}"
-        elif lane != "desktop_updater":
+        else:
             assert not any(reached.values()), f"{lane}=false but ran anyway: {reached}"
 
 
 # One-file changes from the review's direct classifier run (acceptance/classifier.json),
 # and the suites each must dispatch on a pull request.
 _R15_CASES = {
-    "scripts/build/desktop.mjs": ("e2e_upgrade", "e2e_desktop_update"),
-    "scripts/build/web.mjs": ("e2e_upgrade", "e2e_desktop_update"),
-    "hermes_cli/_subprocess_compat.py": ("e2e_upgrade", "e2e_desktop_update"),
-    "hermes_cli/desktop_build_lock.py": ("e2e_upgrade", "e2e_desktop_update"),
-    "hermes_cli/memory_provider_migration.py": ("e2e_upgrade", "e2e_desktop_update"),
-    "hermes_cli/source_build.py": ("e2e_upgrade", "e2e_desktop_update"),
-    "hermes_cli/source_completion.py": ("e2e_upgrade", "e2e_desktop_update"),
-    "apps/desktop/electron/update-marker.ts": ("desktop_updater", "e2e_desktop_update"),
-    "apps/desktop/electron/handoff-result.ts": ("desktop_updater", "e2e_desktop_update"),
+    "scripts/build/tui.mjs": ("e2e_upgrade",),
+    "hermes_cli/_subprocess_compat.py": ("e2e_upgrade",),
+    "hermes_cli/desktop_build_lock.py": ("e2e_upgrade",),
+    "hermes_cli/memory_provider_migration.py": ("e2e_upgrade",),
+    "hermes_cli/source_build.py": ("e2e_upgrade",),
+    "hermes_cli/source_completion.py": ("e2e_upgrade",),
 }
 
 
@@ -313,15 +291,8 @@ def test_update_owner_change_dispatches_its_suites_end_to_end(path, lanes):
 # Review R6 m11: update-path files whose suites the classifier left off. Some land in a sibling
 # PR of the update stack (update-marker-gate.ts), so the table routes paths, not files on disk.
 _R6_CASES = {
-    # The Desktop gate's marker reader: the hand-off script's contract (desktop_updater) and the
-    # Desktop update E2E that drives the gate.
-    "apps/desktop/electron/update-marker-gate.ts": ("desktop_updater", "e2e_desktop_update"),
-    # Stops the backend before a remote update: typecheck/vitest and the hand-off script tests.
-    "apps/desktop/electron/remote-lifecycle.ts": ("frontend", "desktop_updater"),
-    # The Tauri updater's marker claim: cargo, the only CI that builds it (review CI3).
-    "apps/bootstrap-installer/src-tauri/src/marker.rs": ("rust",),
-    # The launchers reach the launch repair: the Desktop update relaunches through them too.
-    "hermes_cli/_launchers.py": ("e2e_upgrade", "e2e_desktop_update"),
+    # The launchers reach the launch repair the update runs through.
+    "hermes_cli/_launchers.py": ("e2e_upgrade",),
 }
 
 
@@ -334,36 +305,6 @@ def test_update_path_change_selects_every_suite_that_exercises_it(path, lanes):
         if lane.startswith("e2e"):
             reached = _consumers_reached(run, lane)
             assert all(reached.values()), f"{path}: {lane}=true never reaches {reached}"
-        if lane == "desktop_updater":
-            assert _windows_desktop_updater_tests_selected(run), f"{path}: desktop_updater never reaches its tests"
-
-
-# Review CI2/CI3: update-path files the classifier sent to the wrong suites.
-_CI3_CASES = {
-    # /api/health `commit`: the Desktop compares it before attaching after an update.
-    "hermes_cli/web_routers/status.py": ("python", "e2e_desktop_update"),
-    # The SSH remote's marker judge/gate: typecheck/vitest and the marker contract's script tests.
-    "apps/desktop/electron/remote-update-marker-programs.ts": ("frontend", "desktop_updater"),
-    "apps/desktop/electron/remote-update-marker-programs.test.ts": ("frontend", "desktop_updater"),
-}
-
-
-@pytest.mark.parametrize("path,lanes", list(_CI3_CASES.items()))
-def test_update_path_change_reaches_the_suites_that_consume_it(path, lanes):
-    test_update_path_change_selects_every_suite_that_exercises_it(path, lanes)
-
-
-_TAURI_UPDATER = tuple(f"apps/bootstrap-installer/src-tauri/src/{name}.rs" for name in ("marker", "update", "paths"))
-
-
-@pytest.mark.parametrize("path", _TAURI_UPDATER)
-def test_tauri_updater_routes_as_one_unit_to_the_lane_that_builds_it(path):
-    """No slow lane builds the bootstrap installer: starting one for its updater runs nothing of it."""
-    assert (_REPO / path).is_file(), f"{path} moved: update this table"
-    classified = _real_classifier([path])
-    assert classified["rust"], f"{path}: cargo test never runs"
-    started = [lane for lane in ("e2e", "e2e_upgrade", "e2e_desktop_update", "e2e_desktop_core") if classified[lane]]
-    assert not started, f"{path}: starts {started}, which never build the Tauri installer"
 
 
 def test_gateway_status_routing_names_the_stamp_not_its_prefix_siblings():
@@ -387,8 +328,6 @@ def test_every_detect_output_a_lane_sets_is_consumed_by_some_job():
 # The job (path from ci.yaml down) that runs each lane's consumers of a shared fixture.
 _FIXTURE_LANE_JOBS: dict[str, tuple[str, ...]] = {
     "python": ("tests", "test"),  # pytest on Linux (marker.sh corpus included)
-    "rust": ("rust-tests", "bootstrap-installer"),  # cargo test of the Tauri crate
-    "frontend": ("js-tests", "check"),  # apps/desktop `check` -> vitest --project electron
 }
 _CORPUS = "tests/fixtures/update_marker_corpus.json"
 _TEST_FILE = re.compile(r"(^tests/(?!ci/).*\.py$)|(_tests?\.rs$)|(\.test\.[cm]?[jt]sx?$)")
@@ -397,17 +336,13 @@ _TEST_FILE = re.compile(r"(^tests/(?!ci/).*\.py$)|(_tests?\.rs$)|(\.test\.[cm]?[
 def _fixture_lanes_reached(fixture: str) -> dict[str, bool]:
     classified = _real_classifier([fixture])
     run = _ci_run(classified)
-    reached = {lane: classified[lane] and _reached(run, *job) is not None
-               for lane, job in _FIXTURE_LANE_JOBS.items()}
-    reached["desktop_updater"] = classified["desktop_updater"] and _windows_desktop_updater_tests_selected(run)
-    return reached
+    return {lane: classified[lane] and _reached(run, *job) is not None
+            for lane, job in _FIXTURE_LANE_JOBS.items()}
 
 
-def test_marker_corpus_change_runs_every_language_that_reads_it():
-    """The corpus is A7 rule 7's single source of truth for four readers. Classified by
-    path alone it selected ``python`` only: cargo (marker_tests.rs), vitest
-    (update-marker-corpus.test.ts) and the PowerShell corpus test (desktop_updater on
-    the Windows lane) never ran on the PR that edited their expected answers."""
+def test_marker_corpus_change_runs_every_lane_that_reads_it():
+    """The corpus is A7 rule 7's single source of truth for each reader: the lane that
+    runs a consumer must fire on the PR that edits the shared cases."""
     reached = _fixture_lanes_reached(_CORPUS)
     assert all(reached.values()), f"{_CORPUS}: a corpus consumer's lane never runs: {reached}"
 
@@ -479,10 +414,8 @@ def test_native_windows_lane_selects_the_replay_and_its_controls():
 # -- replay guard sensitivity: mutate data, not the replay implementation ------------------
 
 _REQUIRED_STEP_CASES = (
-    ("e2e_desktop_update", ".github/workflows/e2e-desktop-update.yml", "update", "Run the update suite under xvfb"),
     ("e2e_upgrade", ".github/workflows/tests.yml", "e2e-upgrade", "Run upgrade e2e tests"),
     ("e2e_upgrade", ".github/workflows/windows-install-update-e2e.yml", "install-update", "Run Windows install + update E2E"),
-    ("desktop_updater", ".github/workflows/tests-os.yml", "os-tests", "Run ${{ matrix.marker }} tests"),
     ("e2e", ".github/workflows/tests.yml", "e2e", "Run e2e tests"),
     ("e2e", ".github/workflows/tests-os.yml", "e2e-windows", "Run Windows E2E suite"),
 )
@@ -512,11 +445,6 @@ def test_replay_rejects_ineffective_required_step(monkeypatch, lane, rel, job, n
     elif mutation == "no-command":
         # Keep every old substring/regex check satisfied, but execute no tests.
         step["run"] = "if false; then\n" + step["run"] + "\nfi\n"
-    elif job == "os-tests":
-        step["run"] = step["run"].replace('"${{ matrix.marker }}"', '"macos"')
-    elif job == "update":
-        for cell in workflow["jobs"][job]["strategy"]["matrix"]["include"]:
-            cell["specs"] = "e2e/update/absent.spec.ts"
     else:
         step["run"] = step["run"].replace("tests/e2e", "tests/absent-e2e")
     with pytest.raises(AssertionError):
@@ -538,15 +466,15 @@ def test_selection_receipt_does_not_require_the_native_jobs_venv(tmp_path):
 
 @_NATIVE_WINDOWS_TOO
 def test_replay_uses_executed_gate_output(monkeypatch):
-    path = "apps/desktop/electron/handoff-result.ts"
-    assert all(_consumers_reached(_ci_run(_real_classifier([path])), "desktop_updater").values())
+    path = "hermes_cli/update_cmd_git.py"
+    assert all(_consumers_reached(_ci_run(_real_classifier([path])), "e2e_upgrade").values())
     workflow = _mutated_yaml(monkeypatch, ".github/workflows/ci.yaml")
     gate = next(s for s in workflow["jobs"]["detect"]["steps"] if s.get("id") == "gate-lanes")
     needle = "    for lane, value in values.items():"
     assert needle in gate["run"]
-    gate["run"] = gate["run"].replace(needle, "    values['desktop_updater'] = 'false'\n" + needle)
+    gate["run"] = gate["run"].replace(needle, "    values['e2e_upgrade'] = 'false'\n" + needle)
     with pytest.raises(AssertionError):
-        test_update_owner_change_dispatches_its_suites_end_to_end(path, ("desktop_updater",))
+        test_update_owner_change_dispatches_its_suites_end_to_end(path, ("e2e_upgrade",))
 
 
 _PROBE_STEP = {"run": r'''python3 -c 'import sys; print("py3=" + sys.executable)' >> "$GITHUB_OUTPUT"
@@ -701,24 +629,17 @@ def _unowned(entries: tuple[str, ...], lane: str) -> dict[str, list[str]]:
     return out
 
 
-@pytest.mark.parametrize("entries,lane", [
-    ("_UPDATE_ENTRY_POINTS", "e2e_upgrade"),
-    ("_DESKTOP_BUILD_ENTRY_POINTS", "e2e_desktop_update"),
-])
-def test_every_module_an_update_entry_point_imports_starts_its_suite(entries, lane):
+def test_every_module_an_update_entry_point_imports_starts_its_suite():
     """Add the module to the classifier's owner list for this lane. Only a shared
     hub (``_SHARED_HUBS``: imported across the product, covered by the unit lanes
     and by this suite on every push to main) may stay out."""
-    missing = _unowned(getattr(cc, entries), lane)
-    assert missing == {}, f"{lane}: imported by the update path but not routed to it: {missing}"
+    missing = _unowned(cc._UPDATE_ENTRY_POINTS, "e2e_upgrade")
+    assert missing == {}, f"e2e_upgrade: imported by the update path but not routed to it: {missing}"
 
 
 def test_entry_points_themselves_start_their_suites():
     for module in _entry_modules(cc._UPDATE_ENTRY_POINTS):
         assert cc.classify([module.relative_to(_REPO).as_posix()])["e2e_upgrade"], module
-    for module in _entry_modules(cc._DESKTOP_BUILD_ENTRY_POINTS):
-        rel = module.relative_to(_REPO).as_posix()
-        assert cc.classify([rel])["e2e_desktop_update"] and cc.classify([rel])["e2e_upgrade"], rel
 
 
 def test_shared_hubs_are_real_hubs_still_on_the_update_path():
@@ -728,15 +649,14 @@ def test_shared_hubs_are_real_hubs_still_on_the_update_path():
     thin = {h: counts.get(h, 0) for h in cc._SHARED_HUBS if counts.get(h, 0) < cc.HUB_MIN_IMPORTERS}
     assert thin == {}, f"not a shared hub (fewer than {cc.HUB_MIN_IMPORTERS} importers): own it instead"
     reached = set()
-    for entries in (cc._UPDATE_ENTRY_POINTS, cc._DESKTOP_BUILD_ENTRY_POINTS):
-        for module in _entry_modules(entries):
-            reached |= _imports(module)
+    for module in _entry_modules(cc._UPDATE_ENTRY_POINTS):
+        reached |= _imports(module)
     assert set(cc._SHARED_HUBS) - reached == set(), "stale hub exemption: no entry point imports it"
 
 
 # -- ownership: the JavaScript compilers an update runs -------------------------------------
 
-_SCRIPT_LITERAL = re.compile(r"""["']((?:scripts/build|apps/desktop/scripts)/[\w./-]+\.(?:mjs|js|py|ps1))["']""")
+_SCRIPT_LITERAL = re.compile(r"""["'](scripts/build/[\w./-]+\.(?:mjs|js|py|ps1))["']""")
 _ESM_IMPORT = re.compile(r"""(?:from|import)\s*\(?\s*['"](\.{1,2}/[^'"]+)['"]""")
 _STEP = re.compile(r"""step\(\s*['"]([\w./-]+\.mjs)['"]""")
 
@@ -771,22 +691,8 @@ def _python_script_seeds(entries: tuple[str, ...]) -> set[str]:
 
 def test_build_scripts_the_update_runs_start_the_upgrade_suite():
     reached = _js_closure(_python_script_seeds(cc._UPDATE_ENTRY_POINTS))
-    assert "scripts/build/web.mjs" in reached, "seed scan broke: source_build runs web.mjs"
+    assert "scripts/build/tui.mjs" in reached, "seed scan broke: source_build runs tui.mjs"
     unowned = sorted(f for f in reached if not cc.classify([f])["e2e_upgrade"])
-    assert unowned == []
-
-
-def test_desktop_build_scripts_start_the_desktop_update_suite():
-    """`hermes desktop --build-only` (the update's Desktop rebuild) runs
-    apps/desktop's `build` script, which steps through scripts/build/desktop.mjs."""
-    package = json.loads((_REPO / "apps/desktop/package.json").read_text(encoding="utf-8-sig"))
-    build = re.search(r"node\s+(\S+\.mjs)", package["scripts"]["build"])
-    assert build, package["scripts"]["build"]
-    seeds = {("apps/desktop/" + build.group(1)).replace("/./", "/")}
-    seeds |= _python_script_seeds(cc._DESKTOP_BUILD_ENTRY_POINTS)
-    reached = _js_closure(seeds)
-    assert "scripts/build/desktop.mjs" in reached, "seed scan broke: the Desktop build runs desktop.mjs"
-    unowned = sorted(f for f in reached if not cc.classify([f])["e2e_desktop_update"])
     assert unowned == []
 
 
@@ -824,9 +730,8 @@ def test_pull_requests_and_main_pushes_never_run_e2e(event_name):
     """E2E suites run only on a release run or a manual dispatch, whatever the diff or labels select."""
     lanes = cc.classify([], run_e2e=True)  # every lane on, as a label or an update-path diff would
     run = _run_workflow(".github/workflows/ci.yaml", inputs={}, detect=_detect_outputs(lanes, event_name))
-    for lane in ("e2e", "e2e_upgrade", "e2e_desktop_update"):
+    for lane in ("e2e", "e2e_upgrade"):
         assert not any(_consumers_reached(run, lane).values()), f"{event_name}: {lane} ran"
-    assert "e2e-desktop-core" not in run
     assert "tests" in run and "tests-os" in run  # the unit lanes still run
 
 

@@ -122,8 +122,6 @@ def _owner_rig(tmp_path, monkeypatch, *, old_owner=False):
     from gateway.control_socket import GatewayControlServer
     from gateway.run_api import GatewayRuntimeAPI
     from gateway.runtime_bootstrap import TicketStore
-    from hermes_cli import web_server as web
-    from hermes_cli import web_server_chat
 
     profile = str(tmp_path)
     tickets = TicketStore("owner", [profile])
@@ -154,9 +152,7 @@ def _owner_rig(tmp_path, monkeypatch, *, old_owner=False):
     async def fallback(*args):
         pytest.fail("a ticketed native socket must not enter the legacy fallback")
     monkeypatch.setattr("tui_gateway.ws.handle_ws", handle)
-    monkeypatch.setattr(web, "_DASHBOARD_EMBEDDED_CHAT_ENABLED", True)
-    monkeypatch.setattr(web_server_chat, "_ws_request_is_allowed", lambda ws: True)
-    api = GatewayRuntimeAPI(fallback, runner, web.app)
+    api = GatewayRuntimeAPI(fallback, runner, SimpleNamespace(bound_host=""))
 
     @asynccontextmanager
     async def dial(url, *, subprotocols, **_):

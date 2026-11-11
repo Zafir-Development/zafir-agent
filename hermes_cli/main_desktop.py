@@ -36,7 +36,7 @@ def _desktop_dist_exists(desktop_dir: Path) -> bool:
 
 
 def _renderer_bundle_dir(desktop_dir: Path, *, source_mode: bool) -> Optional[Path]:
-    """The renderer ``dist`` a launch loads: ``apps/desktop/dist`` in source mode, else the
+    """The renderer ``dist`` a launch loads: the desktop workspace's ``dist`` in source mode, else the
     ``app.asar.unpacked/dist`` copy (the only real directory, and the one an interrupted replace tears)."""
     if source_mode:
         return desktop_dir / "dist"
@@ -159,7 +159,7 @@ def _desktop_packaged_executable(desktop_dir: Path) -> Optional[Path]:
 def _desktop_packaged_executable_in(release_dir: Path) -> Optional[Path]:
     """The unpacked Electron app executable under *release_dir* (live ``release`` or a staging dir).
 
-    *release_dir* is electron-builder's ``directories.output`` — the live ``apps/desktop/release`` or a
+    *release_dir* is electron-builder's ``directories.output`` — the live ``release`` dir or a
     stage-and-swap staging dir (#86443).
     """
     if sys.platform == "darwin":
@@ -225,7 +225,7 @@ def _rename_riding_out_file_lock(src: Path, dst: Path) -> None:
 
 
 def _desktop_staging_dir(desktop_dir: Path) -> Path:
-    """Fresh staging dir ``apps/desktop/.staging-<pid>-<ts>``: a sibling of ``release/`` (same fs → the
+    """Fresh staging dir ``.staging-<pid>-<ts>`` beside ``release/``: a sibling (same fs → the
     swap is a rename) but not inside it, so ``release/*-unpacked`` globs never see it. Sweeps leftovers."""
     for stale in desktop_dir.glob(f"{_DESKTOP_STAGING_PREFIX}*"):
         shutil.rmtree(stale, ignore_errors=True)
@@ -343,7 +343,7 @@ def _discard_desktop_staging(staging_dir: Path) -> None:
 # that Windows refuses to load ("This app can't run on your computer" / 此应用无法在你的电脑上运行). These helpers parse
 # the PE header — no signature infrastructure required — so a structurally broken or wrong-architecture
 # Hermes.exe is caught BEFORE the updater replaces the working app, and the previous build can be restored
-# from the .bak tree that apps/desktop/scripts/before-pack.mjs now preserves.
+# from the .bak tree the desktop build preserves.
 _PE_MACHINE_I386 = 0x014C
 _PE_MACHINE_AMD64 = 0x8664
 _PE_MACHINE_ARM64 = 0xAA64
@@ -988,8 +988,8 @@ def _install_rebuilt_desktop_app(desktop_dir: Path, candidates: list[Path]) -> t
     """Copy the rebuilt macOS bundle into every stale or missing installed ``Hermes.app`` in
     *candidates* (``_installed_desktop_apps()``) (#52339).
 
-    ``hermes desktop --build-only`` (what ``hermes update`` runs) packages into
-    ``apps/desktop/release/`` only. Finder, the Dock and Spotlight launch the copy in
+    ``hermes desktop --build-only`` (what ``hermes update`` runs) packages into the
+    workspace's ``release/`` only. Finder, the Dock and Spotlight launch the copy in
     ``/Applications`` (or ``~/Applications``), so without this step every update leaves the
     installed shell one build behind the backend it boots. The detached Desktop updater swaps
     only the bundle it was launched from, so an app running from ``release/`` never refreshed
@@ -1605,7 +1605,7 @@ def _check_desktop_skip_build(
     if source_mode:
         if not _desktop_dist_exists(desktop_dir):
             print(f"✗ --skip-build --source was passed but no desktop dist found at: {desktop_dir / 'dist'}")
-            print("  Pre-build first:  cd apps/desktop && pnpm run build")
+            print("  Pre-build first:  cd desktop && pnpm run build")
             print("  Or drop --skip-build to install dependencies and build automatically.")
             sys.exit(1)
         if not (_electron_dir(project_root) / "package.json").exists():
@@ -1616,7 +1616,7 @@ def _check_desktop_skip_build(
         print(f"→ Skipping desktop source build (--skip-build --source); using dist at {desktop_dir / 'dist'}")
     elif packaged_executable is None:
         print(f"✗ --skip-build was passed but no packaged desktop app was found at: {desktop_dir / 'release'}")
-        print("  Pre-build first:  cd apps/desktop && pnpm run pack")
+        print("  Pre-build first:  cd desktop && pnpm run pack")
         print("  Or drop --skip-build to package automatically.")
         sys.exit(1)
     else:
@@ -1644,7 +1644,7 @@ def _site_packages_install_kind(project_root: Path) -> Optional[str]:
 
     A package-manager install (Homebrew, pip, distro packaging) places this
     code in a ``site-packages``/``dist-packages`` tree. Such a tree ships no
-    ``apps/desktop`` source, so the build ladder below can never run — the
+    desktop app source, so the build ladder below can never run — the
     caller must not treat it like a broken checkout. A Homebrew formula lives
     under a ``Cellar`` directory; any other site-packages owner is reported
     generically as pip.
@@ -1742,7 +1742,7 @@ def cmd_gui(args: argparse.Namespace):
     packaged_executable = _desktop_packaged_executable(desktop_dir)
 
     # The mutable preflight (freshness check → pnpm install → pack) mutates
-    # checkout-scoped node_modules and apps/desktop/release. Serialize it
+    # checkout-scoped node_modules and the desktop release dir. Serialize it
     # across processes so a manual `hermes desktop` racing `hermes update`'s
     # rebuild cannot corrupt either (#93940). The lock lives outside the
     # checkout, keyed by the resolved checkout path.
@@ -1776,7 +1776,7 @@ def cmd_gui(args: argparse.Namespace):
                 desktop_dir, PROJECT_ROOT, source_mode=source_mode, packaged_executable=packaged_executable
             )
         elif needs_build:
-            prepare_source_dependencies(PROJECT_ROOT, ("ui-tui", "web", "apps/desktop"), env=build_env,
+            prepare_source_dependencies(PROJECT_ROOT, ("ui-tui", "web"), env=build_env,
                                         explicit=force_build or getattr(args, "build_only", False))
             built = build_prepared_desktop(desktop_dir, source_mode=source_mode, pnpm=pnpm, env=build_env)
             if not source_mode:

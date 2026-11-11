@@ -1,7 +1,6 @@
-"""Terminal renderer for the learning timeline (learned skills + memories): the desktop starmap's data
-(``apps/desktop/src/app/starmap``) drawn as a timeline bar chart (date rows, skill/memory bars colored by dominant
-category, cumulative trajectory sparkline) plus per-slice bucket metadata the TUI walks as a tree. Age gradient and
-memory ink are ported from the desktop source. Grids are style runs ``[text, style, alpha, hex?]``: consumers map
+"""Terminal renderer for the learning timeline (learned skills + memories), drawn as a timeline bar chart
+(date rows, skill/memory bars colored by dominant category, cumulative trajectory sparkline) plus per-slice bucket
+metadata the TUI walks as a tree. Grids are style runs ``[text, style, alpha, hex?]``: consumers map
 style + brightness onto their palette; hex overrides the base color (category heatmap). Pure, stdlib-only."""
 
 from __future__ import annotations

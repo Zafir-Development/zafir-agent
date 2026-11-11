@@ -120,44 +120,6 @@ async def test_restart_wait_commits_new_input_queued_and_never_claims_it(tmp_pat
 
 
 @pytest.mark.asyncio
-async def test_restart_wait_serves_only_the_reads_that_open_the_parked_session():
-    """Desktop finds and opens the parked conversation over HTTP (sidebar, detail, transcript); every
-    write and unrelated route keeps the drain's 503, and stop() withdraws the reads too."""
-    from gateway.run_api import GatewayRuntimeAPI
-
-    reached = []
-
-    async def app(scope, receive, send):
-        reached.append((scope['method'], scope['path']))
-        await send({'type': 'http.response.start', 'status': 200, 'headers': []})
-        await send({'type': 'http.response.body', 'body': b'{}'})
-
-    runner = SimpleNamespace(_draining=True, _running=True,
-                             session_runtime_descriptor={'state': 'draining', 'drain_reason': 'restart_wait'})
-    api = GatewayRuntimeAPI(app, runner, SimpleNamespace(state=None))
-
-    async def status(method, path):
-        sent = []
-
-        async def receive():
-            return {'type': 'http.request', 'body': b''}
-
-        async def send(message):
-            sent.append(message)
-        await api({'type': 'http', 'method': method, 'path': path, 'headers': [], 'query_string': b'',
-                   'client': ('127.0.0.1', 1)}, receive, send)
-        return sent[0]['status']
-
-    reads = ['/api/profiles/sessions/sidebar', '/api/profiles/sessions', '/api/sessions/s1',
-             '/api/sessions/s1/messages', '/api/sessions/s1/messages/around', '/api/sessions/s1/timeline',
-             '/api/health', '/api/status']
-    assert [await status('GET', path) for path in reads] == [200] * len(reads)
-    refused = [('PATCH', '/api/sessions/s1'), ('DELETE', '/api/sessions/s1'), ('POST', '/api/sessions'),
-               ('GET', '/api/config'), ('GET', '/api/sessions/s1/export/x'), ('POST', '/api/model/set')]
-    assert [await status(m, path) for m, path in refused] == [503] * len(refused)
-    del runner.session_runtime_descriptor['drain_reason']  # stop() began: nothing is served anymore
-    assert await status('GET', '/api/profiles/sessions/sidebar') == 503
-    assert reached == [('GET', path) for path in reads]
 
 
 @pytest.mark.asyncio
@@ -252,12 +214,11 @@ async def test_restart_wait_cuts_sockets_opened_before_it(tmp_path, monkeypatch,
 
     from gateway.run_api import GatewayRuntimeAPI
     from gateway.runtime_bootstrap import TicketStore
-    from hermes_cli import web_server as web
-    from hermes_cli import web_server_chat
+    from types import SimpleNamespace as _NS
 
     tickets = TicketStore("owner", [str(tmp_path)])
     ticket = tickets.mint(profile_id=str(tmp_path), subject="human", purpose="interactive")
-    authority = SimpleNamespace(db=SimpleNamespace(db_path=tmp_path / "state.db"), profile_id=str(tmp_path), runner=None)
+    authority = SimpleNamespace(db=SimpleNamespace(db_path=tmp_path / "state.db"), profile_id=str(tmp_path), instance_id="owner", runner=None)
     runner = SimpleNamespace(_draining=False, _running=True, session_runtime_descriptor={"state": "ready"},
                              session_authority=authority, session_ticket_store=tickets)
 
@@ -283,8 +244,6 @@ async def test_restart_wait_cuts_sockets_opened_before_it(tmp_path, monkeypatch,
         pytest.fail("a ticketed native socket must not enter the legacy fallback")
 
     monkeypatch.setattr("tui_gateway.ws.handle_ws", handle)
-    monkeypatch.setattr(web, "_DASHBOARD_EMBEDDED_CHAT_ENABLED", True)
-    monkeypatch.setattr(web_server_chat, "_ws_request_is_allowed", lambda ws: True)
     frame = json.dumps({"method": "prompt.receipt"})
     incoming = iter([{"type": "websocket.connect"}, {"type": "websocket.receive", "text": frame},
                      {"type": "websocket.disconnect", "code": 1000}])
@@ -297,139 +256,13 @@ async def test_restart_wait_cuts_sockets_opened_before_it(tmp_path, monkeypatch,
 
     scope = {"type": "websocket", "path": "/api/ws", "scheme": "ws", "query_string": b"",
              "client": ("127.0.0.1", 1234), "server": ("127.0.0.1", 9999),
-             "headers": [(b"sec-websocket-protocol", ("hermes-gateway-v1, hermes-gateway-ticket." + ticket).encode())],
+             "headers": [(b"host", b"127.0.0.1:9999"),
+                         (b"sec-websocket-protocol", ("hermes-gateway-v1, hermes-gateway-ticket." + ticket).encode())],
              "subprotocols": ["hermes-gateway-v1", "hermes-gateway-ticket." + ticket]}
-    await GatewayRuntimeAPI(fallback, runner, web.app)(scope, receive, send)
+    await GatewayRuntimeAPI(fallback, runner, _NS(bound_host="127.0.0.1"))(scope, receive, send)
     if opened_in_wait:
         assert received == [("text", frame), ("disconnect", 1000)], received
     else:
         assert received == [("disconnect", 1013)], received
 
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize("opened_in_wait", [False, True])
-async def test_restart_wait_lets_a_webapp_tab_dial_back_in_to_answer_the_parked_prompt(
-        tmp_path, monkeypatch, opened_in_wait):
-    """Browser reconnects can answer during restart wait, through the real socket and session
-    authority, which still refuses every verb outside the drain's allowlist; a socket opened before
-    the wait, other sockets' tickets and stopping remain refused."""
-    import json
-
-    import httpx
-
-    from gateway.run_api import GatewayRuntimeAPI
-    from gateway.session_authority import LiveSession, SessionAuthority
-    from tests.hermes_cli.test_webapp_socket_tickets import _SESSION, serve_webapp
-    from tests.waiting import async_wait_until
-    from tui_gateway import server as tui_server
-
-    web = serve_webapp(tmp_path, monkeypatch).server
-    runner = SimpleNamespace(_draining=False, _running=True, session_runtime_descriptor={"state": "ready"},
-                             session_authority=None)
-    db = SessionDB(tmp_path / "state.db")
-    db.create_session("s", source="test")
-    authority = SessionAuthority(runner, profile_id=str(tmp_path / ".hermes"), instance_id="owner", db=db,
-                                 epoch=begin_runtime_epoch(db, instance_id="owner"))
-    authority.sessions["s"] = LiveSession(None, "route")
-    monkeypatch.setattr(web.app.state, "session_authority", authority, raising=False)
-    monkeypatch.setattr(tui_server, "_WS_ORPHAN_REAP_GRACE_S", 0)
-
-    def open_restart_wait():
-        runner._draining = True
-        runner.session_runtime_descriptor.update(state="draining", drain_reason="restart_wait")
-
-    if opened_in_wait:
-        open_restart_wait()
-    inbox, sent, replies = asyncio.Queue(), [], {}
-
-    async def send(message):
-        sent.append(message["type"])
-        for line in (message.get("text") or "").splitlines():
-            frame = json.loads(line)
-            replies[frame.get("id")] = frame
-
-    def ask(rid, method, **params):
-        inbox.put_nowait({"type": "websocket.receive", "text": json.dumps(
-            {"jsonrpc": "2.0", "id": rid, "method": method, "params": {"session_id": "s", **params}})})
-
-    api = GatewayRuntimeAPI(web.app, runner, web.app)
-    socket = None
-    try:
-        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=api), base_url="http://localhost") as client:
-            async def mint(socket):
-                return await client.post("/api/webapp/socket-ticket", params={"socket": socket}, headers=_SESSION)
-
-            if opened_in_wait:
-                assert (await mint("host-terminal")).status_code == 503
-            minted = await mint("gateway")
-            assert minted.status_code == 200, minted.text
-            protocols = ["hermes-gateway-v1", f"hermes-gateway-ticket.{minted.json()['ticket']}"]
-            scope = {"type": "websocket", "path": "/api/ws", "scheme": "ws", "query_string": b"native_dial=browser",
-                     "client": ("127.0.0.1", 1234), "server": ("localhost", 80),
-                     "headers": [(b"host", b"localhost"), (b"origin", b"http://localhost"),
-                                 (b"sec-websocket-protocol", ", ".join(protocols).encode())],
-                     "subprotocols": protocols}
-            inbox.put_nowait({"type": "websocket.connect"})
-            socket = asyncio.ensure_future(api(scope, inbox.get, send))
-            await async_wait_until(lambda: "websocket.accept" in sent or socket.done(), what="the upgrade answered")
-            assert sent[0] == "websocket.accept", sent
-            if opened_in_wait:
-                ask(1, "session.resume")
-                await async_wait_until(lambda: 1 in replies, what="the resume")
-                assert "result" in replies[1], replies[1]
-                ask(2, "config.set", key="model", value="x")
-                ask(3, "approval.respond", execution_generation=1, prompt_id="gone", choice="once")
-                await async_wait_until(lambda: {2, 3} <= replies.keys(), what="both replies")
-                assert replies[2]["error"]["message"] == "runtime_draining", replies[2]
-                # Reached the authority: a stale prompt is its own verdict, never the drain's refusal.
-                assert replies[3]["error"]["message"] == "stale_generation", replies[3]
-                del runner.session_runtime_descriptor["drain_reason"]  # stop() began
-            else:
-                open_restart_wait()  # the wait opens while this socket is live
-            # The next frame is cut (1013) before it is read: the socket ends unanswered.
-            ask(4, "session.list")
-            await asyncio.wait_for(socket, 10)
-            assert 4 not in replies, replies[4]
-            runner.session_runtime_descriptor.pop("drain_reason", None)  # stop() began
-            assert (await mint("gateway")).status_code == 503
-    finally:
-        if socket is not None and not socket.done():
-            socket.cancel()
-            await asyncio.gather(socket, return_exceptions=True)
-        db.close()
-
-
-@pytest.mark.asyncio
-async def test_restart_wait_admits_a_browser_ticket_only_where_its_gate_redeems_it(tmp_path, monkeypatch):
-    """Off the Webapp the loopback dashboard gate takes the legacy ``?token=`` and never redeems a
-    ticket, so a ticket-shaped subprotocol beside it is still closed 1013 during the wait."""
-    from gateway.run_api import GatewayRuntimeAPI
-    from tests.hermes_cli.test_webapp_socket_tickets import _TOKEN, serve_webapp
-
-    web = serve_webapp(tmp_path, monkeypatch).server
-    monkeypatch.delattr(web.app.state, "ui_surface")  # the gateway's own listener, as on main
-    runner = SimpleNamespace(_draining=True, _running=True, session_authority=None,
-                             session_runtime_descriptor={"state": "draining", "drain_reason": "restart_wait"})
-    reached = []
-
-    async def handle(ws, **kwargs):
-        reached.append(kwargs)
-
-    monkeypatch.setattr("tui_gateway.ws.handle_ws", handle)
-    sent = []
-
-    async def receive():
-        return {"type": "websocket.connect"}
-
-    async def send(message):
-        sent.append(message)
-
-    protocols = ["hermes-gateway-v1", "hermes-gateway-ticket.not-a-ticket"]
-    scope = {"type": "websocket", "path": "/api/ws", "scheme": "ws", "query_string": f"token={_TOKEN}".encode(),
-             "client": ("127.0.0.1", 1234), "server": ("localhost", 80),
-             "headers": [(b"host", b"localhost"), (b"origin", b"http://localhost"),
-                         (b"sec-websocket-protocol", ", ".join(protocols).encode())],
-             "subprotocols": protocols}
-    await GatewayRuntimeAPI(web.app, runner, web.app)(scope, receive, send)
-    assert [(message["type"], message.get("code")) for message in sent] == [("websocket.close", 1013)], sent
-    assert reached == []

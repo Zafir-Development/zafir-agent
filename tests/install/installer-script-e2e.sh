@@ -25,19 +25,13 @@
 #              the checkout landed on HEAD with a working `hermes`
 #
 # Usage:
-#   tests/install/installer-script-e2e.sh --update-method hermes-update|installer-script|installer-script+desktop
-#                                         [--install-method installer-script|installer-script+desktop]
+#   tests/install/installer-script-e2e.sh --update-method hermes-update|installer-script
+#                                         [--install-method installer-script]
 #                                         [--install-ref REF]
 #
-#   --install-method installer-script          the plain one-liner (default)
-#                    installer-script+desktop  the one-liner with its desktop
-#                                              stage opted in (--include-desktop)
+#   --install-method installer-script  the plain one-liner (default)
 #   --update-method  hermes-update      `hermes update`
 #                    installer-script   re-run install.sh (HEAD's copy)
-#                    installer-script+desktop  re-run with --include-desktop
-#                    hermes-desktop-app-update  launch the app via `hermes
-#                                       desktop` (spawn captured, Playwright
-#                                       drives it) and click Update now
 #   --install-ref    what to install first; anything git resolves. Default:
 #                    the newest release tag in the checkout.
 #   --update-ref     what to update TO. Default: HEAD. Pass the next release
@@ -79,12 +73,12 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 case "$INSTALL_METHOD" in
-  installer-script|installer-script+desktop) ;;
-  *) echo "error: --install-method must be installer-script or installer-script+desktop, got '$INSTALL_METHOD'" >&2; exit 1 ;;
+  installer-script) ;;
+  *) echo "error: --install-method must be installer-script, got '$INSTALL_METHOD'" >&2; exit 1 ;;
 esac
 case "$UPDATE_METHOD" in
-  hermes-update|installer-script|installer-script+desktop|hermes-desktop-app-update) ;;
-  *) echo "error: --update-method must be hermes-update, installer-script, installer-script+desktop or hermes-desktop-app-update, got '$UPDATE_METHOD'" >&2; exit 1 ;;
+  hermes-update|installer-script) ;;
+  *) echo "error: --update-method must be hermes-update or installer-script, got '$UPDATE_METHOD'" >&2; exit 1 ;;
 esac
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -177,7 +171,6 @@ export HOME="$WORK_ROOT/home"
 mkdir -p "$HOME/.local/bin"
 export PATH="$HOME/.local/bin:$PATH"
 export HERMES_HOME="$HOME/.hermes"
-export HERMES_DESKTOP_USER_DATA_DIR="$WORK_ROOT/electron-user-data"
 mkdir -p "$HERMES_HOME"
 
 INSTALL_DIR="$HERMES_HOME/hermes-agent"
@@ -188,8 +181,7 @@ INSTALL_DIR="$HERMES_HOME/hermes-agent"
 # only as "the upgrade changed the user's own state" minutes later. Print the KEY
 # NAMES (never values) at each provider boundary: that is what names the step that
 # clobbers them. Declared here with the other early helpers because bash resolves
-# functions in execution order -- its first call is at the user-state snapshot,
-# hundreds of lines above close_running_desktop.
+# functions in execution order -- its first call is at the user-state snapshot.
 env_key_names() { # label
   local label="$1"
   if [ ! -s "$HERMES_HOME/.env" ]; then
@@ -198,26 +190,6 @@ env_key_names() { # label
   fi
   printf '  [env] %s: %s\n' "$label" \
     "$(grep -oE '^[A-Za-z_][A-Za-z0-9_]*=' "$HERMES_HOME/.env" | tr -d '=' | sort | tr '\n' ' ')"
-}
-
-assert_desktop_artifact() {
-  # $1: label. After a +desktop install the built app must exist under the
-  # checkout -- install.sh builds it there and registers no OS entry point.
-  local release_dir="$INSTALL_DIR/apps/desktop/release"
-  local found=""
-  local cand
-  for cand in \
-    "$release_dir/linux-unpacked/Hermes" \
-    "$release_dir/linux-unpacked/hermes" \
-    "$release_dir/mac-arm64/Hermes.app" \
-    "$release_dir/mac/Hermes.app"; do
-    if [ -x "$cand" ] || [ -d "$cand" ]; then
-      found="$cand"
-      break
-    fi
-  done
-  [ -n "$found" ] || fail "no desktop app under $release_dir after $1 (+desktop install)"
-  ok "desktop app built by installer at $1: $found"
 }
 
 assert_checkout() {
@@ -229,50 +201,11 @@ assert_checkout() {
   local hermes
   hermes="$(source_hermes "$INSTALL_DIR")" || fail "no usable installed command at $2"
   python3 -B "$REPO_ROOT/tests/install/e2e-assets/source_driver.py" \
-    --root "$INSTALL_DIR" --launcher "$hermes" --desktop "$EXPECT_DESKTOP" \
+    --root "$INSTALL_DIR" --launcher "$hermes" \
     || fail "read-only verification failed at $2; no repair was attempted"
   HERMES_DISABLE_LAZY_INSTALLS=1 PYTHONDONTWRITEBYTECODE=1 source_build_env "$hermes" --version 2>&1 | ts_prefix > "$LOG_DIR/version-$2.log" \
     || fail "hermes --version failed after $2; log in $LOG_DIR/version-$2.log"
   ok "hermes --version works: $(head -c 120 "$LOG_DIR/version-$2.log" | tr -d '\n')"
-}
-
-desktop_checkpoint() { # phase, expected commit, selected method
-  source_build_env "$HERMES_E2E_NODE" "$ASSETS/source-desktop-smoke.mjs" \
-    --root "$INSTALL_DIR" --home "$HERMES_HOME" --user-data "$HERMES_DESKTOP_USER_DATA_DIR" \
-    --out "$LOG_DIR" --phase "$1" --expect-commit "$2" \
-    --desktop "$EXPECT_DESKTOP" --method "$3"
-}
-
-# Each Playwright phase must own Electron's single-instance lock. Close all
-# other app processes before a phase. Electron otherwise rejects the second
-# instance before Playwright receives an app-ready event.
-close_running_desktop() {
-  local pattern="$INSTALL_DIR/apps/desktop/release"
-  local pid waited=0
-  for pid in $(pgrep -f "$pattern" 2>/dev/null); do
-    kill "$pid" 2>/dev/null || true
-  done
-  while [ "$waited" -lt 30 ]; do
-    pgrep -f "$pattern" >/dev/null 2>&1 || break
-    sleep 0.5
-    waited=$((waited + 1))
-  done
-  if pgrep -f "$pattern" >/dev/null 2>&1; then
-    for pid in $(pgrep -f "$pattern" 2>/dev/null); do
-      kill -KILL "$pid" 2>/dev/null || true
-    done
-    sleep 1
-  fi
-  pgrep -f "$pattern" >/dev/null 2>&1 \
-    && fail "a desktop instance from this install survived termination"
-
-  # The install stamp is logged before requestSingleInstanceLock; a launch that
-  # prints only that stamp is Electron's silent secondary-instance path. After
-  # every matching process is gone, these isolated-route artifacts are stale,
-  # not user data, and must not reject Playwright's lock-owning launch.
-  rm -f "$HERMES_DESKTOP_USER_DATA_DIR/SingletonLock" \
-    "$HERMES_DESKTOP_USER_DATA_DIR/SingletonSocket" \
-    "$HERMES_DESKTOP_USER_DATA_DIR/SingletonCookie"
 }
 
 # The redirect must stay at TRANSPORT level. `hermes update` resolves its
@@ -326,33 +259,18 @@ assert_user_shims() {
 # --- install OLD ---------------------------------------------------------------
 
 step "installing OLD ($INSTALL_REF) via its own scripts/install.sh ($INSTALL_METHOD)"
-EXPECT_DESKTOP=absent
-if [ "$INSTALL_METHOD" = "installer-script+desktop" ]; then
-  EXPECT_DESKTOP=present
-  source_build_env run_source_installer "$REPO_ROOT" "$WORK_ROOT" "$LOG_DIR" "$OLD_SHA" old desktop
-  assert_checkout "$OLD_SHA" OLD
-  assert_desktop_artifact OLD
-else
-  source_build_env run_source_installer "$REPO_ROOT" "$WORK_ROOT" "$LOG_DIR" "$OLD_SHA" old
-  assert_checkout "$OLD_SHA" OLD
-fi
+source_build_env run_source_installer "$REPO_ROOT" "$WORK_ROOT" "$LOG_DIR" "$OLD_SHA" old
+assert_checkout "$OLD_SHA" OLD
 
-# A real, chat-capable provider, started BEFORE the first desktop checkpoint. An
-# existing user HAS one configured, the durability check needs a real turn (not a
-# file we wrote ourselves), and the checkpoint's own chat smoke asserts against
-# HERMES_E2E_MOCK_URL -- so starting this later left TWO mocks per leg: the
-# checkpoint's (which the app's config pointed at and kept using) and the
-# driver's, which the smoke then waited on. That is the "The mock must receive
-# this checkpoint prompt after the send" timeout: the app was talking to 43475
-# while the smoke asserted against 46723. One mock, started here, is also
-# written into the provider config BEFORE preserve_before_upgrade snapshots the
-# home, so nothing reconfigures provider state inside the verified window.
+# A real, chat-capable provider, started before the user-state turn. An existing
+# user HAS one configured, and the durability check needs a real turn (not a file
+# we wrote ourselves). One mock, started here, is also written into the provider
+# config BEFORE preserve_before_upgrade snapshots the home, so nothing
+# reconfigures provider state inside the verified window.
 if [ -z "${HERMES_E2E_MOCK_URL:-}" ]; then
   PATH="$(dirname "$HERMES_E2E_NODE"):$PATH" mock_start "$WORK_ROOT"
   trap mock_stop EXIT
 fi
-
-desktop_checkpoint old "$OLD_SHA" "$INSTALL_METHOD"
 
 # Produce the user's own state through the ordinary CLI, then snapshot what
 # must survive. Done as late as possible before the update so the window
@@ -398,13 +316,10 @@ ok "serve.git main = $TARGET_SHA"
 
 step "updating via $UPDATE_METHOD"
 
-# Install-side state capture, callable from inside the update branches: on
-# app-update legs the updater's transcript is streamed into the app UI (or runs
-# detached) and is otherwise lost, so snapshot every place it also lands --
-# product logs, update hand-off files, the venv's entry-point dir -- while the
-# install is still there to inspect. The assertions can `fail` out of the
-# driver, so the evidence has to be on disk BEFORE they do: the app-update
-# branch calls this the moment its observer returns, not after its rc check.
+# Install-side state capture: snapshot every place the updater's transcript can
+# land -- product logs, update hand-off files, the venv's entry-point dir --
+# while the install is still there to inspect. The assertions can `fail` out of
+# the driver, so the evidence has to be on disk BEFORE they do.
 COLLECTED_INSTALL_LOGS=0
 collect_install_side_logs() {
   [ "$COLLECTED_INSTALL_LOGS" -eq 0 ] || return 0
@@ -412,9 +327,6 @@ collect_install_side_logs() {
   ildest="$LOG_DIR/install-logs"
   mkdir -p "$ildest"
   cp -R "$HERMES_HOME/logs" "$ildest/hermes-logs" 2>/dev/null || true
-  if [ -n "${XDG_DATA_HOME:-}" ]; then
-    cp -R "$XDG_DATA_HOME/hermes/logs" "$ildest/desktop-userdata-logs" 2>/dev/null || true
-  fi
   cp "$HERMES_HOME/.hermes-update-result.json" "$ildest" 2>/dev/null || true
   ls -la "$HERMES_HOME" > "$ildest/hermes-home-ls.txt" 2>/dev/null || true
   ls -la "$INSTALL_DIR/venv/bin" > "$ildest/venv-bin-ls.txt" 2>/dev/null || true
@@ -438,95 +350,17 @@ case "$UPDATE_METHOD" in
     # A user re-running the one-liner today gets the CURRENT script.
     source_build_env run_source_installer "$REPO_ROOT" "$WORK_ROOT" "$LOG_DIR" "$TARGET_SHA" "$TARGET_LABEL"
     ;;
-  installer-script+desktop)
-    EXPECT_DESKTOP=present
-    source_build_env run_source_installer "$REPO_ROOT" "$WORK_ROOT" "$LOG_DIR" "$TARGET_SHA" "$TARGET_LABEL" desktop
-    assert_desktop_artifact "$TARGET_LABEL"
-    ;;
-  hermes-desktop-app-update)
-    # The real user surface: `hermes desktop` launches the app, the user
-    # clicks Settings -> About -> Update now. Playwright must OWN the spawn
-    # (it needs the inspection pipe), so the driver intercepts the product's
-    # own launch call - argv/cwd/env captured at the spawn site by
-    # e2e-assets/launch-capture/sitecustomize.py - and re-executes it under
-    # _electron.launch. Everything before the spawn (build, stamps, sandbox
-    # fixup) runs for real in the installed code.
-    EXPECT_DESKTOP=present
-    HERMES="$(source_hermes "$INSTALL_DIR")" || fail "no installed desktop command"
-    accept_installer_marker "$INSTALL_DIR" \
-      || fail "installed source has changes other than the generated install marker"
-    ASSETS="$REPO_ROOT/tests/install/e2e-assets"
-    SPEC="$WORK_ROOT/launch-spec.json"
-
-    # A REAL configured provider: the mock inference server (the desktop E2E
-    # suite's own) is configured into HERMES_HOME exactly like the dev:mock
-    # flow does. The app then boots genuinely configured - no onboarding
-    # overlay (a fullscreen div that intercepts every click) - and the chat
-    # surface is real too.
-    #
-    # The mock the app must talk to was started and configured ABOVE, and its URL
-    # is what config.yaml/.env hold. Nothing here may touch provider state: this
-    # point is INSIDE the window the user-state verifier judges, so a rewrite (or
-    # a new mock on a new port) reads as the upgrade modifying .env. The app reads
-    # config.yaml/.env, not HERMES_E2E_MOCK_URL.
-    source "$ASSETS/mock-provider.sh"
-    trap mock_stop EXIT
-
-    step "capturing the hermes desktop launch spec (build runs for real)"
-    rc=0
-    if [ "$HERMES" = "$INSTALL_DIR/.hermes/bin/hermes" ]; then
-      # The PM launcher uses -I: PYTHONPATH/sitecustomize cannot reach it.
-      # Ask the installed launcher for its own isolated command, then inject
-      # the driver hook into that command without changing product code.
-      (cd "$INSTALL_DIR" && source_build_env python3 -I "$ASSETS/launch-capture/pm-launch.py" \
-        "$HERMES" "$SPEC" < /dev/null 2>&1 | ts_prefix > "$LOG_DIR/desktop-launch-capture.log") || rc=$?
-    else
-      # Pre-PM console scripts load sitecustomize from PYTHONPATH.
-      (cd "$INSTALL_DIR" && \
-        PYTHONPATH="$ASSETS/launch-capture${PYTHONPATH:+:$PYTHONPATH}" \
-        HERMES_E2E_CAPTURE_LAUNCH="$SPEC" \
-        source_build_env "$HERMES" desktop < /dev/null 2>&1 | ts_prefix > "$LOG_DIR/desktop-launch-capture.log") || rc=$?
-    fi
-    log_group "hermes desktop (launch capture) transcript" "$LOG_DIR/desktop-launch-capture.log"
-    [ "$rc" -eq 0 ] || fail "hermes desktop exited $rc during launch capture; transcript above"
-    # Exit 0 without a capture means a version that never reached its
-    # launch - that must fail loudly, not pass as a no-op.
-    [ -f "$SPEC.captured" ] || fail "hermes desktop exited 0 but no launch was captured at $SPEC"
-    ok "captured $(cat "$SPEC.captured") launch spec"
-
-    close_running_desktop
-    step "driving the app under Playwright: Settings -> About -> Update now"
-    # Use the checkout module closure and current driver Node, not OLD tooling.
-    rc=0
-    (cd "$WORK_ROOT" && "$HERMES_E2E_NODE" "$ASSETS/launch-from-spec.mjs" \
-      --spec "$SPEC" \
-      --old-sha "$OLD_SHA" --chat-out "$LOG_DIR/update-window" --mock-url "$HERMES_E2E_MOCK_URL" \
-      --result "$HERMES_HOME/.hermes-update-result.json" \
-      --expect-sha "$TARGET_SHA" \
-      --repo-dir "$INSTALL_DIR" 2>&1 \
-      | ts_prefix > "$LOG_DIR/app-update.log") || rc=$?
-    log_group "app update (Playwright) transcript" "$LOG_DIR/app-update.log"
-    # Evidence before the assertion: the hand-off transcript is exactly what a
-    # failing app-update leg needs, and this branch used to collect it only
-    # after `fail` had already exited the driver.
-    collect_install_side_logs
-    [ "$rc" -eq 0 ] || fail "app-driven update exited $rc; transcript above"
-    ;;
 esac
 
 # Install-side state BEFORE the post-update assertions: the assertions below can
 # `fail` out of the driver, so the evidence must already be on disk when they do.
-# The app-update branch collects it earlier (its own rc check can fail first);
-# the flag inside makes this second call a no-op on those legs.
 collect_install_side_logs
 
 # The update may publish a launcher before its installed dependency inputs are
-# current. The next non-metadata startup then owns source completion, including
-# rebuilding the packaged desktop app. Launching that app directly first lets
-# its backend replace the live bundle and kills Playwright's renderer target.
-# Desktop legs must therefore drive the ordinary CLI startup even when the
-# launcher exists. No-desktop legs retain the legacy missing-launcher recovery.
-if [ "$EXPECT_DESKTOP" = "present" ] || ! source_hermes "$INSTALL_DIR" >/dev/null 2>&1; then
+# current. The next non-metadata startup then owns source completion. Drive the
+# ordinary CLI startup when the launcher is missing -- the legacy
+# missing-launcher recovery.
+if ! source_hermes "$INSTALL_DIR" >/dev/null 2>&1; then
   step "next ordinary startup after the update (completes deferred source-update work)"
   STARTUP_HERMES="$(source_hermes_for_startup "$INSTALL_DIR")" \
     || fail "no installed command to start after the update"
@@ -542,7 +376,5 @@ user_state_after_upgrade
 
 preserve_after_upgrade
 env_key_names "after update"
-close_running_desktop
-desktop_checkpoint new "$TARGET_SHA" "$UPDATE_METHOD"
 
 step "PASS: $INSTALL_REF -> $TARGET_LABEL via $UPDATE_METHOD"

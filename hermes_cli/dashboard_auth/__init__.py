@@ -1,7 +1,12 @@
-"""Dashboard authentication provider framework. The auth gate engages only when the dashboard
-binds to a non-loopback host without ``--insecure``; every request must then carry a verified
-session from a registered ``DashboardAuthProvider`` (Nous provider is the default; third parties
-register theirs via the plugin hook ``ctx.register_dashboard_auth_provider``)."""
+"""Dashboard-auth provider protocol and registry (the browser dashboard itself is gone).
+
+The process-global provider registry and the protocol types remain because bundled
+``plugins/dashboard_auth/*`` providers and ``hermes_cli.plugins``/``plugins_context`` import them at
+plugin discovery, and a plugin may still register a provider through
+``ctx.register_dashboard_auth_provider``. Nothing serves a login page or a browser-authenticated
+route after Step 4; the surviving consumer of a provider's session/refresh types is the plugin
+contract itself. The fate of those bundled providers is a later-step decision.
+"""
 from hermes_cli.dashboard_auth.base import (
     DashboardAuthProvider, Session, TokenPrincipal, LoginStart, InvalidCodeError,
     InvalidCredentialsError, ProviderError, RefreshExpiredError, assert_protocol_compliance,

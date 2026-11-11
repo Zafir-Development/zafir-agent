@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Optional
 
 RESTRICT_SYSCTL = Path("/proc/sys/kernel/apparmor_restrict_unprivileged_userns")
-# Answered by apps/desktop/electron/entry.ts before any window, lock or backend exists.
+# Answered by the desktop shell before any window, lock or backend exists.
 SANDBOX_PROBE_SWITCH = "--hermes-sandbox-probe"
 _PROBE_TIMEOUT_S = 15
 _SUDO_TIMEOUT_S = 300  # room for a typed password, never an unbounded hang

@@ -23,8 +23,9 @@ function vendor(source, name, scripts) {
 
 // A real pnpm workspace and lockfile. tui-only and web-only are tarballs, which pnpm
 // stores and links like registry packages; web-only carries a dependency build. The
-// root postinstall counts pnpm installs. Build outputs stay out of the store, as
-// the repository's pnpm-workspace.yaml configures.
+// root postinstall counts pnpm installs. An unrequested sibling workspace proves
+// selection never provisions it. Build outputs stay out of the store, as the
+// repository's pnpm-workspace.yaml configures.
 function fixture() {
   const base = mkdtempSync(join(tmpdir(), 'node union with spaces-'))
   roots.push(base)
@@ -41,12 +42,12 @@ function fixture() {
   json(join(source, 'package.json'), { name: 'fixture', private: true, dependencies: { 'root-only': 'file:vendor/root-only' },
     scripts: { postinstall: `node -e "require('node:fs').appendFileSync('installs', 'x')"` } })
   writeFileSync(join(source, 'pnpm-workspace.yaml'), [
-    'packages:', '  - ui-tui', '  - web', '  - apps/desktop', 'sideEffectsCache: false',
+    'packages:', '  - ui-tui', '  - web', '  - apps/extra', 'sideEffectsCache: false',
     'allowBuilds:', "  'web-only@file:vendor/web-only-1.0.0.tgz': true", '',
   ].join('\n'))
   json(join(source, 'ui-tui/package.json'), { name: 'tui', version: '1.0.0', dependencies: { 'tui-only': 'file:../vendor/tui-only-1.0.0.tgz' } })
   json(join(source, 'web/package.json'), { name: 'web', version: '1.0.0', dependencies: { 'web-only': 'file:../vendor/web-only-1.0.0.tgz' } })
-  json(join(source, 'apps/desktop/package.json'), { name: 'desktop', version: '1.0.0', scripts: { postinstall: 'node -e "require(\'fs\').writeFileSync(\'electron-provisioned\',\'yes\')"' } })
+  json(join(source, 'apps/extra/package.json'), { name: 'extra', version: '1.0.0', scripts: { postinstall: 'node -e "require(\'fs\').writeFileSync(\'extra-provisioned\',\'yes\')"' } })
   execFileSync(pnpmCommand(), ['install', '--lockfile-only'], { cwd: source, env, stdio: 'pipe' })
   pinPnpm(source, execFileSync(pnpmCommand(), ['--version'], { cwd: source, env, encoding: 'utf8' }).trim())
   return { source, env }
@@ -86,8 +87,8 @@ test('selection fails closed on implicit, unknown or missing workspaces', () => 
   // pnpm itself would ignore a filter that matches nothing.
   expect(() => prepareNodeDependencies({ source, workspaces: ['missing'], env })).toThrow(/workspace/)
   expect(() => prepareNodeDependencies({ source, workspaces: ['.'], env })).toThrow(/workspace/)
-  rmSync(join(source, 'apps/desktop'), { recursive: true })
-  expect(() => prepareNodeDependencies({ source, workspaces: ['apps/desktop'], env })).toThrow(/workspace/)
+  rmSync(join(source, 'apps/extra'), { recursive: true })
+  expect(() => prepareNodeDependencies({ source, workspaces: ['apps/extra'], env })).toThrow(/workspace/)
   expect(existsSync(join(source, 'node_modules'))).toBe(false)
 }, 30000)
 
@@ -141,7 +142,7 @@ test('native toolchain admission rejects a changed compiler without breaking ord
   prepareNodeDependencies({ ...options, install: false })
 }, 30000)
 
-test('one locked preparation retains the requested union without provisioning desktop', () => {
+test('one locked preparation retains the requested union without provisioning an unrequested workspace', () => {
   const { source, env } = fixture()
   const lock = readFileSync(join(source, 'pnpm-lock.yaml'))
   prepareNodeDependencies({ source, workspaces: ['ui-tui', 'web', 'ui-tui'], env })
@@ -149,30 +150,19 @@ test('one locked preparation retains the requested union without provisioning de
     expect(createRequire(join(source, workspace, 'package.json'))(name)).toBe(name)
   }
   expect(createRequire(join(source, 'package.json'))('root-only')).toBe('root-only')
-  expect(existsSync(join(source, 'apps/desktop/node_modules'))).toBe(false)
-  expect(existsSync(join(source, 'apps/desktop/electron-provisioned'))).toBe(false)
+  expect(existsSync(join(source, 'apps/extra/node_modules'))).toBe(false)
+  expect(existsSync(join(source, 'apps/extra/extra-provisioned'))).toBe(false)
   expect(readFileSync(join(source, 'pnpm-lock.yaml'))).toEqual(lock)
   execFileSync(process.execPath, cli(source, '--workspace', 'ui-tui', '--workspace', 'web'), { cwd: tmpdir(), env, stdio: 'pipe' })
   expect(createRequire(join(source, 'web/package.json'))('web-only')).toBe('web-only')
 }, 30000)
 
-test('electron: false installs Desktop without preparing its Electron binary', () => {
-  const { source, env } = fixture()
-  json(join(source, 'vendor/electron/package.json'), { name: 'electron', version: '1.0.0' })
-  json(join(source, 'apps/desktop/package.json'), { name: 'desktop', version: '1.0.0', devDependencies: { electron: 'file:../../vendor/electron' } })
-  execFileSync(pnpmCommand(), ['install', '--lockfile-only'], { cwd: source, env, stdio: 'pipe' })
-  // Electron preparation runs after the install: this fake is not the version Desktop pins.
-  expect(() => prepareNodeDependencies({ source, workspaces: ['apps/desktop'], env })).toThrow(/lock-pinned/)
-  prepareNodeDependencies({ source, workspaces: ['apps/desktop'], env, electron: false })
-  expect(existsSync(join(source, 'apps/desktop/node_modules/electron/package.json'))).toBe(true)
-}, 30000)
-
 test('web-only selection excludes siblings and rejects stale locks without rewriting them', () => {
   const { source, env } = fixture()
-  rmSync(join(source, 'apps/desktop'), { recursive: true })
+  rmSync(join(source, 'apps/extra'), { recursive: true })
   prepareNodeDependencies({ source, workspaces: ['web'], env })
   expect(existsSync(join(source, 'ui-tui/node_modules'))).toBe(false)
-  expect(existsSync(join(source, 'apps/desktop/electron-provisioned'))).toBe(false)
+  expect(existsSync(join(source, 'apps/extra/extra-provisioned'))).toBe(false)
   const lock = readFileSync(join(source, 'pnpm-lock.yaml'))
   json(join(source, 'web/package.json'), { name: 'web', version: '1.0.0', dependencies: { 'web-only': '9.0.0' } })
   expect(() => prepareNodeDependencies({ source, workspaces: ['web'], env })).toThrow()

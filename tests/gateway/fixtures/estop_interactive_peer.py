@@ -20,8 +20,7 @@ async def probe():
     from gateway.run import GatewayRunner
     from gateway.session_authority import initialize_session_authority
     from gateway.run_api import start_gateway_api, stop_gateway_api
-    from hermes_cli import web_server
-    from hermes_cli.dashboard_auth.ws_tickets import mint_ticket
+    from tests.gateway.fixtures.native_ws_auth import prepare_listener, subprotocols, ws_url
     from tests.gateway.fixtures.local_recovery_probe import Model
     from agent import estop
     from websockets.asyncio.client import connect
@@ -37,12 +36,11 @@ async def probe():
         'auxiliary': {'title_generation': {'enabled': False}}, 'platform_toolsets': {'cli': []}}))
     runner = GatewayRunner()
     await initialize_session_authority(runner, profile_id=str(home), instance_id='estop-probe')
+    prepare_listener(runner)
     api = await start_gateway_api(runner)
-    web_server.app.state.auth_required = True
     receipt = {}
     try:
-        ticket = mint_ticket(user_id='owner', provider='fixture')
-        async with connect(api.api_origin.replace('http:', 'ws:') + '/api/ws?ticket=' + ticket) as ws:
+        async with connect(ws_url(api), subprotocols=subprotocols(runner, subject='owner')) as ws:
             pending = {}
             frames = asyncio.Queue()
 

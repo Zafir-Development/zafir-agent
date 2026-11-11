@@ -128,11 +128,7 @@ A local `docker build -t hermes-agent .` produces another image-managed install.
 It does not turn the running container into a self-updating source checkout.
 Recreate the container to use that image. See [Docker](./docker.md).
 
-## Nix and Termux users
-
-A local `nix run .` still runs a Nix-owned derivation. Its package files remain
-immutable and updates stay with Nix. Use `nix develop` for a development shell,
-or the source procedure above where the host supports it.
+## Termux users
 
 The Termux distribution is a bionic APT package. The desktop/server source
 bootstrap is not its supported development or repair route. Use the

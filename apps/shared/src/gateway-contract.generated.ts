@@ -1454,33 +1454,6 @@ export interface DisplayStopResult {
   profile_key: string
   stopped: boolean
 }
-export interface DisplayObserveParams {
-  profile?: string | null
-  viewer_id?: string | null
-}
-export interface DisplayObserveResult {
-  profile: string
-  supported: boolean
-  installed: boolean
-  missing: string[]
-  running: boolean
-  pid?: number | null
-  display?: string | null
-  socket?: string | null
-  geometry: string
-  install_command?: string | null
-  browser?: string | null
-  blocker?: string | null
-  memory_available_mb?: number | null
-  memory_limit_mb?: number | null
-  placement?: string
-  image_switch?: DisplayImageSwitch | null
-  lease: DisplayLease
-  profile_key: string
-  ticket: string
-  path: string
-  viewer_id: string
-}
 export interface DisplaySwitchSandboxImageParams {
   profile?: string | null
   approve?: boolean
@@ -2928,13 +2901,6 @@ export interface FileAttachParams {
   path?: string | null
   data_url?: string | null
   name?: string | null
-  staged_upload?: StagedFileUpload | null
-}
-/** Source identity returned by the browser upload route, checked against the live profile. */
-export interface StagedFileUpload {
-  install_id: string
-  path: string
-  profile_home: string
 }
 export interface FileAttachResult {
   attached: boolean
@@ -4492,7 +4458,7 @@ export interface PluginToolsetRow {
   label: string
   description: string
 }
-/** ``toggle``: ``key``/``name`` + ``enable``; ``install``: ``identifier``/``repo`` or ``catalog_name`` (+ ``force``, ``enable``, ``ref``, ``inspected_sha`` = the commit ``inspect`` read: a custom source with no ``ref`` whose branch moved since is refused); ``inspect``: ``identifier``/``repo`` or ``catalog_name``; ``install_desktop``: ``identifier``/``repo`` (any source ``install`` takes) or ``catalog_name``, always with ``ref`` (the commit ``inspect`` read and the dialog showed; another commit is refused) (+ ``force``) — the desktop half onto the host that serves this client; ``remove_desktop``: ``name`` (+ ``force`` for a package's own half); ``update``: ``name`` (+ ``accept_capabilities`` to apply a re-pin that widened the plugin after the user confirmed the ``delta``, + ``force`` to apply an update whose security scan returned caution after the user saw the findings); ``remove``: ``name`` (user installs only); ``settings``: ``key`` + ``values`` (``{setting_key: value}``, non-secret schema keys only); ``presence``: ``names`` (catalog names, answered in that order); ``update_all``: no fields; ``auto_update``: ``enable`` to set ``plugins.auto_apply`` (omit to read it). */
+/** ``toggle``: ``key``/``name`` + ``enable``; ``install``: ``identifier``/``repo`` or ``catalog_name`` (+ ``force``, ``enable``, ``ref``, ``inspected_sha`` = the commit ``inspect`` read: a custom source with no ``ref`` whose branch moved since is refused); ``inspect``: ``identifier``/``repo`` or ``catalog_name``; ``update``: ``name`` (+ ``accept_capabilities`` to apply a re-pin that widened the plugin after the user confirmed the ``delta``, + ``force`` to apply an update whose security scan returned caution after the user saw the findings); ``remove``: ``name`` (user installs only); ``settings``: ``key`` + ``values`` (``{setting_key: value}``, non-secret schema keys only); ``presence``: ``names`` (catalog names, answered in that order); ``update_all``: no fields; ``auto_update``: ``enable`` to set ``plugins.auto_apply`` (omit to read it). */
 export interface PluginsManageParams {
   profile?: string | null
   action?: PluginsAction
@@ -4509,7 +4475,7 @@ export interface PluginsManageParams {
   values?: Record<string, unknown> | null
   names?: string[] | null
 }
-export type PluginsAction = 'list' | 'toggle' | 'install' | 'inspect' | 'install_desktop' | 'remove_desktop' | 'update' | 'remove' | 'settings' | 'onboarding' | 'presence' | 'update_all' | 'auto_update'
+export type PluginsAction = 'list' | 'toggle' | 'install' | 'inspect' | 'update' | 'remove' | 'settings' | 'onboarding' | 'presence' | 'update_all' | 'auto_update'
 /** ``list`` → ``plugins`` + counts; ``toggle`` → ``ok``/``unchanged``/``restart_required``/``name`` (the canonical key written)/``plugin``; ``install`` → ``hermes_cli.plugins_cmd.dashboard_install_plugin``'s ok payload; ``inspect`` → ``ok``/``agent``/``desktop``/``agent_name``/``desktop_name``/``sha`` (the commit read)/``warnings``/``insecure`` or ``ok=false`` + ``error``; ``toggle``/``install``/``update`` that loaded a plugin also carry ``gateway_reloaded`` (the running gateway picked it up and re-wired its handlers) and ``activation`` — the honest split of what is live now vs deferred, so ``restart_required`` is True only when no gateway answered or the running gateway/backend cannot import the plugin's Python dependencies (``activation.missing_dependencies``); ``update`` → ``ok``/``unchanged``/``sha``, or ``ok=false`` + ``consent_required`` with the ``delta`` (``{surface: [added...]}``) / ``delta_lines`` a widened pin adds — nothing changed until the client retries with ``accept_capabilities`` — or ``ok=false`` + ``scan_blocked`` with ``scan_verdict`` / ``scan_findings`` (retry a caution verdict with ``force``); ``remove`` → ``ok``/``name`` plus ``cleared_memory_provider`` when the removed plugin was the live ``memory.provider``. */
 export interface PluginsManageResult {
   plugins?: AgentPluginRow[] | null
@@ -4546,9 +4512,6 @@ export interface PluginsManageResult {
   agent_name?: string | null
   desktop_name?: string | null
   insecure?: boolean | null
-  path?: string | null
-  paired_with_agent?: boolean | null
-  unpaired_from?: string | null
   results?: PluginUpdateAllRow[] | null
   skipped?: PluginUpdateAllSkip[] | null
   current?: number | null
@@ -4565,7 +4528,6 @@ export interface AgentPluginRow {
   status: string
   portable: boolean
   install_dir: string
-  has_desktop_half: boolean
   servers: PluginServerRow[]
   catalog_name?: string | null
   catalog_tier?: string | null
@@ -6363,8 +6325,6 @@ export interface RpcMethods {
   'display.lease.acquire': { params: DisplayLeaseAcquireParams; result: DisplayLeaseResult }
   /** Hand back. Without a viewer id the release is refused while a human holds unless force. */
   'display.lease.release': { params: DisplayLeaseReleaseParams; result: DisplayLeaseResult }
-  /** Mint a single-use ticket for /api/display/ws and the server-minted viewer id for this connection. */
-  'display.observe': { params: DisplayObserveParams; result: DisplayObserveResult }
   /** Start this profile's Xvnc + Xfce (idempotent); blocks until the display is published. */
   'display.start': { params: ProfileParams; result: DisplayStatus }
   /** Runtime + lease snapshot for this profile's screen. */
@@ -6844,7 +6804,6 @@ export const RPC_METHODS = [
   'display.install',
   'display.lease.acquire',
   'display.lease.release',
-  'display.observe',
   'display.start',
   'display.status',
   'display.stop',

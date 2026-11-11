@@ -611,9 +611,6 @@ def _finish_source_update(root: Path, *, current: bool, pending: Path) -> None:
     # Those builds need PM's selected interpreter with its dependencies
     # activated, so hand that file THIS interpreter and let it re-exec
     # itself, exactly as the installers do.
-    desktop_app = root / "apps/desktop"
-    desktop = ((desktop_app / "dist/index.html").is_file()
-               or any((desktop_app / "release").glob("*")))
     # The tail's progress lines go to stderr: this is an automatic repair in
     # front of whatever command the user ran, and that command may be
     # emitting machine-readable stdout (a JSON probe, a piped query).
@@ -627,8 +624,7 @@ def _finish_source_update(root: Path, *, current: bool, pending: Path) -> None:
         code = run(
             [sys.executable, "-I", "-B", "-u",
              str(root / "hermes_cli/source_completion.py"),
-             "--source", str(root), "--finish-update",
-             *(("--desktop",) if desktop else ())],
+             "--source", str(root), "--finish-update"],
             inherit_lock=True, cwd=root, env=activation_environment(root), stdout=sys.__stderr__,
         ).returncode
     except CustodyRefused as exc:

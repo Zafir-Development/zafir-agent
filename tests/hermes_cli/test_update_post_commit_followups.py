@@ -28,11 +28,11 @@ def test_open_receipt_is_durably_running_and_finalizes_in_place(tmp_path, monkey
     assert len(run_files) == 1
     update_receipt.record_stage("apply", "success")
     assert [s["name"] for s in _latest(tmp_path)["stages"]] == ["apply"]
-    update_receipt.record_followup("build", "web UI build: npm exited 1")
+    update_receipt.record_followup("build", "TUI build: npm exited 1")
     update_receipt.finalize_update_receipt("success")
     final = _latest(tmp_path)
     assert final["outcome"] == "success"
-    assert [(f["step"], f["reason"]) for f in final["followups"]] == [("build", "web UI build: npm exited 1")]
+    assert [(f["step"], f["reason"]) for f in final["followups"]] == [("build", "TUI build: npm exited 1")]
     # The terminal record replaced the running one in the SAME archive file (no duplicate per run).
     assert list((tmp_path / "logs/update_receipts").glob(f"update_*_{final['update_id']}.json")) == run_files
 
@@ -104,27 +104,24 @@ def test_profile_process_writes_receipts_to_the_root_home(tmp_path, monkeypatch)
     assert update_receipt._receipt_dir() == root / "logs/update_receipts"
 
 
-def test_failed_web_build_does_not_skip_the_tui(tmp_path, monkeypatch, capsys):
+def test_failed_tui_build_raises_product_build_error(tmp_path, monkeypatch, capsys):
     from hermes_cli import source_build
 
-    built = []
     monkeypatch.setattr("hermes_cli.main_install_repair._install_configured_features_missing_deps", lambda root: None)
     monkeypatch.setattr("hermes_cli.update_stage.publish_stage", lambda text: None)
     monkeypatch.setattr("hermes_cli.memory_provider_migration.migrate_all_homes", lambda: None)
-    monkeypatch.setattr(source_build, "source_frontends", lambda root: ("web", "ui-tui"))
+    monkeypatch.setattr(source_build, "source_frontends", lambda root: ("ui-tui",))
     monkeypatch.setattr(source_build, "source_build_env", lambda **kw: {"PATH": ""})
     monkeypatch.setattr(source_build, "prepare_source_dependencies", lambda *a, **kw: None)
     monkeypatch.setattr(source_build, "source_product_current", lambda *a: False)
-    monkeypatch.setattr(source_build, "build_source_tui", lambda root, env: built.append("tui"))
 
-    def broken_web(root, env):
+    def broken_tui(root, env):
         raise subprocess.CalledProcessError(1, ["npm", "run", "build"])
 
-    monkeypatch.setattr(source_build, "build_source_web", broken_web)
+    monkeypatch.setattr(source_build, "build_source_tui", broken_tui)
     with pytest.raises(source_build.ProductBuildError) as failure:
         source_build.build_update_products(tmp_path, desktop=False)
-    assert built == ["tui"]
-    assert [name for name, _ in failure.value.failures] == ["web UI build"]
+    assert [name for name, _ in failure.value.failures] == ["TUI build"]
     assert "npm run build exited 1" in str(failure.value)
 
 

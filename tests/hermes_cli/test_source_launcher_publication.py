@@ -468,24 +468,6 @@ def test_windows_repair_upgrades_healthy_old_pm_external_launchers(tmp_path, mon
     assert Path(json.loads(result.stdout)[0]).samefile(interpreter)
 
 
-def test_dashboard_action_boots_selected_dependencies(tmp_path, monkeypatch):
-    from hermes_cli import web_server, web_server_gateway
-
-    repo, home, _ = fixture_tree(tmp_path, monkeypatch)
-    select_generation(repo, 'current', 'selected')
-    monkeypatch.setattr(web_server, "PROJECT_ROOT", repo)
-    monkeypatch.setattr(web_server_gateway, "_ACTION_LOG_DIR", home / "logs")
-    proc = web_server_gateway._spawn_hermes_action(["--version"], "gateway-restart")
-    try:
-        assert proc.wait(timeout=30) == 7
-        log = (home / "logs" / web_server_gateway._ACTION_LOG_FILES["gateway-restart"]).read_text(encoding="utf-8-sig")
-        assert json.loads(log.splitlines()[-1])["value"] == "selected"
-    finally:
-        if proc.poll() is None:
-            proc.kill()
-            proc.wait(timeout=30)
-
-
 def test_pre_pm_base_dependencies_activate_only_at_boot(tmp_path, monkeypatch):
     # The in-tree pre-PM venv is never activated; only a sealed payload's own environment is.
     repo, home, _ = fixture_tree(tmp_path, monkeypatch)

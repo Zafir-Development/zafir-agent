@@ -10,20 +10,15 @@ booleans (one per lane) to ``$GITHUB_OUTPUT`` and stdout. The
 Lanes:
 
 * ``python``      — pytest / ruff / ty / footguns.
-* ``python_prod`` — Python changes OUTSIDE tests/. A tests-only PR keeps
-  ``python`` (pytest must run) while this stays off.
 * ``docker_meta`` — Dockerfiles etc.
 * ``docker``      — the image build: docker meta, the dependency manifests, PM,
   and the image's own tests.
-* ``nix``         — ``nix flake check``: the flake files and the dependency
-  manifests.
-* ``e2e``, ``e2e_upgrade``, ``e2e_desktop_core``, ``e2e_desktop_update`` —
-  the end-to-end suites. The classifier still says which suites a diff
-  touches (``_E2E_LANES``, the ``run-e2e`` label), but ci.yaml's ``detect``
-  gate forces these lanes off on pull requests and pushes to main: the E2E
-  suites run only on a release run or a manual dispatch.
-* ``frontend``    — TS typecheck matrix + desktop build, and the WhatsApp
-  bridge's ``node --test`` suites.
+* ``e2e``, ``e2e_upgrade`` — the end-to-end suites. The classifier still says
+  which suites a diff touches (``_E2E_LANES``, the ``run-e2e`` label), but
+  ci.yaml's ``detect`` gate forces these lanes off on pull requests and pushes
+  to main: the E2E suites run only on a release run or a manual dispatch.
+* ``frontend``    — TS typecheck matrix and the WhatsApp bridge's
+  ``node --test`` suites.
 * ``site``        — Docusaurus + generated skill docs.
 * ``scan``        — supply-chain scan (Python files, .pth, setup hooks).
 * ``deps``        — pyproject.toml dependency bounds check.
@@ -32,17 +27,8 @@ Lanes:
   must not run it.
 * ``npm_lock``    — semantic JS lockfile diff PR comment (pnpm-lock.yaml and
   the standalone npm projects' package-lock.json).
-* ``bootstrap``   — the bootstrap installer lane: install.sh sandbox install,
-  pin-fragment drift check, and shipped version-stamp verification.
-* ``desktop_updater`` — the Windows desktop-update hand-off script and the
-  tests that drive the REAL ``windows.ps1`` (``-SelfTestUi`` / pipe drain /
-  retry policy). These are integration tests of a PowerShell process on a
-  shared runner; running them on every Python PR made their timing noise
-  everyone's problem. They still run on push (fail-open) and whenever the
-  script, its siblings, or their tests change.
-* ``rust``        — ``cargo test`` for the Tauri bootstrap installer. ``.rs``
-  lives under ``apps/``, so without this lane a Rust change matched ``frontend``
-  and only the TypeScript matrix ran.
+* ``bootstrap``   — the install-script lane: install.sh/install.ps1 sandbox
+  install, pin-fragment drift check, and shipped version-stamp verification.
 * ``catalog``     — the plugin-catalog tests (catalog-tests.yml). A diff made
   only of catalog entry data (``plugin-catalog/*.yaml``, ``contributors/emails/``)
   runs this lane INSTEAD of the Python suite: those files are data that a known
@@ -54,7 +40,7 @@ Lanes:
   other test of those backends is mocked, so a change to the backends, the
   terminal tool, or the real-backend tests runs it on the PR.
 
-``docker``, ``nix`` and the E2E lanes take most of the larger-runner minutes.
+``docker`` and the E2E lanes take most of the larger-runner minutes.
 An ordinary product change does not start them on a pull request. Every push
 to main runs them all (a push has no diff, so every lane is on), so a
 regression they catch shows up on main after the merge. A stable-release run
@@ -71,10 +57,6 @@ must never skip one a change could break:
   or a frontend-only package; an unrecognized path keeps it on.
 * ``skills/`` (incl. ``SKILL.md``) is python-relevant — the skill-doc tests
   read that tree, so a doc-looking edit can still break Python.
-* ``nix/``, ``flake.nix`` and ``flake.lock`` are the exception the other way:
-  only the flake reads them, so they skip the Python lanes and run ``nix``
-  alone. ``pyproject.toml`` and ``uv.lock`` are flake inputs too, but the
-  packaging tests read them, so they keep every Python lane.
 * ``website/static/oauth/`` is python-relevant too: it publishes the OAuth
   Client ID Metadata Document that ``tests/tools/test_mcp_cimd.py`` checks
   against the pinned callback ports in ``tools/mcp_oauth.py``.
@@ -94,10 +76,7 @@ import os
 import subprocess
 import sys
 
-_FRONTEND = ("ui-tui/", "web/", "apps/")  # TS typecheck-matrix packages
-# Shipped page outside those packages, exercised by the desktop Electron suite. The desktop cache
-# key owner is checked by tests-js/desktop-build-cache-inputs.test.mjs against the Node graph.
-_FRONTEND_FILES = {"scripts/desktop-update/ui.html", "scripts/ci/desktop_build_cache.py"}
+_FRONTEND = ("ui-tui/", "apps/")  # TS typecheck-matrix packages
 # The WhatsApp bridge's ``node --test`` suites run in the JS & TS job, so a
 # change to the bridge or to the Python adapter that speaks its protocol
 # selects ``frontend``.
@@ -105,8 +84,6 @@ _WHATSAPP_BRIDGE = ("scripts/whatsapp-bridge/", "plugins/platforms/whatsapp/")
 # Shift every package's tree (pnpm-workspace.yaml carries the overrides).
 _ROOT_NPM = {"package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml"}
 _DOCKER_META = ("docker/", ".hadolint.yaml", "Dockerfile", ".dockerignore") # docker setup
-_NIX_PATHS = ("nix/",) # nix files
-_NIX_FILES = {"flake.nix", "flake.lock"} # base nix files
 _SITE = ("website/", "skills/", "optional-skills/")  # docs site + skill pages
 # Prose/frontend trees that can't touch Python. skills/ is excluded on purpose.
 _PY_SKIP = ("docs/", "website/") + _FRONTEND
@@ -135,10 +112,6 @@ _PY_RELEVANT_CONTRACT_FILES = {
     "apps/shared/src/gateway-contract.openrpc.json",
     # tests/gateway/test_control_socket_vectors.py (the public control-socket contract)
     "apps/shared/src/node/control-socket.vectors.json",
-    # tests/hermes_cli/test_desktop_slash_registry.py
-    "apps/desktop/src/lib/desktop-slash-registry.json",
-    # tests/tui_gateway/test_show_reasoning_display_gate.py (card-tool names vs the gateway lifecycle set)
-    "apps/desktop/src/lib/tool-render-class.ts",
     # tests/website/test_catalog_rules_mirror.py (docs page mirrors the canonical rules)
     "plugin-catalog/README.md",
     # tests/hermes_cli/test_plugin_docs_public_imports.py (its examples import only the plugin API)
@@ -153,36 +126,17 @@ _CATALOG_DATA = ("plugin-catalog/", "contributors/emails/")
 _SCAN_EXTS = (".py", ".pth")
 _SCAN_FILES = {"setup.cfg", "pyproject.toml"}
 
-# Bootstrap installer: the POSIX shell installer, the dev-checkout wrapper
-# that carries the same pin fragment, and the Tauri app's non-Rust sources
-# (the .rs/Cargo files are the ``rust`` lane's job). Changes here get the
-# bootstrap-installer.yml lane — a real sandboxed install + stamp check.
-_BOOTSTRAP_PATHS = ("apps/bootstrap-installer/",)
-_BOOTSTRAP_FILES = {"scripts/install.sh", "setup-hermes.sh"}
-# Windows desktop-update hand-off (scripts/desktop-update/windows.ps1 + the
-# Electron side that launches it) and the pytest files that spawn it.
-# tests/_fixtures/ holds the conftest's platform gating, so it re-arms the lane too.
-_DESKTOP_UPDATER_PATHS = ("scripts/desktop-update/", "tests/_fixtures/")
-_DESKTOP_UPDATER_TEST_PREFIX = "tests/scripts/desktop_update/"
-_DESKTOP_UPDATER_FILES = {
-    "apps/desktop/electron/updater-process.ts",
-    "apps/desktop/electron/managed-ssh-update.ts",
-    # The other half of the marker / result contract the script implements.
-    "apps/desktop/electron/update-marker.ts",
-    "apps/desktop/electron/update-marker-gate.ts",  # the gate's live-marker probe
-    "apps/desktop/electron/handoff-result.ts",
-    # Stops a remote backend for the update the hand-off script then runs.
-    "apps/desktop/electron/remote-lifecycle.ts",
-    # The SSH remote's marker judge/gate programs: marker.sh/marker.ps1's contract, run remotely.
-    "apps/desktop/electron/remote-update-marker-programs.ts",
-    "apps/desktop/electron/remote-update-marker-programs.test.ts",
-    # Python the script runs: the post-update verify and the staged app swap.
-    "hermes_cli/desktop_update_verify.py",
-    "hermes_cli/main_desktop.py",
-    "tests/conftest.py",
-    "pyproject.toml",
+# Install scripts: the POSIX and PowerShell installers, the generated pin
+# fragments they carry, the dev-checkout wrapper, and the install-script CI
+# lane itself. Changes here get the install-script.yml lane — a real sandboxed
+# install + stamp check.
+_BOOTSTRAP_FILES = {
+    "scripts/install.sh",
+    "scripts/install.ps1",
+    "scripts/gen-bootstrap-pins.py",
+    "setup-hermes.sh",
+    ".github/workflows/install-script.yml",
 }
-
 # Cross-language fixtures: one data file that tests in several languages read as
 # their shared contract. Editing it is editing every consumer, so it selects each
 # lane that runs one (a path-prefix rule would see only ``tests/`` -> python, and
@@ -193,30 +147,14 @@ _SHARED_FIXTURE_CONSUMERS: dict[str, tuple[str, ...]] = {
     # A7 rule 7: the update-marker parse / judge / release corpus.
     "tests/fixtures/update_marker_corpus.json": (
         "tests/hermes_cli/test_update_marker_corpus.py",  # Python: update_lock
-        "apps/bootstrap-installer/src-tauri/src/marker_tests.rs",  # Rust: cargo test
-        "apps/desktop/electron/update-marker-corpus.test.ts",  # Electron: vitest
-        "tests/scripts/desktop_update/test_desktop_update_posix_marker_corpus.py",  # marker.sh
-        "tests/scripts/desktop_update/test_desktop_update_windows_marker_corpus.py",  # marker.ps1
-        "apps/desktop/electron/remote-update-marker-programs.test.ts",  # SSH remote judge
-        "apps/desktop/electron/remote-lifecycle-v2-marker.test.ts",  # SSH relaunch/spawn gate
     ),
-    # Which halves a plugin folder ships: the gateway's and native Desktop's inspectors.
+    # Which halves a plugin folder ships: the gateway's inspector.
     "tests/fixtures/plugin_component_detection.json": (
         "tests/hermes_cli/test_plugins_cmd_inspect.py",  # Python: detect_components
-        "apps/desktop/electron/desktop-plugin-install.test.ts",  # Electron: detectPluginComponents
     ),
 }
 # What a fixture inherits from its consumers: the lanes that run them as tests.
-# Not the slow suites a consumer's path also matches (an Electron test file under
-# electron/update-* starts the Desktop update E2E, which never reads the corpus).
-_FIXTURE_CONSUMER_LANES = ("python", "rust", "frontend", "desktop_updater")
-
-# Rust crates — currently just the Tauri bootstrap installer (Hermes-Setup).
-# These live under ``apps/``, so before this lane existed a ``.rs`` edit matched
-# ``frontend`` and nothing more: the TypeScript matrix built, cargo never ran,
-# and the crate's unit tests had never executed in CI at all.
-_RUST_PATHS = ("apps/bootstrap-installer/src-tauri/",)
-_RUST_FILENAMES = {"Cargo.toml", "Cargo.lock"}
+_FIXTURE_CONSUMER_LANES = ("python", "frontend")
 
 # The real SSH/Docker backend lane: the backends, the terminal tool that drives
 # them, the tests it runs, the sshd it starts, and the runner's env allowlist
@@ -249,21 +187,6 @@ _PY_TEST_HARNESS = (
     "scripts/run_tests_launch.py",
     "scripts/run_tests_fork_child.py",
 )
-# Both Desktop suites package the app and share this harness (the update
-# suite imports the core suite's harness and provider).
-_DESKTOP_E2E_SHARED = (
-    "apps/desktop/package.json",
-    "apps/desktop/electron-builder.config.cjs",
-    "apps/desktop/scripts/",
-    "apps/desktop/e2e/core/harness",
-    "apps/desktop/e2e/core/provider",
-    "apps/desktop/e2e/electron-binary",
-    "apps/desktop/e2e/fix-electron-tracing",
-    "apps/desktop/e2e/run-tmp",
-)
-# The Tauri updater (update.rs, its marker claim marker.rs, the paths.rs both resolve) is
-# compiled and tested by ``cargo test`` alone (the ``rust`` lane, via ``.rs``): no slow lane
-# builds the bootstrap installer, so none of the three starts one.
 # What `hermes update` runs outside the update_* module family: the steps of the
 # pipeline (entry, lock, early recovery, completion tail, launchers, fleet
 # restart/verify, Windows pause/resume) and the lock / marker / recovery state
@@ -273,7 +196,7 @@ _DESKTOP_E2E_SHARED = (
 _UPDATE_PIPELINE = (
     "hermes_cli/main.py",  # cmd_update: lock, pre-update backup, receipt boundary
     "hermes_cli/main_dashboard.py",  # hangup protection + update.log mirror
-    "hermes_cli/main_web_build.py",  # completion's bytecode sweep and dropped-folder prune
+    "hermes_cli/update_bytecode.py",  # completion's bytecode sweep and dropped-folder prune
     # Prefix: main_desktop.py (staged Desktop swap / rebuild in the tail) and the
     # main_desktop_* siblings it imports (macOS signing identity).
     "hermes_cli/main_desktop",
@@ -310,7 +233,6 @@ _UPDATE_PIPELINE = (
     "gateway/host_rendezvous.py",
     "gateway/shutdown_forensics.py",
     "gateway/restart.py",
-    "scripts/desktop-update/",  # the hand-off scripts run `hermes update`
 )
 # Selectors are owned by the import graph, not remembered. The update
 # transaction's own modules (what `hermes update` and the launch-time completion
@@ -332,15 +254,6 @@ _UPDATE_ENTRY_POINTS = (
     "hermes_cli/desktop_build_lock.py",
     "hermes_cli/subcommands/update",
 )
-# The entry points that build or verify the Desktop app inside an update
-# (`hermes desktop --build-only`, the source build/completion that feeds it).
-_DESKTOP_BUILD_ENTRY_POINTS = (
-    "hermes_cli/source_build.py",
-    "hermes_cli/source_completion.py",
-    "hermes_cli/main_desktop.py",
-    "hermes_cli/desktop_update_verify.py",
-    "hermes_cli/desktop_build_lock.py",
-)
 # What the entry points import, outside the update_* family and the pipeline above.
 _UPDATE_DEPENDENCIES = (
     "hermes_cli/_subprocess_compat.py",  # update git env, process-tree kill, PM git exposure
@@ -361,7 +274,6 @@ _UPDATE_DEPENDENCIES = (
     "hermes_cli/memory_provider_migration.py",
     "hermes_cli/left_core_migration.py",  # source_build migrates plugins that left core
     "hermes_cli/config_version_stamp.py",  # post_update converts legacy AGENT_BROWSER_* before stamping
-    "hermes_cli/web_build_limits.py",  # source_build caps the dashboard Node build
     "hermes_cli/desktop_console.py",
     "hermes_cli/bundled_app.py",
     "hermes_cli/gui_uninstall.py",
@@ -402,12 +314,9 @@ _UPDATE_DEPENDENCIES = (
     "tools/skills_sync.py",
     "tools/environments/local_env_policy.py",
     "pm/progress.py",
-    # The compilers source_build / the Desktop build run (freshness, node-deps,
-    # tui, web, desktop and their shared frontend-common).
+    # The compilers source_build runs (freshness, node-deps, tui and their
+    # shared frontend-common).
     "scripts/build/",
-    "apps/desktop/scripts/build-webapp.mjs",  # source_build's Webapp renderer build
-    "hermes_cli/webapp.py",  # source_build rebuilds the Webapp bundle a home serves
-    "gateway/webapp_listener.py",  # source_build reads which homes serve the Webapp
 )
 # General-purpose modules an entry point imports but that half the product
 # imports too (>= HUB_MIN_IMPORTERS product modules, checked by the test). The
@@ -473,62 +382,6 @@ _E2E_LANES: dict[str, tuple[str, ...]] = {
         *_UPDATE_ENTRY_POINTS,
         *_UPDATE_DEPENDENCIES,
     ),
-    "e2e_desktop_core": (
-        *_DESKTOP_E2E_SHARED,
-        "apps/desktop/e2e/",
-        "apps/desktop/electron/backend-",
-        "apps/shared/src/",
-        "apps/desktop/src/store/session",
-        "apps/desktop/src/store/transcript",
-        # Every core spec drives open/resume/switch; #132017 changed resume
-        # without running them and main sat red on remote-secondary.
-        "apps/desktop/src/app/session/",
-        "apps/desktop/src/app/open-session",
-        # fleet-condensed-default.spec.ts: the profile rail's doors per gateway.
-        "apps/desktop/src/app/chat/sidebar/profile-switcher",
-        "apps/desktop/src/app/chat/sidebar/fleet-",
-        # reconnect-turn-state.spec.ts: the lost-turn card and Discard live in the queue panel.
-        "apps/desktop/src/app/chat/composer/queue-",
-    ),
-    "e2e_desktop_update": (
-        *_DESKTOP_E2E_SHARED,
-        "apps/desktop/e2e/update/",
-        "apps/desktop/electron/updater",
-        "apps/desktop/electron/update-",
-        "apps/desktop/electron/app-updater",
-        "apps/desktop/electron/gateway-stop-before-update",
-        "apps/desktop/electron/pre-update-",
-        "apps/desktop/electron/install-stamp",
-        # The rest of the Electron update path (codemap desktop-update §1):
-        # main.ts owns the gate / backend stop / hand-off launch hunks (the
-        # classifier sees files, not hunks), the result reader, the install
-        # kind, the attach-time version check and the in-place app swap.
-        "apps/desktop/electron/main.ts",
-        "apps/desktop/electron/handoff-result",
-        "apps/desktop/electron/desktop-installation",
-        "apps/desktop/electron/backend-discovery",
-        "apps/desktop/electron/local-gateway",  # gateway ensure: code_sha vs checkout, restart on skew
-        "apps/desktop/electron/bundle-swap",
-        "apps/desktop/electron/app-installer-file",
-        "scripts/desktop-update/",
-        "scripts/install.sh",
-        "hermes_cli/update_",
-        "hermes_cli/main_desktop",  # the entry point and the main_desktop_* siblings it imports
-        *_DESKTOP_BUILD_ENTRY_POINTS,
-        *_UPDATE_DEPENDENCIES,
-        # Pipeline modules the Desktop build entry points import directly.
-        "hermes_cli/main.py",  # `hermes desktop --build-only`
-        "hermes_cli/venv_sync.py",
-        "hermes_cli/source_stamp.py",
-        # Imported by the Desktop build's scripts (scripts/build/desktop.mjs closure).
-        "apps/desktop/product-identity.cjs",
-        "scripts/msix-shared.mjs",
-        # The launchers the Desktop relaunches through reach the launch-time repair first.
-        "hermes_cli/_launchers.py",
-        # The backend's /api/health `commit`, which the Desktop compares to the checkout
-        # before attaching to a running backend after an update.
-        "hermes_cli/web_routers/status.py",
-    ),
 }
 
 
@@ -544,20 +397,16 @@ def _with_package_inits(paths: tuple[str, ...]) -> tuple[str, ...]:
                                           and os.path.isfile(os.path.join(root, i)))]))
 
 
-for _lane in ("e2e_upgrade", "e2e_desktop_update"):
+for _lane in ("e2e_upgrade",):
     _E2E_LANES[_lane] = _with_package_inits(_E2E_LANES[_lane])
 # The upgrade journeys are their own lane; editing one does not start ``e2e``.
-# The update suite shares apps/desktop/e2e/ with the core suite but not its specs.
 _E2E_LANE_EXCLUDES = {
     "e2e": ("tests/e2e/core/upgrade/", "tests/e2e/core/windows_update/"),
-    "e2e_desktop_core": ("apps/desktop/e2e/update/",),
 }
-# The image builds the Webapp (webapp_build stage), so its manifests and build
-# recipe route here; Desktop sources stay out, as web/ and ui-tui/ do.
+# The image builds the TUI frontend from the shared recipe and apps/shared, so
+# those inputs route here.
 _DOCKER_PATHS = (*_DOCKER_META, *_DEP_MANIFESTS, *_NPM_MANIFESTS, "pm/", "tests/docker/",
-                 "apps/desktop/package.json", "apps/desktop/scripts/build-webapp.mjs",
                  "apps/shared/package.json", "scripts/build/")
-_NIX_LANE_PATHS = (*_NIX_PATHS, *_NIX_FILES, *_DEP_MANIFESTS, *_NPM_MANIFESTS)
 
 # A pull request with this label runs every slow lane, whatever it touches.
 RUN_E2E_LABEL = "run-e2e"
@@ -568,10 +417,6 @@ def _is_docs(p: str) -> bool:
     return p.endswith((".md", ".mdx")) or p.startswith("docs/") or p.startswith("LICENSE")
 
 
-def _is_nix(p: str) -> bool:
-    return p.startswith(_NIX_PATHS) or p in _NIX_FILES
-
-
 def _py_irrelevant(p: str) -> bool:
     if p.startswith(_PY_RELEVANT_SITE) or p in _PY_RELEVANT_CONTRACT_FILES:
         return False
@@ -580,7 +425,6 @@ def _py_irrelevant(p: str) -> bool:
         or p in _ROOT_NPM
         or p.startswith(_PY_SKIP)
         or p.startswith(_DOCKER_META)
-        or _is_nix(p)
     )
 
 
@@ -588,36 +432,8 @@ def _is_catalog_data(p: str) -> bool:
     return p.startswith(_CATALOG_DATA) and p not in _PY_RELEVANT_CONTRACT_FILES
 
 
-def _py_test_only(p: str) -> bool:
-    """Is ``p`` inside the test suite (never shipped / imported by the product)?
-
-    Product jobs (Desktop E2E's ``hermes serve`` backend, the Docker image)
-    run installed code — nothing under ``tests/`` is packaged or importable
-    there. scripts/run_tests.sh and scripts/run_tests_parallel.py are deliberately
-    NOT test-only: they are runner infrastructure, and a bad edit there can
-    mask real failures, so they stay conservative (python_prod=true).
-    """
-    return p.startswith("tests/")
-
-
 def _is_scan(p: str) -> bool:
     return p.endswith(_SCAN_EXTS) or p in _SCAN_FILES
-
-
-def _is_desktop_updater(p: str) -> bool:
-    return (
-        p.startswith(_DESKTOP_UPDATER_PATHS)
-        or p.startswith(_DESKTOP_UPDATER_TEST_PREFIX)
-        or p in _DESKTOP_UPDATER_FILES
-    )
-
-
-def _is_rust(p: str) -> bool:
-    return (
-        p.endswith(".rs")
-        or p.startswith(_RUST_PATHS)
-        or os.path.basename(p) in _RUST_FILENAMES
-    )
 
 
 def _slow_lanes(files: list[str]) -> dict[str, bool]:
@@ -630,7 +446,6 @@ def _slow_lanes(files: list[str]) -> dict[str, bool]:
         for lane, paths in _E2E_LANES.items()
     }
     lanes["docker"] = any(f.startswith(_DOCKER_PATHS) for f in files)
-    lanes["nix"] = any(f.startswith(_NIX_LANE_PATHS) for f in files)
     return lanes
 
 
@@ -644,9 +459,8 @@ def classify(files: list[str], run_e2e: bool = False) -> dict[str, bool]:
     catalog = any(_is_catalog_data(f) for f in files)
     code = [f for f in files if not _is_catalog_data(f)]
     python = any(not _py_irrelevant(f) for f in code)
-    python_prod = any(not _py_irrelevant(f) and not _py_test_only(f) for f in code)
     frontend = any(
-        f.startswith(_FRONTEND) or f in _ROOT_NPM or f in _FRONTEND_FILES
+        f.startswith(_FRONTEND) or f in _ROOT_NPM
         or f.startswith(("tests-js/",) + _WHATSAPP_BRIDGE)
         or (f.startswith("scripts/build/") and f.endswith((".mjs", ".js", ".ts")))
         for f in files
@@ -657,7 +471,6 @@ def classify(files: list[str], run_e2e: bool = False) -> dict[str, bool]:
     
     ret = {
         "python": python,
-        "python_prod": python_prod,
         "docker_meta": docker_meta,
         "frontend": frontend,
         "site": any(f.startswith(_SITE) for f in files),
@@ -665,11 +478,7 @@ def classify(files: list[str], run_e2e: bool = False) -> dict[str, bool]:
         "deps": deps,
         "uv_lock": any(f in ("pyproject.toml", "uv.lock") for f in files),
         "npm_lock": npm_lock,
-        "bootstrap": any(
-            f.startswith(_BOOTSTRAP_PATHS) or f in _BOOTSTRAP_FILES for f in files
-        ),
-        "desktop_updater": any(_is_desktop_updater(f) for f in files),
-        "rust": any(_is_rust(f) for f in files),
+        "bootstrap": any(f in _BOOTSTRAP_FILES for f in files),
         "remote_backends": any(f.startswith(_REMOTE_BACKEND_PATHS) for f in files),
         "catalog": catalog,
         **{lane: run_e2e or on for lane, on in _slow_lanes(files).items()},
@@ -681,7 +490,6 @@ def classify(files: list[str], run_e2e: bool = False) -> dict[str, bool]:
             ret[lane] = ret[lane] or inherited[lane]
     if not files or any(f.startswith(".github/") for f in files):
         ret["python"] = True
-        ret["python_prod"] = True
         ret["docker_meta"] = True
         ret["frontend"] = True
         ret["site"] = True
@@ -690,8 +498,6 @@ def classify(files: list[str], run_e2e: bool = False) -> dict[str, bool]:
         ret["uv_lock"] = True
         ret["npm_lock"] = True
         ret["bootstrap"] = True
-        ret["desktop_updater"] = True
-        ret["rust"] = True
         ret["remote_backends"] = True
         ret["catalog"] = True
         ret.update(dict.fromkeys(_slow_lanes([]), True))

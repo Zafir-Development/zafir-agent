@@ -1,9 +1,9 @@
 """Generate canonical install-stamp.json for packaged Hermes builds.
 
-All packagers (Docker, Nix, desktop) call this script to produce the same
+All packagers (Docker, desktop) call this script to produce the same
 ``install-stamp.json`` file. Runtime surfaces (CLI, TUI, desktop) read the
 stamp through ``hermes_cli.version_info`` — no env vars, no separate
-docker/nix code paths.
+distribution-specific code paths.
 
 Usage::
 
@@ -14,7 +14,7 @@ Usage::
     # Override provenance for reproducible/packaged builds:
     python scripts/write_install_stamp.py --output ... \\
         --commit <sha> --branch <name> --dirty \\
-        --base-version 0.19.0 --distance 42 --source nix --distribution nix
+        --base-version 0.19.0 --distance 42 --source ci --distribution docker
 
     # Docker (identity admitted by the workflow; with no reachable release the
     # commit alone is the identity and the runtime reports base "unknown"):
@@ -61,6 +61,8 @@ _SEMVER_TAG_RE = re.compile(r"^v(0|[1-9]\d{0,2})\.(\d+)\.(\d+)(?:-[0-9A-Za-z.-]+
 _LEGACY_CALVER_TAG_RE = re.compile(r"^v20\d{2}\.\d+\.\d+(?:\.\d+)?$")
 
 FALLBACK_COMMIT = "0" * 40
+# A caller-supplied identity is only an identity when it is the whole SHA.
+_FULL_COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 
 
 def _run_git(*args: str, cwd: str | Path = _REPO_ROOT) -> str | None:
@@ -120,14 +122,14 @@ def build_stamp(
     source: str = "local",
     distribution: str | None = None,
     runtime_dir: str | None = None,
-    channel_request: dict | None = None,
 ) -> dict:
     """Build a stamp dict from explicit args, filling gaps from git/env.
 
-    Args override detection except for commit-build checkout verification.
+    Args override detection.
     ``source`` identifies where the stamp came from (``ci``, ``local``,
-    ``docker``, ``nix``, ``fallback``). ``update_mechanism`` is required:
-    every stamp names who applies the next update (see UPDATE_MECHANISMS).
+    ``docker``, ``commit-build``, ``fallback``). ``update_mechanism``
+    is required: every stamp names who applies the next update (see
+    UPDATE_MECHANISMS).
 
     ``runtime_dir`` is a path RELATIVE to the stamp file's directory, naming
     where the pm store (the managed tool bytes) lives. A sealed desktop-app
@@ -145,31 +147,6 @@ def build_stamp(
         )
     # Only a caller-supplied commit may stand in for a missing release version.
     commit_admitted = commit is not None
-    if channel_request is not None:
-        from scripts.bundles.desktop_prepare import git, require_source, validate_channel_request
-        channel_request = validate_channel_request(channel_request)
-        if os.environ.get("HERMES_BUILD_COMMIT") or os.environ.get("HERMES_PAYLOAD_TAG"):
-            raise ValueError("channel request conflicts with commit-build or tag identity")
-        if os.environ.get("HERMES_DESKTOP_VARIANT") != "bundled" or update_mechanism not in {"electron-updater", "app-installer"}:
-            raise ValueError("channel builds require a bundled native update owner")
-        if _run_git("rev-parse", "HEAD", cwd=_REPO_ROOT) != channel_request["commit"] or commit not in (None, channel_request["commit"]):
-            raise ValueError("channel build identity does not match checkout HEAD")
-        require_source(_REPO_ROOT, channel_request["commit"])
-        commit, source, base_version = channel_request["commit"], "channel-build", channel_request["sourceVersion"]
-        dirty, distance = False, 0
-        commit_date = int(git(_REPO_ROOT, "log", "-1", "--format=%ct", "HEAD"))
-
-    commit_build = os.environ.get("HERMES_BUILD_COMMIT")
-    if commit_build:
-        from scripts.releases.commit_build import require_commit
-
-        require_commit(commit_build)
-        if os.environ.get("HERMES_PAYLOAD_TAG"):
-            raise ValueError("Commit builds cannot also select a release tag")
-        if _resolve_commit_from_git() != commit_build or commit not in (None, commit_build):
-            raise ValueError("Commit build identity does not match the checkout HEAD")
-        commit, source, update_mechanism = commit_build, "commit-build", "external"
-
     # A dispatch SHA describes workflow code, not an admitted build checkout.
     if commit is None:
         commit = _resolve_commit_from_env()
@@ -182,11 +159,9 @@ def build_stamp(
         source = "fallback"
 
     # Branch: explicit > CI env > git
-    if commit_build or channel_request is not None:
-        branch = None
-    elif branch is None:
+    if branch is None:
         branch = _resolve_branch_from_env()
-    if branch is None and not commit_build and channel_request is None:
+    if branch is None:
         branch = _resolve_branch_from_git()
 
     # Dirty: explicit > git
@@ -243,7 +218,19 @@ def build_stamp(
     tag = os.environ.get("HERMES_PAYLOAD_TAG") or None
 
     _stable_tag = re.compile(r"^v(0|[1-9]\d{0,2})\.\d+\.\d+$")
-    if payload != "bootstrap" and not commit_build and channel_request is None and not (
+    # The one tagless non-bootstrap payload: the Termux .deb's --commit lane
+    # (HERMES_DESKTOP_VARIANT=runtime). Its identity is the full SHA the caller
+    # explicitly admitted on the command line -- never an ambient env/git guess,
+    # never the all-zero fallback. Commit builds never enter an update channel,
+    # so the stamp keeps tag=None.
+    tagless_runtime = (
+        payload == "runtime"
+        and commit_admitted
+        and commit != FALLBACK_COMMIT
+        and bool(_FULL_COMMIT_RE.fullmatch(commit))
+        and not tag
+    )
+    if payload != "bootstrap" and not tagless_runtime and not (
         tag and (_stable_tag.match(tag) or update_channel.is_canary_tag(tag))
     ):
         raise SystemExit(
@@ -267,9 +254,6 @@ def build_stamp(
         "payload": payload,
         "tag": tag if payload != "bootstrap" else None,
     }
-    if channel_request is not None:
-        stamp["channelBuild"] = channel_request
-        stamp["displayVersion"] = f'{base_version} ({channel_request["channel"]} #{channel_request["sequence"]}, {commit[:7]})'
     if runtime_dir is not None:
         stamp["runtimeDir"] = runtime_dir
     return stamp
@@ -287,7 +271,6 @@ def write_stamp(output: str | Path, **kwargs) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Write install-stamp.json")
     parser.add_argument("--output", "-o", required=True, help="Output file path")
-    parser.add_argument("--channel-request", type=Path, help="Immutable admitted channel request JSON")
     parser.add_argument("--commit", default=None, help="Override commit SHA")
     parser.add_argument("--branch", default=None, help="Override branch name")
     parser.add_argument("--dirty", action="store_true", default=None, help="Mark as dirty")
@@ -298,7 +281,7 @@ def main() -> int:
     parser.add_argument("--source", default="local", help="Stamp source label")
     parser.add_argument(
         "--distribution",
-        choices=("docker", "nix", "desktop-app", "apt-termux"),
+        choices=("docker", "desktop-app", "apt-termux"),
         help="Package distribution (the steward that replaces this tree)",
     )
     parser.add_argument(
@@ -307,7 +290,7 @@ def main() -> int:
         choices=UPDATE_MECHANISMS,
         help="Who applies the next update: 'self' (hermes update), "
         "'app-installer' (Windows App Installer), 'electron-updater' (in-app updater), "
-        "'external' (nix/docker/store)",
+        "'external' (package manager or store)",
     )
     parser.add_argument(
         "--runtime-dir",
@@ -315,7 +298,7 @@ def main() -> int:
         help="Path RELATIVE to the stamp file's directory, naming where the "
         "pm store (the managed tool bytes) lives. A sealed desktop-app "
         "payload passes '..' (the payload dir is the install root's "
-        "parent). Omitted for source/docker/nix stamps.",
+        "parent). Omitted for source and Docker stamps.",
     )
     args = parser.parse_args()
 
@@ -332,7 +315,6 @@ def main() -> int:
         source=args.source,
         distribution=args.distribution,
         runtime_dir=args.runtime_dir,
-        channel_request=json.loads(args.channel_request.read_text(encoding="utf-8-sig")) if args.channel_request else None,
     )
 
     commit_short = stamp["commit"][:12]

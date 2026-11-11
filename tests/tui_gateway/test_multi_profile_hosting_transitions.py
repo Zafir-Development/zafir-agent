@@ -89,10 +89,10 @@ def test_launch_body_survives_first_secondary_activation(two_homes):
     assert seen == {"before": ENV_VAL, "multiplex_now": True, "after": ENV_VAL, "b_leak": None}
 
 
-def test_launch_body_survives_first_secondary_activation_on_the_dashboard(two_homes, monkeypatch):
+def test_launch_body_survives_secondary_activation_via_profile_scope(two_homes, monkeypatch):
     pytest.importorskip("fastapi")
     from agent.secret_scope import get_secret
-    from hermes_cli import web_server_profiles as wsp
+    from hermes_cli import profile_scope as wsp
 
     _root, b = two_homes
     monkeypatch.setattr(wsp, "_resolve_profile_dir", lambda name: b)
@@ -100,7 +100,7 @@ def test_launch_body_survives_first_secondary_activation_on_the_dashboard(two_ho
     seen: dict = {}
 
     def launch_request():
-        with wsp._config_profile_scope(None):
+        with wsp.config_profile_scope(None):
             seen["before"] = get_secret("INJECTED_TOKEN")
             entered.set()
             assert activated.wait(10)
@@ -109,7 +109,7 @@ def test_launch_body_survives_first_secondary_activation_on_the_dashboard(two_ho
     t = threading.Thread(target=launch_request)
     t.start()
     assert entered.wait(10)
-    with wsp._config_profile_scope("b") as scoped:
+    with wsp.config_profile_scope("b") as scoped:
         assert scoped == b and get_secret("B_ONLY_TOKEN") == B_VAL
     activated.set()
     t.join(10)

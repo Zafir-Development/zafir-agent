@@ -236,48 +236,6 @@ def test_gui_releases_lock_after_build_failure(tmp_path, monkeypatch, capsys):
     successor.release()
 
 
-def test_update_path_waits_for_a_held_lock(tmp_path, monkeypatch, capsys):
-    """`hermes update`'s desktop rebuild queues behind a holder instead of failing the update."""
-    from hermes_cli import source_build as source_build_mod
-    from hermes_cli.main_desktop import _refresh_installed_desktop_apps
-
-    root = _checkout(tmp_path)
-
-    holder = DesktopBuildLock(root)
-    assert holder.acquire() is True
-
-    release_calls: list[bool] = []
-
-    class _ReleaseOnEnter(DesktopBuildLock):
-        def acquire(self, *, wait: bool = False) -> bool:
-            release_calls.append(wait)
-            # Simulate the holder finishing while we wait: release, then succeed.
-            holder.release()
-            return super().acquire(wait=wait)
-
-    built: list[bool] = []
-
-    def fake_build_prepared_desktop(desktop_dir, *, source_mode, pnpm, env, icons=None):
-        built.append(True)
-
-    monkeypatch.setattr(source_build_mod, "_install_configured_features_missing_deps", lambda *_: None, raising=False)
-    monkeypatch.setattr(source_build_mod, "source_frontends", lambda _root: ("ui-tui", "web"), raising=False)
-    monkeypatch.setattr(source_build_mod, "source_build_env", lambda **_kw: {"PATH": "/usr/bin"}, raising=False)
-    monkeypatch.setattr(source_build_mod, "prepare_source_dependencies", lambda *_a, **_kw: None, raising=False)
-    monkeypatch.setattr(source_build_mod, "build_source_tui", lambda *_a, **_kw: None, raising=False)
-    monkeypatch.setattr(source_build_mod, "build_source_web", lambda *_a, **_kw: None, raising=False)
-    monkeypatch.setattr(source_build_mod, "_refresh_installed_desktop_apps", lambda *_a, **_kw: None, raising=False)
-    monkeypatch.setattr("hermes_cli.desktop_build_lock.DesktopBuildLock", _ReleaseOnEnter)
-    monkeypatch.setattr("hermes_cli.main_desktop.build_prepared_desktop", fake_build_prepared_desktop)
-    monkeypatch.setattr("hermes_cli.update_stage.publish_stage", lambda _s: None, raising=False)
-
-    source_build_mod.build_update_products(root, desktop=True)
-
-    assert release_calls == [True], "update path must acquire the lock in wait mode"
-    assert built == [True]
-
-
-
 # --- C5: a direct desktop build and an updater never hold different locks over one checkout ---
 
 _UPDATE_HOLDER = (

@@ -223,19 +223,3 @@ def stop_for_relaunch(*, incomplete: bool = False) -> NoReturn:
         _result = 1
         print(f"Update takeover failed: {exc}", file=sys.stderr, flush=True)
     raise SystemExit(_result)
-
-
-def relaunch_stopped_serves(token: dict) -> None:
-    """A historical atexit token is separate work, not another whole update."""
-    if not token.get("pending"):
-        return
-    code = 1
-    try:
-        code, completed = _run_child({"stopped_serves": token})
-        if completed.get("serves_handled") is True:
-            token["pending"] = False
-    except (OSError, ValueError, TypeError) as exc:
-        print(f"Stopped serve recovery failed: {exc}", file=sys.stderr, flush=True)
-    if code or token.get("pending"):
-        print("Stopped serve recovery did not complete; restart the affected "
-              "serve/dashboard backends manually.", file=sys.stderr, flush=True)

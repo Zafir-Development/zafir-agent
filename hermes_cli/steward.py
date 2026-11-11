@@ -197,9 +197,9 @@ def is_bundled_payload(project_root: Path) -> bool:
 
     THE shape predicate for the sealed-bundle branch, and a mirror of the
     Electron shell's ``installShape() === 'bundled'``: the build stamp is
-    the authority, so filesystem coincidences (a sibling ``bin/``, a
-    surviving ``apps/desktop/package.json``) can never promote a checkout
-    into it. A missing, foreign, or unreadable stamp means NOT bundled.
+    the authority, so filesystem coincidences (a sibling ``bin/``) can never
+    promote a checkout into it. A missing, foreign, or unreadable stamp means
+    NOT bundled.
     """
     try:
         return read_install_stamp(Path(project_root)).get("payload") == "bundled"

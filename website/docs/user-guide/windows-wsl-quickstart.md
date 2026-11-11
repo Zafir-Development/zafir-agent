@@ -66,7 +66,7 @@ Hermes does not work reliably on WSL1 — WSL1 translates Linux syscalls on the 
 
 ### Distro choice
 
-Ubuntu (LTS) is what we test against. Debian works. Arch and NixOS work for people who want them, but the one-line installer assumes a Debian-derived `apt` system — see the [Nix setup guide](../getting-started/nix-setup.md) for that path.
+Ubuntu (LTS) is what we test against. Debian works. Other distributions may work, but the one-line installer assumes a Debian-derived `apt` system.
 
 ### Enable systemd (recommended)
 

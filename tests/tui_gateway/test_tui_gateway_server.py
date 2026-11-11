@@ -149,7 +149,7 @@ def test_session_slot_is_claimed_on_first_turn_not_on_create(monkeypatch, tmp_pa
 def test_session_context_uses_session_cwd(monkeypatch, tmp_path):
     """Desktop/TUI sessions must pin the agent cwd per session.
 
-    The gateway process itself is often launched from apps/desktop in dev, so
+    The gateway process itself is often launched from a dev checkout, so
     falling back to os.getcwd() makes agents answer from the desktop app folder
     even when the sidebar/session cwd is a real project.
     """
@@ -15866,7 +15866,7 @@ def test_session_list_honors_params_profile_opens_profile_db(monkeypatch, tmp_pa
     monkeypatch.setattr(server, "_profile_home", lambda p: profile_home if p == "mlperf" else None)
     monkeypatch.setattr(server, "_get_db", lambda: LaunchDB())
     monkeypatch.setattr(
-        "hermes_cli.web_server_sessions._open_session_db_at_path",
+        "hermes_cli.session_db_browse.open_session_db_at_path",
         lambda db_path, *, read_only: ProfileDB(db_path=db_path),
     )
 
@@ -15910,7 +15910,7 @@ def test_session_most_recent_honors_params_profile(monkeypatch, tmp_path):
     monkeypatch.setattr(server, "_profile_home", lambda p: profile_home if p == "mlperf" else None)
     monkeypatch.setattr(server, "_get_db", lambda: LaunchDB())
     monkeypatch.setattr(
-        "hermes_cli.web_server_sessions._open_session_db_at_path",
+        "hermes_cli.session_db_browse.open_session_db_at_path",
         lambda db_path, *, read_only: ProfileDB2(db_path=db_path),
     )
 

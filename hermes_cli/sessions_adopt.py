@@ -70,11 +70,11 @@ async def adopt_sessions(rows, *, report=print) -> tuple[int, Counter]:
     without ending it. ``(adopted, skipped-by-refusal)``; a row the owner refuses is skipped,
     never retried as another principal."""
     from hermes_cli.gateway_client import GatewayRPCError, connect_gateway
-    from hermes_cli.web_server_boundary import _DESKTOP_ATTACHMENT_WS_MAX_BYTES
+    from hermes_cli.web_server_boundary import SESSION_WS_MAX_BYTES
 
     adopted, skipped = 0, Counter()
     # The owner answers a resume with the session's whole history; a long chat outgrows the default frame.
-    async with connect_gateway(max_size=_DESKTOP_ATTACHMENT_WS_MAX_BYTES) as client:
+    async with connect_gateway(max_size=SESSION_WS_MAX_BYTES) as client:
         for done, row in enumerate(rows, 1):
             try:
                 snapshot = await client.rpc('session.resume', session_id=row['id'])

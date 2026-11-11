@@ -1,7 +1,7 @@
 #!/command/with-contenv sh
 # shellcheck shell=sh
 # Let the unprivileged hermes group query and control the STATIC s6-rc
-# services (dashboard, main-hermes, profile-gateways) without handing
+# services (main-hermes, profile-gateways) without handing
 # it any part of the root supervision tree.
 #
 # s6-supervise creates each service's ``supervise/`` 0700 and its

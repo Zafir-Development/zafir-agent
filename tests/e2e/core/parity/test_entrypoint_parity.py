@@ -7,7 +7,7 @@ per entrypoint: the fake model calls the MCP canary tool, then answers.
 
 For every entrypoint the same invariants must hold on the FIRST turn after a cold
 start — any red cell is a wiring-parity bug of the "works in the CLI, missing in
-Desktop/gateway/ACP/cron" class:
+serve/gateway/ACP/cron" class:
 
 * the request carries the context file, the skill index and the memory entry;
 * both hooks fired AND their injected context reached the model;
@@ -72,7 +72,7 @@ DRIVERS: dict[str, Driver] = {
     "oneshot (-z)": _drive_cli.drive_oneshot,
     "chat -q": _drive_cli.drive_chat_q,
     "tui_gateway (stdio)": _drive_rpc.drive_tui_gateway,
-    "serve (Desktop WS)": _drive_rpc.drive_serve,
+    "serve (local WS)": _drive_rpc.drive_serve,
     "gateway (fake adapter)": _drive_gateway.drive_gateway,
     "api_server": _drive_gateway.drive_api_server,
     "acp (stdio)": _drive_acp.drive_acp,

@@ -630,19 +630,17 @@ def test_annotated_tag_pin_keeps_reviewed_trust_and_reads_as_at_pin(world, monke
 
 
 def test_repin_that_widens_the_plugin_requires_consent_on_every_surface(world, monkeypatch):
-    """A new pin adding tools / a Desktop half is a new grant: the dashboard/TUI answer consent_required
+    """A new pin adding tools is a new grant: the dashboard/TUI answer consent_required
     with the delta and touch nothing; a retry with consent applies it; the CLI asks y/N and a decline
     leaves the tree at the old pin. A pin that widens nothing (sha2) needs no consent."""
     entry = pc_cat.get_live_catalog_entry("cat-plugin")
     target, _m, _n = cat.install_catalog_entry(entry, force=False)
     repo = world["repo"]
     (repo / "plugin.yaml").write_text("name: cat-plugin\nversion: 3.0.0\ndescription: d\nprovides_tools: [shell_out]\n")
-    (repo / "desktop").mkdir()
-    (repo / "desktop" / "plugin.js").write_text("export default {}\n")
     world["state"]["pin"] = wide = _commit(repo, "widen")
     result = pc.dashboard_update_user_plugin("cat-plugin")
     assert result["ok"] is False and result["consent_required"] is True
-    assert result["delta"] == {"tools": ["shell_out"], "desktop": ["desktop/plugin.js"]}
+    assert result["delta"] == {"tools": ["shell_out"]}
     assert _head(target) == world["sha1"]  # nothing moved
     # CLI: non-interactive (or 'n') → refused, tree untouched.
     monkeypatch.setattr(pc, "_is_tty", lambda: True)

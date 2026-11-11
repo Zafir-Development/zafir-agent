@@ -211,7 +211,7 @@ def _log_file_samples() -> dict:
         "errors": _python_log_line("run_agent"),
         "gateway": _python_log_line("gateway.run"),
         "gui": _python_log_line("hermes_cli.web_server"),
-        # Written by TypeScript; apps/desktop/electron/desktop-log-line.test.ts pins the same shape.
+        # Written by TypeScript; the native client's log-line test pins the same shape.
         "desktop": "2026-09-28 13:18:46,062 [hermes] [boot] ready",
         "mcp": _mcp_output_line(),
         # update.log mirrors raw update output; handoff lines carry the shim's ISO-8601 stamp.

@@ -278,11 +278,6 @@ def _prepare_native(*, out: Path, ref: str, source: Path, cache: Path,
         print(f"✓ uv-cache (lock-scoped: pruned {pruned} stale entries; offline rebuilds resolve from shipped wheels)", flush=True)
     else:
         raise InstallError("uv-cache", "runtime dependency cache is missing")
-    if current_target().startswith("win32-"):
-        from scripts.bundles.msix_names import drop_msix_reserved_names
-        for tree in drop_msix_reserved_names(out):
-            print(f"✓ msix: dropped {tree.as_posix()} (holds a package-reserved name, never read at runtime)")
-
     bad = _arch_guard(store_dir)
     for line in bad:
         print(f"✗ arch: {line}")
@@ -360,9 +355,8 @@ def main() -> int:
     parser.add_argument("--ref", default="HEAD")
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument("--tui", type=Path)
-    parser.add_argument("--web", type=Path)
     args = parser.parse_args()
-    args.frontends = {name: path for name in ("tui", "web") if (path := getattr(args, name)) is not None}
+    args.frontends = {"tui": args.tui} if args.tui is not None else {}
     return _stage_native(args)
 
 

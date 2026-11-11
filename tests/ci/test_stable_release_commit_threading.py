@@ -9,7 +9,7 @@ WORKFLOWS = ROOT / ".github/workflows"
 LOCAL_CALL = re.compile(r"^\./\.github/workflows/(?P<name>[^/@]+)$")
 
 # Reusable workflows that already named their commit input before this contract.
-EXISTING_INPUT = {"pm-bundle.yml": "ref", "desktop-bundle-smoke.yml": "sha"}
+EXISTING_INPUT = {"pm-bundle.yml": "ref"}
 
 # Checkouts that deliberately follow the controller (default-branch) tree, with the reason.
 CONTROLLER_CHECKOUTS: dict[tuple[str, str], str] = {}
@@ -44,8 +44,8 @@ def commit_input(name: str) -> str:
 
 def test_every_reusable_lane_accepts_a_commit():
     for name, doc in reachable().items():
-        if name in {"stable-release.yml", "desktop-bundled-release.yml"}:
-            continue  # The controller, and the workflow that admits the claim itself.
+        if name == "stable-release.yml":
+            continue  # The controller admits the claim itself.
         inputs = (doc["on"]["workflow_call"] or {}).get("inputs") or {}
         assert commit_input(name) in inputs, f"{name} cannot be told which commit to test"
 
@@ -53,11 +53,9 @@ def test_every_reusable_lane_accepts_a_commit():
 def test_every_call_forwards_the_commit():
     for name, doc in reachable().items():
         for job_name, job, called in local_calls(doc):
-            if called == "desktop-bundled-release.yml":
-                continue  # Admits the claim itself and checks out the admitted SHA.
             key = commit_input(called)
             assert key in (job.get("with") or {}), f"{name}:{job_name} does not pass {key} to {called}"
-            if name not in {"stable-release.yml", "desktop-bundled-release.yml"}:
+            if name != "stable-release.yml":
                 # A nested call must pass its own commit down. An empty or hard-coded value
                 # would silently test the controller tip.
                 value = job["with"][key]
@@ -66,7 +64,7 @@ def test_every_call_forwards_the_commit():
 
 def test_every_checkout_follows_the_commit_input():
     for name, doc in reachable().items():
-        if name in {"stable-release.yml", "desktop-bundled-release.yml"}:
+        if name == "stable-release.yml":
             continue
         key = commit_input(name)
         for job_name, job in (doc.get("jobs") or {}).items():
@@ -82,8 +80,6 @@ def test_every_checkout_follows_the_commit_input():
 def test_stable_release_calls_pass_the_admitted_commit():
     jobs = load("stable-release.yml")["jobs"]
     for job_name, job, called in local_calls({"jobs": jobs}):
-        if called == "desktop-bundled-release.yml":
-            continue
         value = job["with"][commit_input(called)]
         assert value == "${{ needs.admit.outputs.commit }}", f"{job_name}: {value}"
         needs = job.get("needs", [])
@@ -98,7 +94,7 @@ PHASE_SCOPED = {"docker.yml": "inputs.release-phase"}
 
 def test_no_lane_shares_a_concurrency_group_with_pushes_to_the_default_branch():
     for name, doc in reachable().items():
-        if name in {"stable-release.yml", "desktop-bundled-release.yml"}:
+        if name == "stable-release.yml":
             continue
         blocks = [("workflow", doc.get("concurrency"))]
         blocks += [(job_name, job.get("concurrency")) for job_name, job in (doc.get("jobs") or {}).items()]
@@ -130,7 +126,7 @@ REFERENCE = re.compile(r"GITHUB_SHA|github\.sha|github\.ref_name|github\.ref\b|G
 
 def test_no_lane_uses_the_controller_commit_as_the_commit_under_test():
     for name in reachable():
-        if name in {"stable-release.yml", "desktop-bundled-release.yml"}:
+        if name == "stable-release.yml":
             continue
         for number, line in enumerate((WORKFLOWS / name).read_text(encoding="utf-8").splitlines(), 1):
             text = line.strip()

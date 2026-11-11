@@ -230,31 +230,3 @@ def test_explicit_filter_drops_unverified_external_process_row(tmp_path, monkeyp
     kept = _filter_explicit_provider_rows(rows, _Ctx())
 
     assert all(r["slug"] != "acme-acp" for r in kept)
-
-
-# --- Accounts-tab cli_command ------------------------------------------------
-
-
-def test_cli_command_reflects_configured_executable(tmp_path, monkeypatch, acme_acp):
-    from hermes_cli.web_server_oauth import _external_process_cli_command
-
-    fake = tmp_path / ("acme.exe" if os.name == "nt" else "acme")
-    fake.write_text("", encoding="utf-8")
-    fake.chmod(0o755)
-    monkeypatch.setenv("HERMES_ACME_ACP_COMMAND", str(fake))
-
-    rendered = _external_process_cli_command("acme-acp", "acme login")
-
-    assert rendered == f"{fake} login"
-
-
-def test_cli_command_untouched_for_non_external_providers(acme_acp):
-    from hermes_cli.web_server_oauth import _external_process_cli_command
-
-    assert _external_process_cli_command("nous", "hermes auth add nous") == "hermes auth add nous"
-
-
-def test_cli_command_default_when_no_override(monkeypatch, acme_acp):
-    from hermes_cli.web_server_oauth import _external_process_cli_command
-
-    assert _external_process_cli_command("acme-acp", "acme login") == "acme login"

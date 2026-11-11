@@ -20,13 +20,12 @@ if str(ROOT) not in sys.path:
 # definitions never ship; the frontend/desktop sources and build scripts are
 # prebuilt by CI into staged products (AgentInputs.frontends) — a sealed
 # payload never re-enters the source-build graph (is_bundled_payload routes
-# updates to the channel updater), and linux_desktop_entry degrades to the
-# themed icon when apps/desktop/assets is absent. Excluded here means:
+# updates to the channel updater). Excluded here means:
 # not packaged, not compiled, not baked. Frontend product staging
 # (scripts/bundles/stage.py) needs its full tree and passes no exclusions.
 INERT_SNAPSHOT_DIRS = (
-    "tests", "tests-js", "website", "evals", ".github", "nix", "docker",
-    "apps", "ui-tui", "web", "scripts",
+    "tests", "tests-js", "website", "evals", ".github", "docker",
+    "apps", "ui-tui", "scripts",
 )
 
 

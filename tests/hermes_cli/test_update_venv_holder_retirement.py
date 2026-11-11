@@ -48,17 +48,6 @@ def test_historical_holder_hooks_hand_off_without_inspecting_or_killing(
     forbidden.assert_not_called()
 
 
-def test_relaunch_stopped_serves_is_separate_work_not_an_update(monkeypatch, fresh_child, capsys):
-    """The historical atexit token restarts stopped serves through the child and returns."""
-    token = {"pending": True, "entries": [{"pid": 123, "port": 9000}]}
-    fresh_child.returncode = 0
-    fresh_child.result = {"serves_handled": True}
-    main._relaunch_stopped_serves(token)
-    assert token["pending"] is False
-    assert fresh_child.requests[-1]["stopped_serves"]["entries"] == token["entries"]
-    assert "did not complete" not in capsys.readouterr().err
-
-
 @pytest.mark.parametrize("gateway_mode", [False, True])
 def test_gateway_ancestor_refusal_never_kills_unknown_ancestry(monkeypatch, gateway_mode):
     """The live guard only refuses a tree-kill when a nominated gateway is positively an ancestor."""

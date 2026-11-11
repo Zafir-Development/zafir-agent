@@ -12,8 +12,7 @@ async def probe():
     from gateway.run import GatewayRunner
     from gateway.session_authority import initialize_session_authority
     from gateway.run_api import start_gateway_api, stop_gateway_api
-    from hermes_cli import web_server
-    from hermes_cli.dashboard_auth.ws_tickets import mint_ticket
+    from tests.gateway.fixtures.native_ws_auth import prepare_listener, subprotocols, ws_url
     from tests.gateway.fixtures.local_recovery_probe import rpc
     from tools.delegate_tool import is_spawn_paused
     from tools.process_registry import process_registry
@@ -24,13 +23,12 @@ async def probe():
     (home / '.env').write_text('PROCESS_SCOPE_PROBE=from-dotenv\n')
     runner = GatewayRunner()
     authority = await initialize_session_authority(runner, profile_id=str(home), instance_id='process-scope')
+    prepare_listener(runner)
     api = await start_gateway_api(runner)
-    web_server.app.state.auth_required = True
     receipt, processes = {}, []
     command = shlex.quote(sys.executable) + ' -c ' + shlex.quote('import time; time.sleep(60)')
     try:
-        ticket = mint_ticket(user_id='owner', provider='fixture')
-        async with connect(api.api_origin.replace('http:', 'ws:') + '/api/ws?ticket=' + ticket) as ws:
+        async with connect(ws_url(api), subprotocols=subprotocols(runner, subject='owner')) as ws:
             sid = (await rpc(ws, 'session.create', request_id='scope', source='tui', toolsets=[]))['result']['session_id']
             route = authority.sessions[sid].route
             # This session's own job (persisted too), another chat's job and another chat's persisted job.

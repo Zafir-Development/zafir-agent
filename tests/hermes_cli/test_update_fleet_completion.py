@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from hermes_cli import update_cmd, update_cmd_fleet, update_cmd_fleet_verify as fleet_verify, update_cmd_maint, update_receipt
+from hermes_cli import update_cmd, update_cmd_fleet, update_cmd_fleet_verify as fleet_verify, update_receipt
 from hermes_constants import get_hermes_home
 
 
@@ -15,7 +15,7 @@ from hermes_constants import get_hermes_home
 def test_fleet_completion_preserves_runtime_verdict_and_restart_obligation(
     update_complete, state, monkeypatch,
 ):
-    refreshed, migrated = [], []
+    migrated = []
     snapshot = [{"profile": "default", "pid": 1234, "state": state}] if state else []
     restart = update_cmd_fleet._GatewayRestartOutcome(
         incomplete=False, phase_errors=[], pre_restart_gateway_pids=[1234],
@@ -24,10 +24,6 @@ def test_fleet_completion_preserves_runtime_verdict_and_restart_obligation(
     )
     monkeypatch.setattr(fleet_verify, "_print_legacy_units_warning", lambda: None)
     monkeypatch.setattr(update_cmd, "_surviving_pre_update_serve_runtimes", lambda plan: [])
-    monkeypatch.setattr(
-        update_cmd_maint, "_refresh_dashboard_after_update",
-        lambda **kwargs: refreshed.append(kwargs),
-    )
     monkeypatch.setattr(update_receipt, "_code_identity", lambda **kwargs: {})
     monkeypatch.setattr(
         "hermes_cli.gateway_migrate.maybe_auto_migrate_after_update", lambda: migrated.append(True),
@@ -59,4 +55,3 @@ def test_fleet_completion_preserves_runtime_verdict_and_restart_obligation(
     assert restart.incomplete is (state != "current")
     assert update_cmd_fleet._fleet_restart_obligation_armed() is (state != "current")
     assert migrated == ([True] if healthy else [])
-    assert refreshed == [{"already_restarted_units": {"hermes-gateway"}}]

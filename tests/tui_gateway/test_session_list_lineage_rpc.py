@@ -5,7 +5,7 @@ compression rows, and the REST ``/api/sessions`` path projects it
 (``gateway/platforms/api_server.py::_session_response``). The ``session.list`` RPC row
 summary dropped the field, so RPC consumers could not group a compressed conversation
 with its continuation — the desktop store keys pinning and lineage dedup on it
-(``apps/desktop/src/store/session.ts::sessionPinId``).
+(``sessionPinId``).
 """
 
 import time

@@ -50,12 +50,13 @@ def test_a_signed_claim_tag_is_read_through_the_jobs_own_git_read(tmp_path, monk
     """The job reads a claim with ``git tag -l --format=%(contents)``, and a
     signed tag appends its armor to that message. The reader has to parse the
     record before the armor, or every signed claim fails admission."""
+    from scripts.releases import lanes as lane_set
     from scripts.releases.stable import _claim_metadata
 
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(tmp_path / "absent-config"))
     monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
     record = {"schema": 1, "version": "0.21.5", "attempt": 19, "commit": "3" * 40,
-              "autopublish": False, "skipBundles": False, "skipTests": True,
+              "autopublish": False, "lanes": ["docker"], "lanesRevision": lane_set.LANES_REVISION,
               "claimEpoch": 1790701941}
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -75,6 +76,5 @@ def test_a_signed_claim_tag_is_read_through_the_jobs_own_git_read(tmp_path, monk
     assert "-----BEGIN SSH SIGNATURE-----" in raw
     with pytest.raises(json.JSONDecodeError):  # the shape that failed admission
         json.loads(raw)
-    # The record predates lanes: skipTests=true reads as the build lanes alone.
     assert _claim_metadata(raw, version="0.21.5", attempt=19, commit="3" * 40) == {
-        **record, "lanes": frozenset({"docker", "windows", "windows-store", "macos-arm64"})}
+        **record, "lanes": frozenset({"docker"})}

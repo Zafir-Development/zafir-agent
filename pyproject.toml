@@ -610,7 +610,7 @@ update-startup-files = [
   "hermes_cli/_early_recovery.py", "hermes_cli/update_lock.py", "hermes_cli/update_custody.py",
   "hermes_cli/update_handoff.py", "hermes_cli/venv_sync.py", "pm/__init__.py", "pm/environments.py",
   "hermes_cli/main.py", "hermes_cli/config.py", "hermes_cli/__init__.py",
-  "hermes_cli/web_server.py", "cli.py", "run_agent.py", "model_tools.py", "toolsets.py",
+  "cli.py", "run_agent.py", "model_tools.py", "toolsets.py",
   "hermes_constants.py",
 ]
 
@@ -821,8 +821,6 @@ select = ["PLW1514", "ASYNC210", "ASYNC220", "ASYNC221", "ASYNC251", "TID251"]
 
 [tool.ruff.lint.per-file-ignores]
 "pm/**" = ["TID251"]
-# Desktop E2E fixtures stand in for PM's worker/runtime and reach into it like tests do.
-"apps/desktop/electron/fixtures/**" = ["TID251"]
 # Tests can intentionally exercise locale-encoding edge cases.
 "tests/**" = [
   "PLW1514",

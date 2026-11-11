@@ -3,8 +3,7 @@
 
 For every ``COMMAND_REGISTRY`` command it records what each local client does with it on the
 shared gateway -- the classic CLI (main's ``HermesCLI`` dispatch table, ``cli.py``), Ink
-(``ui-tui/src/app/slash/commands/*.ts``), Desktop (``apps/desktop/src/lib/desktop-slash-commands.ts``
-+ the registry's ``desktop=`` dump), ACP (``acp_adapter/gateway_commands.py``) -- and the
+(``ui-tui/src/app/slash/commands/*.ts``), ACP (``acp_adapter/gateway_commands.py``) -- and the
 gateway's own ``slash.exec`` verdict for a local session (``gateway/session_commands.py``).
 Every column is derived from source, so a verdict that changes without a regenerated table
 fails ``tests/hermes_cli/test_gateway_command_parity.py``. ``--check`` writes nothing and exits 1
@@ -170,41 +169,6 @@ def _rpc_cell(methods, served):
         "sidecar: " + ", ".join(legacy) if legacy else "")
 
 
-def _desktop_specs():
-    text = (ROOT / "apps" / "desktop" / "src" / "lib" / "desktop-slash-commands.ts").read_text(encoding="utf-8-sig")
-    body = text.split("const DESKTOP_COMMAND_SPECS", 1)[1].split("\n]\n", 1)[0]
-    specs = {}
-    for chunk in re.split(r"\n  \{", body)[1:]:
-        name = re.search(r"name: '(/[\w-]+)'", chunk)
-        surface = re.search(r"surface: (action|picker|rpc|exec|unavailable)\((?:\s*'([\w.\-]+)')?", chunk)
-        if not (name and surface):
-            continue
-        aliases = re.search(r"aliases: \[([^\]]*)\]", chunk)
-        kind, detail = surface.groups()
-        for key in [name.group(1)] + (re.findall(r"'(/[\w-]+)'", aliases.group(1)) if aliases else []):
-            specs.setdefault(key, (kind, detail or ""))
-    return specs
-
-
-def desktop_cell(cmd, gateway, specs, served):
-    for key in (cmd.name, *cmd.aliases):
-        spec = specs.get("/" + key)
-        if spec is None:
-            continue
-        kind, detail = spec
-        if kind == "rpc":
-            # runRpc falls back to slash.exec on -32601 (use-prompt-actions/slash.ts).
-            if detail in served:
-                return f"rpc {detail}"
-            return "slash.exec (rpc fallback)" if gateway != "refused" else "slash.exec: refused"
-        if kind == "exec":
-            return "slash.exec" if gateway != "refused" else "slash.exec: refused"
-        return f"{kind}: {detail}" if detail else kind
-    if cmd.desktop and cmd.desktop != "hidden":
-        return f"unavailable: {cmd.desktop}"
-    return "slash.exec" if gateway != "refused" else "slash.exec: refused"
-
-
 HEADER = """---
 title: Gateway command parity
 description: What each local client does with every slash command on the shared gateway
@@ -215,7 +179,7 @@ description: What each local client does with every slash command on the shared 
 
 # Gateway command parity (local sessions)
 
-Every local client (classic CLI, Ink TUI, Desktop, ACP) attaches to the one gateway that owns
+Every local client (classic CLI, Ink TUI, ACP) attaches to the one gateway that owns
 the session. A slash command either runs in the client against a canonical verb
 (`session.mutate`, `session.create`, `prompt.receipt`, ...), or goes to the owner as
 `slash.exec`, where `gateway/session_commands.py` runs only the reviewed reads below and refuses
@@ -240,17 +204,16 @@ def render() -> str:
     sys.path.insert(0, str(ROOT))
     from hermes_cli.commands import COMMAND_REGISTRY
     served = _served_methods()
-    ink, specs = _ink_commands(), _desktop_specs()
-    rows = ["| Command | Gateway (`slash.exec`) | Classic CLI | Ink | Desktop | ACP | Notes |",
-            "|---|---|---|---|---|---|---|"]
+    ink = _ink_commands()
+    rows = ["| Command | Gateway (`slash.exec`) | Classic CLI | Ink | ACP | Notes |",
+            "|---|---|---|---|---|---|"]
     counts = {}
     for cmd in sorted(COMMAND_REGISTRY, key=lambda c: c.name):
         gateway = gateway_cell(cmd.name)
         counts[gateway.split(" ")[0]] = counts.get(gateway.split(" ")[0], 0) + 1
         aliases = f" ({', '.join('/' + a for a in cmd.aliases)})" if cmd.aliases else ""
         cells = [f"`/{cmd.name}`{aliases}", gateway, classic_cell(cmd),
-                 ink_cell(cmd, gateway, ink, served), desktop_cell(cmd, gateway, specs, served),
-                 acp_cell(cmd.name, gateway), port_note(cmd)]
+                 ink_cell(cmd, gateway, ink, served), acp_cell(cmd.name, gateway), port_note(cmd)]
         rows.append("| " + " | ".join(cell.replace("|", "\\|") for cell in cells) + " |")
     summary = ", ".join(f"{count} {kind}" for kind, count in sorted(counts.items()))
     return HEADER + f"{len(COMMAND_REGISTRY)} registry commands: {summary}.\n\n" + "\n".join(rows) + "\n"

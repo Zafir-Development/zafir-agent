@@ -79,7 +79,6 @@ def test_restart_phase_records_accepted_self_restart_and_verify_exits_clean(monk
 
     _fleet_homes(monkeypatch, tmp_path, {"default": {"pid": ancestor, "gateway_state": "running", "code_sha": OLD}})
     monkeypatch.setattr(fleet_verify, "_print_legacy_units_warning", lambda: None)
-    monkeypatch.setattr("hermes_cli.update_cmd_maint._refresh_dashboard_after_update", lambda *a, **k: None)
     monkeypatch.setattr(update_cmd, "_surviving_pre_update_serve_runtimes", lambda plan: [])
     monkeypatch.setattr(fleet_mod._time, "sleep", lambda s: None)
     cleared = []
