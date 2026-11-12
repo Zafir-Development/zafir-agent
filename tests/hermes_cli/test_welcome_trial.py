@@ -31,7 +31,7 @@ def test_the_claim_is_stamped_by_the_mint_write_itself(portal, monkeypatch):
     as_local_desktop_backend(monkeypatch)
 
     with contextlib.suppress(OSError):
-        welcome_trial.claim_desktop_free_tier()
+        welcome_trial.claim_welcome_trial()
 
     assert anon_auth.free_inference_active()
 
@@ -52,7 +52,7 @@ def test_the_trial_is_never_claimed_outside_a_first_desktop_install(portal, monk
 
     BLOCKED[case](monkeypatch, get_hermes_home())
 
-    assert welcome_trial.claim_desktop_free_tier() is None
+    assert welcome_trial.claim_welcome_trial() is None
     assert portal.creates() == 0
     assert not anon_auth.free_inference_active()
 
@@ -61,7 +61,7 @@ def test_a_connector_guest_neither_claims_nor_carries_inference(portal, monkeypa
     as_local_desktop_backend(monkeypatch)
     anon_auth.ensure_portal_identity(explicit=True)  # the first hosted connector action
 
-    assert welcome_trial.claim_desktop_free_tier() is None
+    assert welcome_trial.claim_welcome_trial() is None
     assert not anon_auth.free_inference_active()
     from hermes_cli.auth import resolve_nous_access_token
     resolve_nous_access_token()
@@ -89,7 +89,7 @@ def test_a_lost_claim_is_not_replaced(portal, monkeypatch):
     claimed_trial(monkeypatch)
     anon_auth.clear_dead_guest("anon_credential_dead")
 
-    assert welcome_trial.claim_desktop_free_tier() is None
+    assert welcome_trial.claim_welcome_trial() is None
     assert portal.creates() == 1
 
 
@@ -131,7 +131,7 @@ def test_a_lost_trial_is_never_claimed_again_after_a_relaunch(portal, monkeypatc
     free_tier_bootstrap.reset_for_tests()
     free_tier_bootstrap.run_bootstrap(announce=False)
 
-    assert welcome_trial.claim_desktop_free_tier() is None
+    assert welcome_trial.claim_welcome_trial() is None
     assert portal.creates() == creates
     assert not anon_auth.free_inference_active()
     with pytest.raises(AuthError):
@@ -229,7 +229,7 @@ def test_a_missed_first_launch_stays_due_and_keeps_the_trial(portal, monkeypatch
     assert install_state.probe().existing
     assert should_run() is True
     assert welcome_trial.claim_blocker() is None
-    assert welcome_trial.claim_desktop_free_tier() is not None
+    assert welcome_trial.claim_welcome_trial() is not None
     assert welcome_trial.claim_blocker() == "a Nous identity exists"
 
 
@@ -242,12 +242,12 @@ def test_a_claim_cut_off_before_its_marker_write_never_claims_twice(portal, monk
         raise RuntimeError("the process died here")
     monkeypatch.setattr(install_state, "mark_machine_used", die)  # the stamped guest is saved, then the crash
     with pytest.raises(RuntimeError):
-        welcome_trial.claim_desktop_free_tier()
+        welcome_trial.claim_welcome_trial()
     monkeypatch.setattr(install_state, "mark_machine_used", mark)
     _relaunch()
     anon_auth.clear_dead_guest("anon_credential_dead")   # the claimed guest is reaped later
 
-    assert welcome_trial.claim_desktop_free_tier() is None
+    assert welcome_trial.claim_welcome_trial() is None
     assert portal.creates() == 1
 
 
@@ -270,7 +270,7 @@ def test_two_installs_claiming_at_once_mint_one_trial(portal, monkeypatch, tmp_p
     def canary_claims():
         token = set_hermes_home_override(canary_root)
         try:
-            canary["state"] = welcome_trial.claim_desktop_free_tier()
+            canary["state"] = welcome_trial.claim_welcome_trial()
         finally:
             reset_hermes_home_override(token)
             canary_done.set()
@@ -285,7 +285,7 @@ def test_two_installs_claiming_at_once_mint_one_trial(portal, monkeypatch, tmp_p
         return real_mint(**kwargs)
     monkeypatch.setattr(anon_auth, "ensure_portal_identity", stable_mints)
 
-    assert welcome_trial.claim_desktop_free_tier() is not None
+    assert welcome_trial.claim_welcome_trial() is not None
     canary_thread.join(timeout=30.0)
     assert canary == {"state": None}
     assert portal.creates() == 1

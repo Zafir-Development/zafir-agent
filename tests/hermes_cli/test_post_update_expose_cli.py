@@ -28,16 +28,6 @@ from hermes_cli import _launchers, post_update
 posix_only = pytest.mark.platforms("posix")
 
 
-def _write_bundled_stamp(repo_root: Path) -> None:
-    """The minimal install-stamp.json this branch accepts as a bundled
-    payload (payload marker + a valid updateMechanism)."""
-    repo_root.mkdir(parents=True, exist_ok=True)
-    (repo_root / "install-stamp.json").write_text(
-        json.dumps({"payload": "bundled", "updateMechanism": "electron-updater"}),
-        encoding="utf-8",
-    )
-
-
 @pytest.fixture
 def fake_install(tmp_path, monkeypatch):
     """A venv-shaped install root plus an isolated HOME."""
@@ -384,47 +374,6 @@ class TestExposeCli:
         result = _launchers.expose_cli()
         assert result == {"ok": True, "skipped": "no-store-python"}
 
-    @pytest.mark.parametrize("create", [
-        pytest.param(True, marks=pytest.mark.platforms("linux")),
-        pytest.param(False, marks=posix_only),
-    ])
-    def test_bundled_tree_skips_bundle_owns_launchers(
-        self, fake_install, monkeypatch, tmp_path, create
-    ):
-        """The bundle owns its shims: on Linux (AppImage: transient mount)
-        the step names the shape and writes nothing."""
-        payload = tmp_path / "agent-payload"
-        (payload / "bin").mkdir(parents=True)
-        (payload / "repo").mkdir()
-        _write_bundled_stamp(payload / "repo")
-        for name in ("hermes", "hermes-agent", "hermes-acp"):
-            (payload / "bin" / name).write_text("\x7fELF fake shim\n", encoding="utf-8")
-        monkeypatch.setenv("HERMES_INSTALL_ROOT", str(payload / "repo"))
-        if not create:
-            monkeypatch.setattr("hermes_cli.config.load_config", lambda: pytest.fail("repair read config"))
-        result = _launchers.expose_cli(create=create)
-        assert result == {"ok": True, "skipped": "bundle-owns-launchers"}
-        assert not (fake_install[0] / ".local/bin").exists()
-
-    @posix_only
-    def test_unstamped_tree_with_sibling_bin_is_not_a_bundle(
-        self, fake_install, monkeypatch, tmp_path
-    ):
-        """The stamp is the shape authority. A venv-less checkout whose
-        PARENT happens to carry a bin/hermes (the installers' launcher
-        dir shares ~/.hermes with the checkout) must skip, not enter the
-        sealed branch — on every platform."""
-        (tmp_path / "tools" / "facts.json").unlink()
-        parent = tmp_path / "hermes-home"
-        (parent / "bin").mkdir(parents=True)
-        (parent / "bin" / "hermes").write_text("#!/bin/sh\n# installer launcher\n", encoding="utf-8")
-        checkout = parent / "hermes-agent"
-        checkout.mkdir()
-        monkeypatch.setenv("HERMES_INSTALL_ROOT", str(checkout))
-        result = _launchers.expose_cli()
-        assert result == {"ok": True, "skipped": "no-store-python"}
-        assert _launchers._is_bundled_payload(checkout) is False
-
     @posix_only
     def test_replaces_a_dangling_symlink_from_old_installs(self, fake_install):
         """#21454: `cat >` used to follow an old symlink into the venv and
@@ -441,97 +390,3 @@ class TestExposeCli:
         assert console_script.read_text(encoding="utf-8-sig") == "# real console script\n"
         # …and the link-dir entry is now a real file, not a symlink.
         assert not (wrapper_dir / "hermes").is_symlink()
-
-
-@pytest.mark.platforms("macos")
-def test_direct_packaged_cli_exposes_shims_before_electron(tmp_path):
-    import subprocess
-    import shlex
-
-    home = tmp_path / "home"
-    home.mkdir()
-    payload = tmp_path / "Hermes.app/Contents/Resources/agent-payload"
-    repo = payload / "repo"
-    _write_bundled_stamp(repo)
-    (repo / "install-stamp.json").write_text(json.dumps({
-        "payload": "bundled", "commit": "abcdef012345", "updateMechanism": "electron-updater",
-    }), encoding="utf-8")
-    bin_dir = payload / "bin"
-    bin_dir.mkdir()
-    code = f"import sys; sys.path.insert(0, {str(Path(__file__).resolve().parents[2])!r}); from hermes_cli.main import main; main()"
-    for name in ("hermes", "hermes-agent", "hermes-acp"):
-        shim = bin_dir / name
-        shim.write_text(f'#!/bin/sh\nexec {shlex.join([sys.executable, "-I", "-c", code])} "$@"\n', encoding="utf-8")
-        shim.chmod(0o755)
-    env = dict(os.environ, HOME=str(home), HERMES_HOME=str(home / ".hermes"),
-               HERMES_INSTALL_ROOT=str(repo), HERMES_RUNTIME_DIR=str(tmp_path / "tools"))
-    # Execute the package CLI directly. No Electron process or linking helper runs.
-    # `--help` reaches main()'s boot bootstrap (which owns expose_cli) before argparse
-    # exits; `--version` is answered on the pre-import fast path and never gets there.
-    result = subprocess.run([str(bin_dir / "hermes"), "--help"], env=env,
-                            capture_output=True, text=True, timeout=30, encoding="utf-8", check=False)
-    assert result.returncode == 0, result.stderr
-    for name in ("hermes", "hermes-agent", "hermes-acp"):
-        assert (home / ".local/bin" / name).is_symlink()
-        assert (home / ".local/bin" / name).resolve() == bin_dir / name
-
-
-@posix_only
-class TestSymlinkSealedLaunchers:
-    """The macOS sealed-bundle exposure helper, tested directly — the
-    symlink/ownership logic is platform-free; only its call site in
-    expose_cli is darwin-gated."""
-
-    @pytest.fixture
-    def payload(self, tmp_path, monkeypatch):
-        home = tmp_path / "home"
-        home.mkdir()
-        monkeypatch.setattr(Path, "home", staticmethod(lambda: home))
-        payload_bin = tmp_path / "Hermes.app" / "Contents" / "Resources" / "agent-payload" / "bin"
-        payload_bin.mkdir(parents=True)
-        for name in ("hermes", "hermes-agent", "hermes-acp"):
-            (payload_bin / name).write_text("fake mach-o shim\n", encoding="utf-8")
-        return home, payload_bin
-
-    def test_links_all_three_fresh(self, payload):
-        home, payload_bin = payload
-        result = _launchers._symlink_sealed_launchers(payload_bin)
-        assert result["ok"] is True
-        assert sorted(result["written"]) == ["hermes", "hermes-acp", "hermes-agent"]
-        for name in ("hermes", "hermes-agent", "hermes-acp"):
-            link = home / ".local" / "bin" / name
-            assert link.is_symlink()
-            assert os.readlink(link) == str(payload_bin / name)
-
-    def test_second_run_is_a_no_op(self, payload):
-        _, payload_bin = payload
-        _launchers._symlink_sealed_launchers(payload_bin)
-        result = _launchers._symlink_sealed_launchers(payload_bin)
-        assert result["written"] == []
-
-    def test_retargets_own_link_after_app_moved(self, payload, tmp_path):
-        """An app update / move leaves ~/.local/bin pointing at the old
-        bundle path INSIDE this payload tree — that link is ours; retarget."""
-        home, payload_bin = payload
-        old = payload_bin.parent / "bin-old"
-        link_dir = home / ".local" / "bin"
-        link_dir.mkdir(parents=True)
-        (link_dir / "hermes").symlink_to(old / "hermes")  # dangling, old payload path
-        result = _launchers._symlink_sealed_launchers(payload_bin)
-        assert "hermes" in result["written"]
-        assert os.readlink(link_dir / "hermes") == str(payload_bin / "hermes")
-
-    def test_never_touches_a_live_foreign_entry(self, payload, tmp_path):
-        home, payload_bin = payload
-        link_dir = home / ".local" / "bin"
-        link_dir.mkdir(parents=True)
-        # A real file (pipx-style launcher)…
-        (link_dir / "hermes").write_text("#!/bin/sh\n# pipx launcher\n", encoding="utf-8")
-        # …and a live symlink to a different tool.
-        other = tmp_path / "other-tool"
-        other.write_text("other\n", encoding="utf-8")
-        (link_dir / "hermes-agent").symlink_to(other)
-        result = _launchers._symlink_sealed_launchers(payload_bin)
-        assert (link_dir / "hermes").read_text(encoding="utf-8-sig") == "#!/bin/sh\n# pipx launcher\n"
-        assert os.readlink(link_dir / "hermes-agent") == str(other)
-        assert sorted(result["written"]) == ["hermes-acp"]

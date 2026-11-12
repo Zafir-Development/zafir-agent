@@ -167,8 +167,7 @@ if _hermes_home_points_at_production(os.environ.get("HERMES_HOME", "")):
     os.environ["HERMES_TEST_SANDBOX_HOME"] = _SESSION_HERMES_HOME
     atexit.register(shutil.rmtree, _SESSION_HERMES_HOME, True)
 
-# PYTHONPYCACHEPREFIX is a bytecode-mirror escape hatch: when set (the
-# bundled desktop app exports it as %LOCALAPPDATA%\hermes\pycache),
+# PYTHONPYCACHEPREFIX is a bytecode-mirror escape hatch: when set,
 # importlib/pytest write .pyc files to <prefix>/<absolute source path>
 # instead of next to the sources. Un-scrubbed, that mirror lands under
 # the REAL hermes home and trips the real-home tripwire on any module
@@ -1628,14 +1627,6 @@ def _capture_real_hermes_root() -> list[Path]:
 
 
 _REAL_HERMES_ROOT_CANDIDATES = _capture_real_hermes_root()
-# Captured before any test can patch sys.platform, HOME or XDG_*: a test that runs the real
-# GUI uninstall or update swap would otherwise delete the developer's own Hermes app. Only the
-# ones present (none on CI runners, so the guard costs nothing there), each literal and resolved.
-from hermes_cli.gui_uninstall import packaged_gui_app_paths
-
-_REAL_INSTALLED_GUI_APPS = sorted({
-    os.path.normcase(form) for app in packaged_gui_app_paths() if os.path.lexists(app)
-    for form in (os.path.abspath(app), os.path.realpath(app))})
 
 
 @pytest.fixture(autouse=True)
@@ -1667,7 +1658,7 @@ def _forbid_real_hermes_home_io(monkeypatch, request):
         return
     from tests.home_io_guard import HomeIOGuard
 
-    HomeIOGuard(lambda: _REAL_HERMES_ROOT_CANDIDATES, lambda: _REAL_INSTALLED_GUI_APPS).install(monkeypatch)
+    HomeIOGuard(lambda: _REAL_HERMES_ROOT_CANDIDATES).install(monkeypatch)
 
 
 @pytest.fixture

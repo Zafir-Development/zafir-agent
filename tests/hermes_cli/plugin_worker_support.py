@@ -117,7 +117,7 @@ class PluginWorld:
 def publish_plugins(world: PluginWorld, plugins: dict[str, list[str]]) -> Path:
     """Enable exactly ``plugins`` (name → declared requirements) and publish the generation PM
     builds for them. Each plugin imports its requirements, leaves an ``imported`` marker, and
-    ``request(specs)`` asks ``install_specs`` for more on its own behalf."""
+    """
     from pm import client
 
     for name, requirements in plugins.items():
@@ -131,8 +131,7 @@ def publish_plugins(world: PluginWorld, plugins: dict[str, list[str]]) -> Path:
         (plugin / "__init__.py").write_text(
             "".join(f"import {module}\n" for module in modules)
             + "from pathlib import Path\nPath(__file__).with_name('imported').touch()\n"
-            "def register(ctx):\n    pass\n"
-            "def request(specs):\n    from tools.lazy_deps import install_specs\n    return install_specs(specs)\n",
+            "def register(ctx):\n    pass\n",
             encoding="utf-8")
     (world.home / "config.yaml").write_text(yaml.safe_dump(
         {"plugins": {"enabled": sorted(plugins), "disabled": []}}), encoding="utf-8")

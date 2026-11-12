@@ -31,9 +31,9 @@ _SIGTERM_CHILD = """
 import sys, time
 sys.path.insert(0, {tree!r})
 from gateway import host_rendezvous as hr
-assert hr.claim_host_lock(hr.ROLE_SERVE)[0] is hr.HostLockOutcome.ACQUIRED
-hr.publish_record(hr.ROLE_SERVE, host="127.0.0.1", port=9119, token="live-session-token")
-hr.cleanup_on_exit(hr.ROLE_SERVE)
+assert hr.claim_host_lock(hr.ROLE_GATEWAY)[0] is hr.HostLockOutcome.ACQUIRED
+hr.publish_record(hr.ROLE_GATEWAY, host="127.0.0.1", port=9119, token="live-session-token")
+hr.cleanup_on_exit(hr.ROLE_GATEWAY)
 print("published", flush=True)
 time.sleep(120)
 """
@@ -44,7 +44,7 @@ def host_dir(tmp_path, monkeypatch):
     monkeypatch.setenv("HERMES_GATEWAY_LOCK_DIR", str(tmp_path / "locks"))
     yield tmp_path
     hr.release_host_lock(hr.ROLE_GATEWAY)
-    hr.release_host_lock(hr.ROLE_SERVE)
+    hr.release_host_lock(hr.ROLE_GATEWAY)
 
 
 def _tree() -> str:
@@ -98,15 +98,15 @@ def test_stale_record_is_never_attachable(host_dir, pid, create_time):
     """A dead PID and a live PID from another incarnation are both stale — attaching to either
     dials whatever now owns that port."""
     record = hr.HostRecord(
-        role=hr.ROLE_SERVE, pid=pid, create_time=create_time, host="127.0.0.1", port=9119,
+        role=hr.ROLE_GATEWAY, pid=pid, create_time=create_time, host="127.0.0.1", port=9119,
         protocol_version=hr.HOST_PROTOCOL_VERSION, token_fingerprint="", profiles=("default",),
         updated_at="2026-01-01T00:00:00+00:00")
-    hr.record_path(hr.ROLE_SERVE).parent.mkdir(parents=True, exist_ok=True)
-    hr.record_path(hr.ROLE_SERVE).write_text(json.dumps(record.to_json()), encoding="utf-8")
+    hr.record_path(hr.ROLE_GATEWAY).parent.mkdir(parents=True, exist_ok=True)
+    hr.record_path(hr.ROLE_GATEWAY).write_text(json.dumps(record.to_json()), encoding="utf-8")
 
     assert hr.record_is_stale(record) is True
-    assert hr.read_record(hr.ROLE_SERVE) is None
-    assert hr.read_record(hr.ROLE_SERVE, include_stale=True) is not None
+    assert hr.read_record(hr.ROLE_GATEWAY) is None
+    assert hr.read_record(hr.ROLE_GATEWAY, include_stale=True) is not None
 
 
 @pytest.mark.platforms("posix")
@@ -256,8 +256,8 @@ def test_sigterm_removes_the_record_and_its_live_session_token(host_dir):
     assert child.stdout is not None
     try:
         assert child.stdout.readline().strip() == "published"
-        assert hr.record_path(hr.ROLE_SERVE).exists()
-        assert hr.token_path(hr.ROLE_SERVE).exists()
+        assert hr.record_path(hr.ROLE_GATEWAY).exists()
+        assert hr.token_path(hr.ROLE_GATEWAY).exists()
 
         child.send_signal(signal.SIGTERM)
         child.wait(timeout=30)
@@ -266,9 +266,9 @@ def test_sigterm_removes_the_record_and_its_live_session_token(host_dir):
             child.kill()
             child.wait(timeout=10)
 
-    assert not hr.record_path(hr.ROLE_SERVE).exists(), "record outlived its process"
-    assert not hr.token_path(hr.ROLE_SERVE).exists(), "live session token outlived its process"
-    assert hr.claim_host_lock(hr.ROLE_SERVE)[0] is hr.HostLockOutcome.ACQUIRED, "host lock not released"
+    assert not hr.record_path(hr.ROLE_GATEWAY).exists(), "record outlived its process"
+    assert not hr.token_path(hr.ROLE_GATEWAY).exists(), "live session token outlived its process"
+    assert hr.claim_host_lock(hr.ROLE_GATEWAY)[0] is hr.HostLockOutcome.ACQUIRED, "host lock not released"
 
 
 def test_unopenable_lock_dir_is_not_reported_as_another_owner(host_dir, monkeypatch):
@@ -278,7 +278,7 @@ def test_unopenable_lock_dir_is_not_reported_as_another_owner(host_dir, monkeypa
     blocked.write_text("not a directory", encoding="utf-8")
     monkeypatch.setenv("HERMES_GATEWAY_LOCK_DIR", str(blocked / "locks"))
 
-    outcome, error = hr.claim_host_lock(hr.ROLE_SERVE)
+    outcome, error = hr.claim_host_lock(hr.ROLE_GATEWAY)
 
     assert outcome is hr.HostLockOutcome.COULD_NOT_OPEN
     assert isinstance(error, OSError)
@@ -287,40 +287,14 @@ def test_unopenable_lock_dir_is_not_reported_as_another_owner(host_dir, monkeypa
 def test_lock_cache_follows_the_lock_directory(host_dir, monkeypatch, tmp_path):
     """The handle cache is keyed by (role, resolved path): keyed by role alone it reported
     "already held" for a directory it had never created, so ``owns_host_lock()`` lied."""
-    assert hr.claim_host_lock(hr.ROLE_SERVE)[0] is hr.HostLockOutcome.ACQUIRED
+    assert hr.claim_host_lock(hr.ROLE_GATEWAY)[0] is hr.HostLockOutcome.ACQUIRED
     moved = tmp_path / "other-locks"
     monkeypatch.setenv("HERMES_GATEWAY_LOCK_DIR", str(moved))
 
-    assert hr.owns_host_lock(hr.ROLE_SERVE) is False
-    assert hr.claim_host_lock(hr.ROLE_SERVE)[0] is hr.HostLockOutcome.ACQUIRED
-    assert (moved / "host-serve.lock").exists()
-    hr.release_host_lock(hr.ROLE_SERVE)
-
-
-def test_probe_owner_refuses_a_closed_port_and_a_foreign_listener(host_dir):
-    """The two shapes the record cannot see: the owner's socket is already closed (the
-    graceful-shutdown window) and an unrelated process holds the port."""
-    import dataclasses
-
-    closed = socket.socket()
-    closed.bind(("127.0.0.1", 0))
-    dead_port = closed.getsockname()[1]
-    closed.close()
-    record = hr.HostRecord(
-        role=hr.ROLE_SERVE, pid=os.getpid(), create_time=hr.process_create_time(),
-        host="127.0.0.1", port=dead_port, protocol_version=hr.HOST_PROTOCOL_VERSION,
-        token_fingerprint="", profiles=(), updated_at="2026-01-01T00:00:00+00:00")
-
-    assert hr.probe_owner(record, timeout=1.0) is None
-
-    foreign = socket.socket()
-    foreign.bind(("127.0.0.1", 0))
-    foreign.listen(1)
-    try:
-        assert hr.probe_owner(
-            dataclasses.replace(record, port=foreign.getsockname()[1]), timeout=1.0) is None
-    finally:
-        foreign.close()
+    assert hr.owns_host_lock(hr.ROLE_GATEWAY) is False
+    assert hr.claim_host_lock(hr.ROLE_GATEWAY)[0] is hr.HostLockOutcome.ACQUIRED
+    assert (moved / "host-gateway.lock").exists()
+    hr.release_host_lock(hr.ROLE_GATEWAY)
 
 
 def test_relative_xdg_state_home_is_ignored(monkeypatch, tmp_path):

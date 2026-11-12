@@ -113,7 +113,7 @@ async def test_a_desktop_chat_runs_its_turns_as_work_for_the_local_desktop(tmp_p
     from contextlib import nullcontext
     from gateway.session_local_recovery import local_source
     from gateway.session_policy import local_desktop_turn
-    from hermes_cli.anon_auth import on_local_desktop_backend
+    from hermes_cli.anon_auth import on_local_host_backend
 
     conn = await _connect(tmp_path, monkeypatch,
                           config="model:\n  provider: openrouter\n  default: anthropic/claude-sonnet-4\n")
@@ -126,11 +126,11 @@ async def test_a_desktop_chat_runs_its_turns_as_work_for_the_local_desktop(tmp_p
         def inside_turn(stored):
             source = local_source(conn.authority, stored, conn.connection.actor.subject)
             with local_desktop_turn(conn.runner, source, nullcontext()):
-                return on_local_desktop_backend()
+                return on_local_host_backend()
 
         assert inside_turn(desktop["stored_session_id"]) is True
         assert inside_turn(tui["stored_session_id"]) is False
-        assert on_local_desktop_backend() is False
+        assert on_local_host_backend() is False
     finally:
         await conn.connection.close()
 
@@ -174,7 +174,7 @@ async def test_a_fresh_launch_claims_the_trial_and_opens_onboarding_on_it(tmp_pa
         return dict(guest)
 
     monkeypatch.setattr(anon_auth, "current_nous_state", lambda *a, **k: dict(state) if state else None)
-    monkeypatch.setattr(welcome_trial, "claim_desktop_free_tier", claim)
+    monkeypatch.setattr(welcome_trial, "claim_welcome_trial", claim)
     monkeypatch.setattr(welcome_trial, "_has_nous_identity", lambda: bool(state))
     conn = await _connect(tmp_path, monkeypatch)
     try:
@@ -193,7 +193,7 @@ async def test_the_first_local_desktop_connection_runs_the_desktop_boot_work(tmp
     from hermes_cli import anon_auth, free_tier_bootstrap, onboarding_run
     from tui_gateway import server
     seen = []
-    monkeypatch.setattr(onboarding_run, "latch_first_install", lambda: seen.append(anon_auth.on_local_desktop_backend()))
+    monkeypatch.setattr(onboarding_run, "latch_first_install", lambda: seen.append(anon_auth.on_local_host_backend()))
     monkeypatch.setattr(server, "_local_desktop_boot_started", False)
     free_tier_bootstrap.reset_for_tests()
     conn = await _connect(tmp_path, monkeypatch)
@@ -242,7 +242,7 @@ async def test_an_exact_create_retry_from_a_socket_not_yet_declared_local_resume
     from contextlib import nullcontext
     from gateway.session_local_recovery import local_source
     from gateway.session_policy import local_desktop_turn
-    from hermes_cli.anon_auth import on_local_desktop_backend
+    from hermes_cli.anon_auth import on_local_host_backend
 
     conn = await _connect(tmp_path, monkeypatch,
                           config="model:\n  provider: openrouter\n  default: anthropic/claude-sonnet-4\n")
@@ -258,7 +258,7 @@ async def test_an_exact_create_retry_from_a_socket_not_yet_declared_local_resume
 
         source = local_source(conn.authority, stored, conn.connection.actor.subject)
         with local_desktop_turn(conn.runner, source, nullcontext()):
-            assert on_local_desktop_backend() is True
+            assert on_local_host_backend() is True
         from gateway.session_local import local_session_info
         from gateway.session_contract import SessionRef
         info = local_session_info(conn.authority, SessionRef(conn.authority.profile_id, stored))
@@ -333,7 +333,7 @@ async def test_a_desktop_chat_saved_before_the_mark_moved_still_resumes_and_runs
     from gateway.session_local import publish_local_policy
     from gateway.session_local_recovery import local_source
     from gateway.session_policy import local_desktop_turn
-    from hermes_cli.anon_auth import on_local_desktop_backend
+    from hermes_cli.anon_auth import on_local_host_backend
     from hermes_state_local import POLICY_PREFIX
 
     conn = await _connect(tmp_path, monkeypatch,
@@ -363,6 +363,6 @@ async def test_a_desktop_chat_saved_before_the_mark_moved_still_resumes_and_runs
         assert retry["result"]["stored_session_id"] == stored
         source = local_source(conn.authority, stored, conn.connection.actor.subject)
         with local_desktop_turn(conn.runner, source, nullcontext()):
-            assert on_local_desktop_backend() is True
+            assert on_local_host_backend() is True
     finally:
         await conn.connection.close()

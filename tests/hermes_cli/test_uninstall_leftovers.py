@@ -1,7 +1,7 @@
-"""Uninstall sweeps every leftover: both LaunchAgent label patterns, macOS
-Library app-store entries and the XDG cache/data dirs outside HERMES_HOME
-(#62209 — uninstalls reported success yet launchd respawned the gateway and
-Library/XDG dirs survived until manually removed)."""
+"""Uninstall sweeps every leftover: both LaunchAgent label patterns and the
+XDG cache/data dirs outside HERMES_HOME (#62209 — uninstalls reported success
+yet launchd respawned the gateway and the XDG dirs survived until manually
+removed)."""
 from __future__ import annotations
 
 import subprocess
@@ -76,28 +76,6 @@ def test_remove_launchd_gateway_returns_false_when_no_plists(launch_agents, monk
 
 
 @pytest.mark.skipif(sys.platform != "darwin", reason="macOS Library layout")
-def test_remove_desktop_app_leftovers_removes_hermes_library_entries(fake_home):
-    library = fake_home / "Library"
-    ours = []
-    for parent, name in (
-        ("Caches", "com.nousresearch.hermes"),
-        ("Logs", "Hermes"),
-        ("WebKit", "com.nousresearch.hermes"),
-        ("HTTPStorages", "com.nousresearch.hermes"),
-        ("Saved Application State", "com.nousresearch.hermes.savedState"),
-    ):
-        d = library / parent / name
-        d.mkdir(parents=True)
-        ours.append(d)
-    (library / "Caches" / "com.other.vendor").mkdir(parents=True)  # untouched
-
-    removed = uninstall.remove_desktop_app_leftovers(full_uninstall=False)
-
-    assert all(not d.exists() for d in ours)
-    assert (library / "Caches" / "com.other.vendor").exists()
-    assert len(removed) == len(ours)
-
-
 def test_xdg_cache_removed_and_data_mode_semantics(fake_home):
     cache = fake_home / ".cache" / "hermes"
     data = fake_home / ".local" / "share" / "hermes"
@@ -107,7 +85,7 @@ def test_xdg_cache_removed_and_data_mode_semantics(fake_home):
     assert uninstall._xdg_leftover_paths(full_uninstall=False) == ([cache], [data])
     assert uninstall._xdg_leftover_paths(full_uninstall=True) == ([cache, data], [])
 
-    removed = uninstall.remove_desktop_app_leftovers(full_uninstall=False)
+    removed = uninstall.remove_app_leftovers(full_uninstall=False)
     assert cache in removed and not cache.exists()
     assert data.exists()  # user data is preserved in keep-data mode
 
@@ -118,7 +96,7 @@ def test_xdg_data_removed_on_full_uninstall(fake_home):
     cache.mkdir(parents=True)
     data.mkdir(parents=True)
 
-    removed = uninstall.remove_desktop_app_leftovers(full_uninstall=True)
+    removed = uninstall.remove_app_leftovers(full_uninstall=True)
 
     assert not cache.exists() and not data.exists()
     assert cache in removed and data in removed

@@ -148,18 +148,18 @@ def install_portal(monkeypatch, tmp_path, fake: FakePortal | None = None) -> Fak
 
 
 def as_local_desktop_backend(monkeypatch) -> None:
-    """Every activity in this test is work for the local Desktop (``process_identity.serving_local_desktop``),
+    """Every activity in this test is work for the local Desktop (``process_identity.serving_local_host``),
     threads included."""
     from contextvars import ContextVar
     from hermes_cli import process_identity
-    monkeypatch.setattr(process_identity, "_SERVING_LOCAL_DESKTOP", ContextVar("serving_local_desktop_test", default=True))
+    monkeypatch.setattr(process_identity, "_SERVING_LOCAL_HOST", ContextVar("serving_local_host_test", default=True))
 
 
 def off_local_desktop(monkeypatch) -> None:
     """From here on the activity is not the local Desktop's: a CLI shell beside it, another client."""
     from contextvars import ContextVar
     from hermes_cli import process_identity
-    monkeypatch.setattr(process_identity, "_SERVING_LOCAL_DESKTOP", ContextVar("serving_local_desktop_test", default=False))
+    monkeypatch.setattr(process_identity, "_SERVING_LOCAL_HOST", ContextVar("serving_local_host_test", default=False))
 
 
 def claimed_trial(monkeypatch) -> dict:
@@ -168,6 +168,6 @@ def claimed_trial(monkeypatch) -> dict:
     from hermes_cli import welcome_trial
 
     as_local_desktop_backend(monkeypatch)
-    state = welcome_trial.claim_desktop_free_tier()
+    state = welcome_trial.claim_welcome_trial()
     assert state is not None, welcome_trial.claim_blocker()
     return state

@@ -45,8 +45,8 @@ def client(root, monkeypatch):
 
     monkeypatch.setitem(server._methods, "session.resume", resume)
     monkeypatch.setitem(server._methods, "prompt.submit", submit)
-    from hermes_cli.process_identity import serving_local_desktop
-    with serving_local_desktop(True):  # the local Desktop's requests: only it starts a first run
+    from hermes_cli.process_identity import serving_local_host
+    with serving_local_host(True):  # the local Desktop's requests: only it starts a first run
         yield calls
 
 

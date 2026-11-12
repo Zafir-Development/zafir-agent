@@ -178,7 +178,7 @@ def _failed_claim(nas, monkeypatch) -> anon_auth.AuthError:
     from hermes_cli import welcome_trial
     as_local_desktop_backend(monkeypatch)
     with pytest.raises(anon_auth.AuthError) as exc:
-        welcome_trial.claim_desktop_free_tier()
+        welcome_trial.claim_welcome_trial()
     return exc.value
 
 
@@ -217,7 +217,7 @@ class TestBootstrapRecord:
         _failed_claim(nas, monkeypatch)
         free_tier_bootstrap.run_bootstrap(announce=False)
         nas.raise_transport = None
-        assert welcome_trial.claim_desktop_free_tier(force=True) is not None   # the user's retry
+        assert welcome_trial.claim_welcome_trial(force=True) is not None   # the user's retry
         record = free_tier_bootstrap.refresh_record(announce=False)
         assert record.free_tier_account is True and record.failure_fields() == {}
         assert free_tier_bootstrap.current_record() is record
