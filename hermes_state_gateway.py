@@ -177,60 +177,6 @@ _HANDOFF_FAIL_SQL = "UPDATE sessions SET handoff_state = 'failed', handoff_error
 class SessionGatewayMixin:
     """Routing index, session peers/orphans, hygiene streaks, heartbeats, handoffs."""
 
-    def _reap_inactive_orphan_desktop_holders(
-        self, holders: list[tuple[int, str]], *, min_age_seconds: float) -> list[int]:
-        """Terminate old PPID-1 Desktop ephemeral backends with no client.
-
-        Fails closed: anything whose parent, age, argv, or network connections
-        cannot be proved safe remains a repair-blocking holder."""
-        from hermes_state import psutil
-        from hermes_state_dbfile import _concrete_state_db_holder_pids, _is_inactive_orphan_desktop_holder
-        if not sys.platform.startswith("linux") or psutil is None:
-            return []
-        try:
-            from hermes_cli.dashboard_procs import _is_ephemeral_port_zero_backend
-        except Exception:
-            return []
-        now = time.time()
-        candidates = []
-        for pid in _concrete_state_db_holder_pids(self.db_path, holders):
-            try:
-                process = psutil.Process(pid)
-                statuses = [conn.status for conn in process.net_connections(kind="inet")]
-                if not _is_inactive_orphan_desktop_holder(
-                    ppid=process.ppid(), age_seconds=now - process.create_time(),
-                    min_age_seconds=min_age_seconds,
-                    ephemeral_backend=_is_ephemeral_port_zero_backend(process.cmdline()),
-                    connection_statuses=statuses):
-                    continue
-            except Exception:
-                continue
-            candidates.append(process)
-        signalled: list[int] = []
-        for process in candidates:
-            try:
-                process.terminate()
-                signalled.append(process.pid)
-            except (psutil.Error, OSError):
-                continue
-        if not signalled:
-            return []
-        try:
-            _gone, alive = psutil.wait_procs(candidates, timeout=1.5)
-        except Exception:
-            alive = []
-        for process in alive:
-            try:
-                process.kill()
-            except (psutil.Error, OSError):
-                continue
-        if alive:
-            try:
-                psutil.wait_procs(alive, timeout=1.5)
-            except Exception:
-                pass
-        return signalled
-
     def record_gateway_session_peer(
         self, session_id: str, *, source: str, user_id: str | None = None, session_key: str | None = None,
         chat_id: str | None = None, chat_type: str | None = None, thread_id: str | None = None, display_name: str | None = None,

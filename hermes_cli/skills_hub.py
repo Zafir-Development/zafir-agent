@@ -132,8 +132,8 @@ def _finish_change(c: Console, invalidate_cache: bool, what: str = "Change will 
 
 
 def _print_error(c: Console, message: str) -> None:
-    # One unwrapped line: the Desktop Hub toasts a failed action's last 3 log lines, and an 80-column
-    # wrap left only the tail of the message there (the subject was cut off).
+    # One unwrapped line: a caller that shows only a failed action's last 3 log lines would
+    # otherwise see just the wrapped tail (the subject cut off).
     c.print(f"[bold red]Error:[/] {message}\n", soft_wrap=True)
 
 
@@ -801,8 +801,8 @@ def do_install(identifier: str, category: str = "", force: bool = False,
 
     Returns True when the skill was installed, False when the install failed (unresolved name,
     fetch, scan block, bad path), None for a no-op the user owns (already installed, declined).
-    The CLI router turns False into a non-zero exit — the Desktop Hub toasts failures off that
-    exit code, so an exit-0 failure reads as "the button did nothing" (only the action log).
+    The CLI router turns False into a non-zero exit — a UI driving the action toasts failures off
+    that exit code, so an exit-0 failure reads as "nothing happened" (only the action log).
     """
     from tools.skills_hub import HubLockFile
     fresh = not HubLockFile().get_installed(identifier.rstrip("/").rsplit("/", 1)[-1])
@@ -1574,9 +1574,9 @@ def skills_command(args) -> Optional[int]:
         _console.print("Usage: hermes skills [browse|search|install|inspect|list|list-modified|diff|check|update|audit|uninstall|reset|opt-out|opt-in|publish|snapshot|tap]\n")
         _console.print("Run 'hermes skills <command> --help' for details.\n")
         return None
-    # A handler reporting a real failure (install/update/uninstall's False) must exit non-zero: the
-    # Desktop Hub reads the spawned action's exit code to decide whether to toast, so an exit-0
-    # failure renders as "the button did nothing" while the reason sits unread in the action log.
+    # A handler reporting a real failure (install/update/uninstall's False) must exit non-zero: a UI
+    # driving the action reads the spawned action's exit code to decide whether to toast, so an exit-0
+    # failure renders as "nothing happened" while the reason sits unread in the action log.
     # Returned, not sys.exit()-ed: `hermes` turns a handler's int into the exit code.
     return 1 if handler(args) is False else None
 

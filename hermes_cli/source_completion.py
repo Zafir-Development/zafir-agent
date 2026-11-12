@@ -29,7 +29,6 @@ _PREPARED = "--prepared"
 def complete_source_checkout(
     root: Path,
     *,
-    desktop: bool,
     assume_yes: bool,
     gateway_mode: bool = False,
     pre_update_snapshot_id: str | None = None,
@@ -60,7 +59,7 @@ def complete_source_checkout(
     # Claim the shared update lock so stacked completions serialize. A tail whose
     # orchestrator already holds the lock (venv_sync's interrupted-update finish,
     # the updater's completion child) runs under its parent's claim, exactly as
-    # `hermes update` does under the desktop handoff pid. The CHECKOUT lock is acquired, not
+    # `hermes update` does under its orchestrator's handoff pid. The CHECKOUT lock is acquired, not
     # sampled (R2): a completion from another home must not build a checkout an update owns;
     # one inside the update's tree joins the lock it inherited.
     lock = UpdateLock(install_root=root)
@@ -71,7 +70,7 @@ def complete_source_checkout(
         )
     try:
         return _complete_locked(
-            root, desktop=desktop, assume_yes=assume_yes, gateway_mode=gateway_mode,
+            root, assume_yes=assume_yes, gateway_mode=gateway_mode,
             pre_update_snapshot_id=pre_update_snapshot_id,
             pre_update_version=pre_update_version,
             completion_message=completion_message, announce=announce, followups=followups,
@@ -84,7 +83,6 @@ def complete_source_checkout(
 def _complete_locked(
     root: Path,
     *,
-    desktop: bool,
     assume_yes: bool,
     gateway_mode: bool,
     pre_update_snapshot_id: str | None,
@@ -122,7 +120,7 @@ def _complete_locked(
             owed.append((name, reason))
 
     step("launchers", lambda: publish_launchers(root))
-    step("build", lambda: build_update_products(root, desktop=desktop, after_dependencies=after_dependencies))
+    step("build", lambda: build_update_products(root, after_dependencies=after_dependencies))
     if announce:
         print(announce)
     verdict: list[bool] = []
@@ -130,7 +128,6 @@ def _complete_locked(
         assume_yes=assume_yes,
         gateway_mode=gateway_mode,
         pre_update_snapshot_id=pre_update_snapshot_id,
-        had_desktop_app_before_update=desktop,
         pre_update_version=pre_update_version,
         completion_message=completion_message,
         followups=owed,
@@ -164,8 +161,6 @@ def main(argv: list[str] | None = None) -> int:
     prepared = _PREPARED in argv
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, required=True)
-    parser.add_argument("--desktop", action="store_true",
-                        help="Also build the packaged desktop app.")
     parser.add_argument("--interactive", action="store_true",
                         help="Allow prompts; installers pass no flag and stay unattended.")
     parser.add_argument("--finish-update", action="store_true",
@@ -192,13 +187,13 @@ def main(argv: list[str] | None = None) -> int:
             # unsafe SQLite runtime is reported, but re-running the tail cannot fix it.
             owed: list[tuple[str, str]] = []
             complete_source_checkout(
-                root, desktop=args.desktop, assume_yes=True,
+                root, assume_yes=True,
                 completion_message=None, announce="\n✓ Code updated!", followups=owed,
             )
             ok = not owed
         else:
             ok = complete_source_checkout(
-                root, desktop=args.desktop, assume_yes=not args.interactive,
+                root, assume_yes=not args.interactive,
                 completion_message="✓ Install complete!",
             )
         return 0 if ok else 1
@@ -208,8 +203,7 @@ def main(argv: list[str] | None = None) -> int:
     # This interpreter is a bootstrap one: the work happens in the re-exec, so
     # every flag that decides WHICH tail runs has to survive into it. Losing
     # --finish-update here silently reports an update as an install.
-    passthrough = (["--desktop"] if args.desktop else []) + \
-                  (["--finish-update"] if args.finish_update else [])
+    passthrough = ["--finish-update"] if args.finish_update else []
     command = _bootstrap_command(root, passthrough)
     from hermes_cli.update_lock import checkout_lock_fds
 

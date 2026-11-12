@@ -843,13 +843,6 @@ def count_db_holders(db_path: Path) -> Optional[int]:
         return None
 
 
-def _is_inactive_orphan_desktop_holder(*, ppid: int, age_seconds: float, min_age_seconds: float,
-                                       ephemeral_backend: bool, connection_statuses: list[str]) -> bool:
-    """Pure safety predicate for the narrow Desktop holder reap."""
-    return (ppid in (0, 1) and age_seconds >= min_age_seconds and ephemeral_backend
-            and "ESTABLISHED" not in connection_statuses)
-
-
 def _concrete_state_db_holder_pids(db_path: Path, holders: list[tuple[int, str]]) -> list[int]:
     """Return unique PIDs proven to hold this DB or one of its sidecars."""
     canonical_db = os.path.normcase(os.path.abspath(os.fspath(db_path)))

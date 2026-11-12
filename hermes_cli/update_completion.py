@@ -229,26 +229,6 @@ def _publish_gateway_success(request: dict) -> None:
         print(f"  ⚠ Could not publish the gateway's update status: {exc}")
 
 
-#: The one whole line the Desktop hand-off scripts match (scripts/desktop-update/posix.sh and
-#: windows.ps1); ``source_build.build_update_products`` prints the same prefix when the build fails.
-DESKTOP_BUILD_OWED = "Desktop app build owed:"
-
-
-def _report_desktop_build_owed(request: dict, record: dict | None, reason: str) -> None:
-    """Name the owed Desktop build when this run never got the build to its own verdict (F6, review P4).
-
-    The builder prints the line only when the build itself fails; a run that never reached it
-    (dependencies owed, the tail refused by the lock, a completion process lost) would otherwise end
-    as a plain "Update complete." in the hand-off. A ``build`` stage on the run's record means the
-    build ran and printed this line itself when the Desktop app failed.
-    """
-    if not request.get("desktop"):
-        return
-    if any(isinstance(mark, dict) and mark.get("name") == "build" for mark in (record or {}).get("stages") or ()):
-        return
-    print(f"  {DESKTOP_BUILD_OWED} {reason}", flush=True)
-
-
 def settle_lost_completion(request: dict, reason: str) -> dict:
     """The parent's side of C3: the code is committed, but the completion never answered (review P2).
 
@@ -270,7 +250,6 @@ def settle_lost_completion(request: dict, reason: str) -> dict:
             arm_completion(Path(request["source"]))
         except Exception as exc:  # health: allow BLE001 -- post-commit boundary: stale dependencies still make the next launch sync
             print(f"  ⚠ Could not record the owed source-update tail: {exc}")
-        _report_desktop_build_owed(request, _running_record(request), "the update completion did not finish")
         update_receipt.resume_run_record()  # the child's persisted stages, never this stale snapshot
         update_receipt.record_followup("completion", reason, retry="the next launch or `hermes update` finishes it")
         parked = not _record_owed_user_action(request)
@@ -304,7 +283,6 @@ def _settle_after_commit(request: dict, result_path: Path, step: str, reason: st
     if receipt is None:
         # A prepared child that died mid-tail persisted stages the parent's snapshot lacks.
         record = _running_record(request) or request["receipt"]
-        _report_desktop_build_owed(request, record, f"{step} did not finish")
         _resume_receipt(record)
         update_receipt.record_stage("deps" if step == "dependencies" else "build", "failed")
         update_receipt.record_followup(step, reason, retry="dependencies not installed yet — the next launch retries"
@@ -417,7 +395,7 @@ def _complete_selected(request: dict) -> bool:
 
     try:
         runtime_safe = complete_source_checkout(
-            root, desktop=request["desktop"], assume_yes=request["assume_yes"],
+            root, assume_yes=request["assume_yes"],
             gateway_mode=request["gateway_mode"], pre_update_snapshot_id=request["snapshot_id"],
             pre_update_version=request["pre_update_version"],
             completion_message=request.get("completion_message"),
@@ -425,8 +403,6 @@ def _complete_selected(request: dict) -> bool:
             followups=followups, after_dependencies=prepare_gateways)
     except (Exception, SystemExit) as exc:  # health: allow BLE001 -- e.g. the shared update lock refused the tail
         reason = str(exc) or type(exc).__name__
-        # The tail's steps catch their own failures, so a raise here means the build never ran.
-        _report_desktop_build_owed(request, None, "the source-update tail did not run")
         record_followup("completion", reason)
         followups.append(("completion", reason))
     if not prepared:  # the tail ended before its dependency step
@@ -497,15 +473,6 @@ class _ForwardedOutput:
         return getattr(self.stream, name)
 
 
-def _report_unbuilt_desktop(request: dict) -> None:
-    """The tail raised out of ``_complete_selected``: before the build stage, the build never ran."""
-    from hermes_cli import update_receipt
-
-    current = update_receipt._current.get()
-    if current is not None:  # a finalized run got past the build (verification finalizes it)
-        _report_desktop_build_owed(request, current.data, "the source-update tail did not finish")
-
-
 def _finish(request: dict, result_path: Path) -> int:
     from hermes_cli import update_receipt
     from pm.receipt import accept_worker_receipt
@@ -524,10 +491,8 @@ def _finish(request: dict, result_path: Path) -> int:
         update_receipt.finalize_interrupted_update_receipt(reason, exit_code=code)
     except SystemExit as exc:
         if exc.code not in (0, None):
-            _report_unbuilt_desktop(request)
             update_receipt.record_followup("completion", f"completion exited {exc.code}")
     except BaseException as exc:
-        _report_unbuilt_desktop(request)
         update_receipt.record_followup("completion", f"{type(exc).__name__}: {exc}")
     finally:
         custody = sys.modules.get("hermes_cli.update_custody")

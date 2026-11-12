@@ -652,7 +652,7 @@ class CLIInfoMixin:
     def _show_context_breakdown(self, cmd_original: str = ""):
         """`/context [all]` — 5×20 glyph grid (cell ≈ 1% of the window) plus an estimated
         per-category table; `all` appends per-skill / per-toolset costs. Read-only: same chars/4
-        engine as the desktop popover (agent.context_breakdown) — no provider calls, no cache impact."""
+        engine as the TUI context popover (agent.context_breakdown) — no provider calls, no cache impact."""
         from hermes_cli.gateway_side import connection_for
         if (connection := connection_for(self)) is not None:
             return self._show_gateway_context_breakdown(connection)
@@ -797,7 +797,7 @@ class CLIInfoMixin:
         """Provider account limits block for `/usage`; True if anything printed.
 
         Uses the live agent's route when present, else the CLI's own configured provider (the
-        TUI/Desktop slash-worker runs without an agent). Fetched off-thread with a hard timeout so
+        TUI slash worker runs without an agent). Fetched off-thread with a hard timeout so
         slow provider APIs don't hang the prompt; failures are non-fatal. Lazy import: pulls the
         OpenAI SDK chain.
         """

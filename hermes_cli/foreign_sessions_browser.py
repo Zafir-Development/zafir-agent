@@ -1,4 +1,4 @@
-"""Backend-local discovery and previews for the desktop session importer."""
+"""Backend-local discovery and previews for the foreign-session importer."""
 
 import hashlib
 import re

@@ -1586,7 +1586,7 @@ def _profile_live_catalog(normalized: str) -> Optional[list[str]]:
         except Exception as exc:  # a failed subprocess launch degrades to the curated list, like api_key below
             logger.debug("external_process catalog fetch failed for %s: %s", normalized, exc)
             live = None
-        # Same merge as setup (`_model_flow_plugin_provider`) so /model, the Desktop picker and
+        # Same merge as setup (`_model_flow_plugin_provider`) so /model, the TUI picker and
         # `hermes model` offer one list: live ids plus any pinned id the probe omitted.
         return merge_profile_catalog(normalized, profile, list(live) if live else None)
     if not (profile.auth_type == "api_key" and profile.base_url):
@@ -2285,7 +2285,7 @@ def normalize_opencode_base_url(
 # Without this, an unreachable endpoint (TCP blackhole — SYN draws no reply,
 # so every attempt burns its full connect timeout) makes every picker open /
 # chat turn re-pay the timeout per candidate, and the sequential stalls stack
-# past 10s while the Desktop sits on a spinner with no error (#81123). Short
+# past 10s while a picker sits on a spinner with no error (#81123). Short
 # TTL collapses the burst but still picks up recovery without a restart.
 # Mirrors _deepinfra_catalog_neg_cache.
 _probe_neg_cache: dict[str, float] = {}

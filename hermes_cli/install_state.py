@@ -1,6 +1,6 @@
 """Has this OS user already used Hermes on this computer?
 
-The desktop's welcome trial goes only to a first install, once per OS user, so ``onboarding.start``
+The welcome trial goes only to a first install, once per OS user, so ``onboarding.start``
 asks this before it claims one. The answer is about the OS user, not the active profile: it looks at
 every Hermes root the machine names (default roots, channel and package roots, the roots gateway
 services and the ``hermes`` launcher point at) and at a marker file no Hermes setting can move.
@@ -136,7 +136,7 @@ def claim_lock() -> Iterator[None]:
 
 
 def reserve_trial() -> None:
-    """The first desktop boot found a fresh install: keep the trial for it, so a later use (a chat
+    """The first boot found a fresh install: keep the trial for it, so a later use (a chat
     before onboarding ran, a key added) does not take it away. The marker also makes the probe read
     "used" from now on; :func:`trial_reserved` is what the claim checks instead."""
     _write_marker(_TRIAL_RESERVED)
@@ -235,7 +235,7 @@ def _shared_auth_dir() -> Iterable[Path]:
 
 
 def _registry_home() -> Iterable[Path]:
-    """The ``HERMES_HOME`` older Windows installers saved for the user (the desktop honours it)."""
+    """The ``HERMES_HOME`` older Windows installers saved for the user (older installs honoured it)."""
     if sys.platform != "win32":
         return ()
     import winreg

@@ -1142,8 +1142,7 @@ class CLICommandsMixin(CLICommandsSessionToolsMixin):
 
     def _handle_hatch_command(self, cmd: str):
         """Generate ("hatch") a new petdex pet from a description: base look, one animation row
-        per state, spritesheet, then adopt. Progress streams inline (~a minute of image calls).
-        The desktop app opens a richer overlay for this command instead."""
+        per state, spritesheet, then adopt. Progress streams inline (~a minute of image calls)."""
         from agent.pet import store
         from agent.pet.generate import orchestrate
         from agent.pet.generate.imagegen import GenerationError
