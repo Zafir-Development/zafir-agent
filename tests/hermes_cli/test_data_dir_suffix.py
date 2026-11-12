@@ -61,8 +61,7 @@ print(json.dumps(result))
 
 @pytest.mark.platforms("linux", "macos", "windows")
 def test_startup_readers_use_the_suffixed_home(tmp_path, monkeypatch):
-    from hermes_constants import get_process_hermes_home
-    from hermes_cli.dashboard_procs import _hermes_home_dir
+    from hermes_constants import get_process_hermes_home, get_process_hermes_home as _hermes_home_dir
     from hermes_cli.env_loader import load_hermes_dotenv
     from hermes_startup_watchdog import get_startup_watchdog_dump_path
 

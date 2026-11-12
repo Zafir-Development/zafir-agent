@@ -100,7 +100,7 @@ class TestTheWarningFires:
         """Log-only: WAL is still applied, and it still persists.
 
         Staying on DELETE is itself treated as a defect elsewhere in the tree
-        (managed_uv repairs it on update, citing ~2600x slower appends), so
+        (the update path repairs it, citing ~2600x slower appends), so
         this must warn about the change without preventing it.
         """
         from hermes_state_wal import apply_wal_with_fallback

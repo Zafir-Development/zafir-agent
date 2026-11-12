@@ -108,18 +108,18 @@ def refuse_restart_of_service_managed_gateway(pid: int | None) -> None:
     Canonical-unit checks miss pre-convention installs (``hermes.service``), so the fallback's
     stop + in-process ``run_gateway`` SIGKILLed a live service-managed gateway and spawned an
     unsupervised orphan in the caller's cgroup while the unit flapped against the stolen lock
-    (#126474). Reuses the dashboard's MainPID-verified lookup: a bare ``.service`` cgroup alone
+    (#126474). Reuses the MainPID-verified lookup: a bare ``.service`` cgroup alone
     (the caller itself started under some unit) never proves ownership.
     """
     if not pid or pid <= 1:
         return
-    from hermes_cli import main_dashboard as _dash
+    from hermes_cli.service_restart_helpers import _systemd_owner_for_pid, _systemd_restart_commands
 
-    owner = _dash._systemd_owner_for_pid(pid)
+    owner = _systemd_owner_for_pid(pid)
     if owner is None:
         return
     unit, scope = owner
-    cmds = _dash._systemd_restart_commands(unit, scope)
+    cmds = _systemd_restart_commands(unit, scope)
     from hermes_cli.gateway import _print_lines
     _print_lines(
         "",
@@ -138,7 +138,7 @@ def refuse_restart_of_service_managed_gateway(pid: int | None) -> None:
 def start_restart_replacement(args, *, force: bool) -> None:
     """Start the manual fallback's replacement once the old owner is gone.
 
-    ``--detach`` (Desktop's bounded, piped client; the updater's recovery call) starts it the way
+    ``--detach`` (a bounded, piped client; the updater's recovery call) starts it the way
     ``gateway ensure`` starts an absent owner. In the foreground that caller became the long-lived
     gateway it only meant to restart: a child its own timeout killed, holding the app's quit open.
     """

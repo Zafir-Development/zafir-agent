@@ -31,7 +31,6 @@ def test_the_pause_record_survives_exactly_when_the_service_rollback_failed(monk
     monkeypatch.setattr(gateway, "find_profile_gateway_processes", lambda strict=False: [])
     monkeypatch.setattr(gateway, "find_windows_gateway_services", lambda profile_processes=(): [service])
     monkeypatch.setattr(update_cmd_windows, "_stop_windows_gateways", lambda *a, **k: {})
-    monkeypatch.setattr(update_cmd_windows, "_record_attested_cold_start_profiles", lambda *a: None)
 
     def stop(*_a, **_k):
         raise OSError("access denied")

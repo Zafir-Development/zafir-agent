@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 from hermes_cli import update_cmd_fleet as fleet
-from hermes_cli import dashboard_procs
+from hermes_cli import process_inventory
 
 FOREIGN_HOME = "/srv/other-account-home/.hermes"
 
@@ -32,7 +32,7 @@ def own_home(monkeypatch, tmp_path):
 
 
 def _pid_homes(monkeypatch, mapping: dict):
-    monkeypatch.setattr(dashboard_procs, "_hermes_home_for_pid", lambda pid: mapping.get(pid))
+    monkeypatch.setattr(process_inventory, "_hermes_home_for_pid", lambda pid: mapping.get(pid))
 
 
 def test_systemd_unit_of_another_home_is_left_alone(monkeypatch, own_home):

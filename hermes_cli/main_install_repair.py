@@ -7,7 +7,6 @@ import sys
 import time as _time
 
 from pathlib import Path
-from typing import NoReturn
 from hermes_cli import _early_recovery as _early_recovery_mod
 
 # Log-record parity with the origin module.
@@ -74,16 +73,6 @@ def _clear_update_incomplete_marker() -> None:
 def _clear_lazy_refresh_incomplete_marker() -> None:
     """Remove the interrupted lazy-refresh breadcrumb. Never raises."""
     _clear_marker_file(_lazy_refresh_marker_path(), label="lazy-refresh-incomplete")
-
-
-# Frozen old-updater import; current updates never detach dependency work.
-_UPDATE_REEXEC_ENV = "HERMES_UPDATE_REEXEC"
-
-
-def _reexec_dependency_sync_off_windows_shim() -> NoReturn:
-    """Stop a mixed old-code/new-files updater at the retired sync boundary."""
-    from hermes_cli._old_updater import stop_for_relaunch
-    stop_for_relaunch()
 
 
 def _is_windows() -> bool:

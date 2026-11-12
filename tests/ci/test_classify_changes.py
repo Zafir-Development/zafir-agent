@@ -353,8 +353,9 @@ def test_every_slow_lane_path_matches_a_tracked_file():
 # gateway/ / hermes_bootstrap.py skipped both the Linux and Windows journeys.
 _UPDATE_PATH_FILES = (
     "hermes_cli/main.py",
-    "hermes_cli/main_dashboard.py",
-    "hermes_cli/main_desktop.py",
+    "hermes_cli/update_output.py",
+    "hermes_cli/process_inventory.py",
+    "hermes_cli/service_restart_helpers.py",
     "hermes_cli/_early_recovery.py",
     "hermes_cli/venv_sync.py",
     "hermes_cli/update_lock.py",
@@ -362,7 +363,6 @@ _UPDATE_PATH_FILES = (
     "hermes_cli/update_completion.py",
     "hermes_cli/update_cmd_windows.py",
     "hermes_cli/update_cmd_zip.py",
-    "hermes_cli/_update_takeover.py",
     "hermes_cli/source_completion.py",
     "hermes_cli/source_build.py",
     "hermes_cli/source_releases.py",
@@ -373,7 +373,6 @@ _UPDATE_PATH_FILES = (
     "hermes_cli/gateway.py",
     "hermes_cli/gateway_windows.py",
     "hermes_cli/gateway_migrate.py",
-    "hermes_cli/desktop_update_verify.py",
     "hermes_bootstrap.py",
     "hermes_constants.py",
     "gateway/status.py",

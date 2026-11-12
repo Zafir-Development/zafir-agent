@@ -706,7 +706,7 @@ def _resolve_detached_python(python_exe: str) -> tuple[str, Path, list[str]]:
     console-subsystem descendants (git, gh, cmd, node, wmic, powershell, …) inherit instead of each
     allocating a visible flashing one. A GUI-subsystem ``pythonw.exe`` daemon has NO console, which is what
     made every descendant spawn flash (#54220/#56747) and forced the endless per-call-site CREATE_NO_WINDOW
-    sweep. Root cause isolated + A/B verified on Windows 11 by the desktop backend fix (commit aa2ae36c3f).
+    sweep. Root cause isolated + A/B verified on Windows 11 by the windowless-backend fix (commit aa2ae36c3f).
     - uv venv launcher: ``venv\\Scripts\\python.exe`` under ``CREATE_NO_WINDOW`` re-execs the base
     interpreter *windowless* — the child inherits the shim's hidden console, so no conhost flashes (the
     #52239 concern). The historical "CREATE_NO_WINDOW cannot suppress the second window" observations were
@@ -850,8 +850,8 @@ def _stdin_is_interactive(*, isatty: bool, console_mode_ok: bool | None) -> bool
 
 
 def _stdout_isatty() -> bool:
-    """The question is printed to stdout. When stdout is captured, nobody sees it. Desktop update
-    hand-offs before #122234 captured each step's stdout while leaving it the console's stdin, so a
+    """The question is printed to stdout. When stdout is captured, nobody sees it. A detached update
+    before #122234 captured each step's stdout while leaving it the console's stdin, so a
     prompt there waited forever for an answer to a question nobody saw."""
     return sys.stdout is not None and sys.stdout.isatty()
 
@@ -1147,7 +1147,7 @@ def _clear_start_attestation(home: Path | None = None) -> None:
 
 # A start attestation older than this is no authority (#110020 review (d)): the marker is a one-shot
 # meant to bridge the seconds between a ✓ and the next ``hermes gateway status``/``update``; a
-# historical marker must never later override Desktop ownership into a duplicate gateway (#76129).
+# historical marker must never later override live ownership into a duplicate gateway (#76129).
 START_ATTESTATION_MAX_AGE_S = 24 * 3600
 # Same slack process_identity uses for psutil create_time comparisons (PID reuse disambiguation).
 _CREATE_TIME_TOLERANCE_S = 2.0
@@ -1252,7 +1252,7 @@ def attested_death_generation(current_pids: list[int], home: Path | None = None)
     or ``None``.
 
     Read-only twin of :func:`check_start_attestation` for callers that must not consume the
-    one-shot marker — ``hermes update`` consults it to decide whether a Desktop-owned install
+    one-shot marker — ``hermes update`` consults it to decide whether an install
     still owes a gateway cold-start (#109538) and records the generation in its resume token so the
     execution step consumes exactly the marker it was authorized by. Callers pass the liveness they
     already established (``[]`` after their own discovery came back empty) so the process table is
@@ -1421,7 +1421,7 @@ def _query_scheduled_task_xml(task_name: str) -> str | None:
     return out
 
 
-# The install probe runs before the desktop backend says ready: a wedged schtasks must not hold that.
+# The install probe runs before the gateway backend says ready: a wedged schtasks must not hold that.
 _TASK_PROBE_TIMEOUT_S = 5
 
 

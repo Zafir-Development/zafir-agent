@@ -100,7 +100,6 @@ def _patch_update_deps(monkeypatch, tmp_path, run_side_effect):
         lambda git_cmd, args, **kw: run_side_effect([*git_cmd, *args], **kw),
     )
     monkeypatch.setattr(hermes_main, "PROJECT_ROOT", tmp_path)
-    monkeypatch.setattr(update_cmd, "_prepare_updated_checkout", lambda *a, **k: None)
     (tmp_path / ".git").mkdir()
     monkeypatch.setattr(hermes_main, "_resolve_update_branch", lambda args: "main")
     monkeypatch.setattr(hermes_main, "_is_windows", lambda: False)
@@ -142,15 +141,6 @@ def _patch_update_deps(monkeypatch, tmp_path, run_side_effect):
         },
     )
     monkeypatch.setattr(hermes_main, "_finalize_update_output", lambda *a, **k: None)
-    # _check_and_apply_config_migration → _run_migrate_config_fresh →
-    # _reload_config_modules() force-reloads hermes_cli.config via
-    # importlib, replacing the module object pytest's capsys + the config
-    # tests' patches target. No-op the reload so the config module stays
-    # stable for later tests in the same process.
-    monkeypatch.setattr(
-        "hermes_cli.update_cmd._reload_config_modules",
-        lambda *a, **k: None,
-    )
     # The startup version-info probe runs git rev-parse HEAD (and the
     # result is cached per-process, so whether it runs depends on test
     # order). Mock it so the head-moved mock's call counting only sees the
@@ -159,8 +149,6 @@ def _patch_update_deps(monkeypatch, tmp_path, run_side_effect):
         "hermes_cli.version_info.get_version_info",
         lambda *a, **k: SimpleNamespace(),
     )
-    monkeypatch.setattr(update_cmd, "_purge_stale_hermes_modules", lambda: None)
-    monkeypatch.setattr(hermes_main, "_purge_stale_hermes_modules", lambda: None)
 
     import hermes_cli.gateway as hermes_gateway
 
@@ -179,11 +167,9 @@ def _patch_update_deps(monkeypatch, tmp_path, run_side_effect):
         "hermes_cli.update_inventory.collect_runtime_inventory",
         lambda: SimpleNamespace(runtimes=[], to_dict=dict),
     )
-    # The restart phase imports discovery fns fresh after
-    # _purge_stale_hermes_modules (the update reloads code in-place), so
-    # module-attr mocks are lost; stub os.kill so the conftest live-system
-    # guard never fires on real pids. No gateways are expected, so the
-    # post-restart fleet matrix must not demand rows.
+    # Stub os.kill so the conftest live-system guard never fires on real
+    # pids. No gateways are expected, so the post-restart fleet matrix must
+    # not demand rows.
     import os as _os_mod
 
     monkeypatch.setattr(_os_mod, "kill", lambda *a, **k: None)
@@ -492,71 +478,6 @@ def test_clean_update_escalates_surviving_serve_as_unaccounted(
     assert by_pid == {4444: "restarted", 5555: "unaccounted"}
 
 
-def test_clean_update_defers_desktop_owned_serve_and_clears_marker(
-    monkeypatch, tmp_path, capsys
-):
-    """#111494 end to end: the only survivor is the Desktop app's own ``serve``
-    backend. The restart phase is forbidden to restart it, so reconciliation must
-    not count it as a missed restart either — otherwise every update with the
-    Desktop open ends ``partial``/exit 1 and re-arms ``fleet_restart_pending``
-    with nothing that could ever discharge it. It is surfaced (``deferred``,
-    relaunch hint) rather than dropped."""
-    from hermes_cli.update_inventory import (
-        RuntimeRecord, UpdatePlan, _restart_mechanism,
-    )
-    import hermes_cli.update_inventory as ui
-    import hermes_cli.process_identity as pi
-
-    args = _update_args()
-    _patch_update_deps(monkeypatch, tmp_path, _make_head_moved_side_effect())
-
-    plan = UpdatePlan()
-    plan.runtimes = [
-        RuntimeRecord(kind="gateway", profile="default", pid=4444,
-                      supervisor="systemd",
-                      restart_via=_restart_mechanism("systemd", "default")),
-        RuntimeRecord(kind="serve", profile="default", pid=6161,
-                      supervisor="desktop",
-                      restart_via=_restart_mechanism("desktop", "default"),
-                      detail={"create_time": 1000.0}),
-    ]
-    monkeypatch.setattr(ui, "collect_runtime_inventory", lambda: plan)
-    real_match = ui.match_runtime_outcomes
-
-    def _match(p, **kw):
-        kw["restarted_services"] = list(kw.get("restarted_services") or []) + [
-            "hermes-gateway.service"
-        ]
-        return real_match(p, **kw)
-
-    monkeypatch.setattr(ui, "match_runtime_outcomes", _match)
-    # The gateway leg is healthy on the new code; only the Desktop serve is left.
-    monkeypatch.setattr(
-        "hermes_cli.update_receipt.collect_fleet_versions",
-        lambda **_k: [{"profile": "default", "pid": 4444, "code_sha": POST_SHA,
-                       "code_version": "0.21.0", "state": "current"}],
-    )
-    # Same incarnation still alive: the Desktop serve genuinely survived on pre-update code.
-    monkeypatch.setattr(
-        pi, "ledger_entries",
-        lambda **_k: [{"pid": 6161, "purpose": "serve", "create_time": 1000.0}],
-    )
-
-    hermes_main.cmd_update(args)  # no SystemExit(1)
-
-    out = capsys.readouterr().out
-    assert "pid 6161" in out and "pre-update code" in out
-    assert "relaunch the Desktop app" in out
-    assert "Planned runtimes the restart phase never touched" not in out
-    assert not update_cmd_fleet._fleet_restart_obligation_armed()
-
-    latest = get_hermes_home() / "logs" / "update_receipts" / "latest.json"
-    receipt = json.loads(latest.read_text(encoding="utf-8"))
-    assert receipt["outcome"] == "success"
-    by_pid = {o["pid"]: o["outcome"] for o in receipt["runtime_outcomes"]}
-    assert by_pid == {4444: "restarted", 6161: "deferred"}
-
-
 def test_interrupt_between_pull_and_restart_leaves_marker(
     monkeypatch, tmp_path
 ):
@@ -673,16 +594,16 @@ def test_startup_warn_discharged_when_multiplexer_covers_owed_profiles(monkeypat
     assert update_cmd._pending_fleet_restart_needed() is False
 
 
-@pytest.mark.parametrize("supervisor", ["desktop", "launchd"])
+@pytest.mark.parametrize("supervisor", ["launchd"])
 def test_startup_warn_discharged_when_inventory_holds_supervised_serve(monkeypatch, capsys, supervisor):
     """A supervised serve/dashboard row in the marker's inventory is its supervisor's to
-    restart (#115090 for receipts, #111494 for the Desktop backend) — it must not make the
-    gateway warning permanently undischargeable once every gateway serves the pulled SHA.
+    restart (#115090) — it must not make the gateway warning permanently undischargeable once
+    every gateway serves the pulled SHA.
 
-    Only ``desktop`` and ``launchd`` are parametrized: those are the two supervisor values the
-    inventory writer can actually put on a serve/dashboard row (``update_inventory``'s ledger
-    pass emits exactly launchd, desktop or manual-serve). The systemd/windows-service/service
-    members of ``_SUPERVISOR_OWNED_SERVE_BACKENDS`` only ever appear on gateway rows.
+    Only ``launchd`` is parametrized: it and ``systemd`` are the supervisor values the inventory
+    writer can actually put on a serve/dashboard row (``update_inventory``'s ledger pass emits
+    exactly launchd, systemd or manual-serve); the systemd/windows-service/service members of
+    ``_SUPERVISOR_OWNED_SERVE_BACKENDS`` only ever appear on gateway rows.
     """
     disk_sha = "e" * 40
     update_cmd._write_fleet_restart_pending_marker(
@@ -862,7 +783,7 @@ def test_startup_warn_silent_when_failed_receipt_already_restarted_fleet(monkeyp
         json.dumps(
             {
                 "outcome": "failed", "exit_code": 1,
-                "stop_reason": "AttributeError: module 'hermes_cli.main_dashboard' has no attribute 'x'",
+                "stop_reason": "AttributeError: module 'hermes_cli.update_output' has no attribute 'x'",
                 "pre_update": {"sha": pre}, "post_update": {"sha": pulled},
                 "gateway_restart": {
                     "restarted_services": ["hermes-gateway"], "relaunched_profiles": [],

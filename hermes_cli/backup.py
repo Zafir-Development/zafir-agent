@@ -49,12 +49,6 @@ from hermes_cli.backup_restore import (
 logger = logging.getLogger(__name__)
 
 
-def _foreign_db_holder_pids(db_path: Path) -> Optional[list[int]]:
-    # Shim to stop the old updater doing work until relaunch. None means unknown,
-    # not permission to restore over a database whose holders we did not scan.
-    return None
-
-
 # --- Exclusion rules ---
 
 # Where ``hermes backup --quick`` / ``/snapshot`` / the pre-update safety net write state
@@ -131,7 +125,7 @@ _EXCLUDED_SUFFIXES = (".pyc", ".pyo", *_SQLITE_SIDECAR_SUFFIXES)
 # File names to skip (runtime state that's meaningless on another machine)
 _EXCLUDED_NAMES = {".backup.lock", "gateway.pid", "cron.pid"}
 
-# The desktop updater's pre-flight drops ``state.db.pre-update-emergency-<ts>.bak`` at the root
+# The updater's pre-flight drops ``state.db.pre-update-emergency-<ts>.bak`` at the root
 # — a backup artifact like ``backups/``. Prefix-matched because the name carries a timestamp;
 # a plain ``.bak`` suffix rule would drop user files.
 # Retired-WAL capture dirs (``<name>.retired-wal-<ts>-<pid>/``) are excluded whole: a
@@ -1684,9 +1678,9 @@ def restore_cron_jobs_if_emptied(
 
     Config-version migrations have been observed to leave ``cron/jobs.json``
     valid-but-empty after an update, silently dropping every scheduled job
-    (issue #34600). The desktop scheduler can also overwrite the file with its
-    own small set of internally-tracked crons, causing partial loss (issue
-    #52144).
+    (issue #34600). Another scheduler writing its own smaller set of
+    internally-tracked crons can also overwrite the file, causing partial loss
+    (issue #52144).
 
     This compares the *current* job count against the pre-update snapshot. If
     the live file now has **fewer** jobs than the snapshot, the snapshot copy
@@ -1726,9 +1720,9 @@ def restore_cron_jobs_if_emptied(
         return None
 
     # Restore when live has FEWER jobs than the pre-update snapshot.
-    # Catches both total loss (0 vs N) and partial loss (1 vs 19) — the
-    # desktop scheduler can overwrite jobs.json with its own small set of
-    # internally-tracked crons after an update/restart.
+    # Catches both total loss (0 vs N) and partial loss (1 vs 19) — a scheduler
+    # can overwrite jobs.json with its own small set of internally-tracked
+    # crons after an update/restart.
     if live_count >= snap_count:
         return None
 
@@ -1819,7 +1813,7 @@ def create_pre_update_snapshots_all_profiles(
 
 # Config paths that the update flow must never change (#64160): the model
 # routing keys and the Mixture-of-Agents section are consumed machine-wide
-# (gateway, cron, desktop), so an update/repair cycle that rewrites them
+# (gateway, cron), so an update/repair cycle that rewrites them
 # silently redirects paid inference. Each entry is a dotted path into the raw
 # config.yaml document; a single-element tuple protects the whole section.
 _PROTECTED_CONFIG_PATHS: tuple[tuple[str, ...], ...] = (
@@ -1851,11 +1845,10 @@ def restore_config_model_settings_if_rewritten(
 ) -> Optional[dict[str, Any]]:
     """Safety net for silent config.yaml model/MoA loss across ``hermes update``.
 
-    Desktop update/repair cycles have been observed to rewrite user-set
+    Update/repair cycles have been observed to rewrite user-set
     ``model.provider``/``model.default`` and drop the ``moa:`` section
-    entirely (issue #64160; the macOS repair/relaunch variant rewrote a
-    pinned ``model.default`` to a transient composer pick). These keys are
-    consumed by the gateway and unattended cron jobs too, so a rewrite
+    entirely (issue #64160). These keys are consumed by the gateway and
+    unattended cron jobs too, so a rewrite
     silently changes paid inference behavior machine-wide.
 
     Mirrors :func:`restore_cron_jobs_if_emptied`: compare the *current*

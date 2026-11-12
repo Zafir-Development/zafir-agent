@@ -1,12 +1,12 @@
-"""Stage publishing into a watching desktop-update UI (hermes_cli.update_stage).
+"""Stage publishing into a watching update UI (hermes_cli.update_stage).
 
-The desktop hand-off shim renders progress from a status JSON file. The
-regression: during an old→new checkout transition the OLD shim never exports
-the status path, so the takeover children (PM sync, builds) ran for minutes
-while the shim's UI sat frozen on its last stage — the user's only signal
-that anything was happening. update_stage must discover the file through
-both the exported env var (new shim) and the marker-pid fallback (old shim),
-and must be inert when neither exists (plain CLI update, no UI at all).
+An update launcher may render progress from a status JSON file. The
+regression: a launcher that predates the env var never exports the status
+path, so the update children (PM sync, builds) ran for minutes while the
+launcher's UI sat frozen on its last stage — the user's only signal that
+anything was happening. update_stage must discover the file through both the
+exported env var and the marker-pid fallback, and must be inert when neither
+exists (plain CLI update, no UI at all).
 """
 
 from __future__ import annotations
@@ -29,7 +29,6 @@ def status_file(tmp_path):
 @pytest.fixture(autouse=True)
 def clean_env(monkeypatch):
     monkeypatch.delenv(update_stage.STATUS_FILE_ENV, raising=False)
-    monkeypatch.delenv(update_stage.UI_SPAWNED_ENV, raising=False)
     # gettempdir() caches its first answer per process; the shim writes beside ${TMPDIR}
     # so tests that redirect TMPDIR need the cache cleared to be observed.
     monkeypatch.setattr(tempfile, "tempdir", None)
@@ -101,14 +100,3 @@ def test_publish_never_raises_on_unwritable_target(monkeypatch, tmp_path):
     update_stage.publish_stage("boom")  # must not raise
 
 
-def test_ensure_panel_skipped_off_macos(status_file, tmp_path, monkeypatch):
-    """ensure_panel is a macOS-only fallback; elsewhere it must not spawn."""
-    monkeypatch.setenv(update_stage.STATUS_FILE_ENV, str(status_file))
-    called = []
-    monkeypatch.setattr(update_stage, "_ui_present_in_log", lambda text: False)
-
-    # os.uname() on Linux reports Linux; the guard must reject before spawn.
-    update_stage.ensure_panel(tmp_path)
-
-    assert called == []
-    assert update_stage.UI_SPAWNED_ENV not in os.environ

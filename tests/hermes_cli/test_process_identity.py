@@ -114,7 +114,7 @@ def test_install_id_hashes_the_install_root_the_cli_resolves(monkeypatch):
 # Ledger
 # ---------------------------------------------------------------------------
 
-def _entry(pid, create, purpose="serve", install=None, spawner_pid=None, spawner_create=None):
+def _entry(pid, create, purpose="gateway", install=None, spawner_pid=None, spawner_create=None):
     return {
         "pid": pid,
         "create_time": create,
@@ -187,25 +187,6 @@ def test_register_self_inherits_spawn_tag_lineage(tmp_path):
     assert me["spawner_create"] == pytest.approx(123.0, abs=0.01)
 
 
-def test_register_self_falls_back_to_desktop_parent_env(tmp_path):
-    # Legacy Desktop: no HERMES_SPAWN, but HERMES_PARENT_PID + winms marker.
-    ledger = tmp_path / "spawn-ledger.json"
-    fake = _fake_psutil({999: 50.0})
-    env = {
-        "HERMES_PARENT_PID": "888",
-        "HERMES_PARENT_START_MARKER": "winms:1755689000123",
-    }
-    with patch.dict(sys.modules, {"psutil": fake}), \
-         patch.dict(pi.os.environ, env, clear=False), \
-         patch.object(pi.os.environ, "get", pi.os.environ.get), \
-         patch.object(pi, "_ledger_path", return_value=ledger), \
-         patch.object(pi.os, "getpid", return_value=999):
-        pi.os.environ.pop(pi.SPAWN_ENV_VAR, None)
-        pi.register_self("serve", project_root=Path("/x/install"))
-    me = json.loads(ledger.read_text(encoding="utf-8"))[0]
-    assert me["spawner_pid"] == 888
-    assert me["spawner_create"] == pytest.approx(1755689000.123, abs=0.01)
-
 
 def test_corrupt_ledger_quarantined_not_rewritten_blind(tmp_path):
     # #89298 contract: corruption is quarantined aside, never treated as [].
@@ -254,7 +235,7 @@ def test_ledger_entries_excludes_a_killed_but_unreaped_process(tmp_path):
             assert time.monotonic() < deadline, "child never became a zombie"
             time.sleep(0.05)
         ledger = tmp_path / "spawn-ledger.json"
-        ledger.write_text(json.dumps([_entry(child.pid, created, purpose="dashboard")]), encoding="utf-8")
+        ledger.write_text(json.dumps([_entry(child.pid, created, purpose="gateway")]), encoding="utf-8")
         with patch.object(pi, "_ledger_path", return_value=ledger):
             assert pi.ledger_entries(project_root=Path("/x/install")) == []
     finally:
@@ -315,58 +296,6 @@ class TestStrictBranchStatusRead:
         assert calls == [pid]
 
 
-# ---------------------------------------------------------------------------
-# Updater rung: _ledger_reapable_backend_pids
-# ---------------------------------------------------------------------------
-
-def _holders(*pids):
-    return [(p, "python.exe", f"python.exe -m hermes_cli.main --profile p{p} serve") for p in pids]
-
-
-def test_updater_reaps_ledger_proven_orphans():
-    from hermes_cli import update_cmd_windows
-
-    entries = [
-        _entry(200, 2.0, spawner_pid=700, spawner_create=7.0),   # spawner dead → reap
-        _entry(201, 2.1, spawner_pid=500, spawner_create=5.0),   # spawner alive → keep
-        _entry(202, 2.2, purpose="chat", spawner_pid=700, spawner_create=7.0),  # not reapable purpose
-    ]
-    fake = _fake_psutil({500: 5.0})
-    with patch.dict(sys.modules, {"psutil": fake}), \
-         patch.object(pi, "ledger_entries", return_value=entries), \
-         patch.object(pi, "spawner_is_dead", wraps=pi.spawner_is_dead):
-        assert update_cmd_windows._ledger_reapable_backend_pids(_holders(200, 201, 202, 203)) == [200]
-
-
-
-
-def test_updater_ledger_rung_never_raises():
-    from hermes_cli import update_cmd_windows
-
-    with patch.object(pi, "ledger_entries", side_effect=RuntimeError("boom")):
-        assert update_cmd_windows._ledger_reapable_backend_pids(_holders(200)) == []
-
-
-def test_desktop_ssh_backend_spawn_shape_is_desktop_owned(monkeypatch):
-    """Desktop's SSH spawn is ``env HERMES_DESKTOP=1 hermes serve --isolated ... --ssh-session-token-file F``
-    with NO token env var (its tests assert the var name never appears on the wire). Missing that
-    shape made the SSH child claim ROLE_SERVE on the remote host (the #119824 shape there)."""
-    monkeypatch.setenv("HERMES_DESKTOP", "1")
-    monkeypatch.delenv("HERMES_DASHBOARD_SESSION_TOKEN", raising=False)
-    ssh_argv = ["serve", "--isolated", "--host", "127.0.0.1", "--port", "0",
-                "--ssh-session-token-file", "/home/u/.hermes/desktop-ssh/abc.token"]
-
-    assert pi.is_desktop_owned_backend(ssh_argv) is True
-    monkeypatch.setattr(sys, "argv", ["hermes", *ssh_argv])
-    assert pi.is_desktop_owned_backend() is True
-    # The bare inherited flag (a Desktop terminal pane running `hermes serve`) is still not ownership.
-    assert pi.is_desktop_owned_backend(["serve", "--host", "127.0.0.1", "--port", "0"]) is False
-
-
-# ---------------------------------------------------------------------------
-# Host-reclaim rung: reap_orphaned_backend_owner (#121964)
-# ---------------------------------------------------------------------------
-
 def _reap(entry_pid=555, create=55.0, procs=None, kill_fn=None, **entry_kw):
     """Run the reclaim predicate with a faked psutil world; returns (result, kills)."""
     entry = _entry(entry_pid, create, **entry_kw)
@@ -412,10 +341,7 @@ def test_reclaim_spares_unprovable_spawner():
 
 
 def test_reclaim_reaps_null_spawner_orphan_to_init():
-    from hermes_cli import dashboard_procs
-
-    with patch.object(dashboard_procs, "_process_ppid", return_value=1), \
-         patch.object(dashboard_procs, "_lock_owned_serve_pids", return_value=set()):
+    with patch.object(pi, "_reparented_orphan", return_value=True):
         # Ancient orphan: create_time far past vs real clock → past the lock-write grace.
         result, kills = _reap(procs={555: 1000.0}, create=1000.0)
     assert result == 555
@@ -423,21 +349,8 @@ def test_reclaim_reaps_null_spawner_orphan_to_init():
 
 
 def test_reclaim_spares_null_spawner_with_live_parent():
-    from hermes_cli import dashboard_procs
-
-    with patch.object(dashboard_procs, "_process_ppid", return_value=1234):
+    with patch.object(pi, "_reparented_orphan", return_value=False):
         result, kills = _reap(procs={555: 55.0})
-    assert result is None
-    assert kills == []
-
-
-def test_reclaim_spares_lock_claimed_orphan():
-    """A valid backend.lock.json claims the PID: another session owns it, never kill."""
-    from hermes_cli import dashboard_procs
-
-    with patch.object(dashboard_procs, "_process_ppid", return_value=1), \
-         patch.object(dashboard_procs, "_lock_owned_serve_pids", return_value={555}):
-        result, kills = _reap(procs={555: 1000.0}, create=1000.0)
     assert result is None
     assert kills == []
 

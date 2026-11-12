@@ -489,19 +489,6 @@ except FileNotFoundError:
     os.chdir(_root)
 
 
-def _legacy_post_swap_invocation(argv: list[str]) -> tuple[Path, list[str]] | None:
-    """Recognize the exact fresh-checkout command emitted by shipped updaters."""
-    if not argv or argv[0] != "update":
-        return None
-    try:
-        marker = argv.index("--post-swap", 1)
-    except ValueError:
-        return None
-    if marker + 2 != len(argv):
-        return None
-    return Path(argv[marker + 1]), argv[1:marker]
-
-
 # Everything below imports Hermes packages, so the root goes on sys.path first. A venv
 # editable-installed from a pre-PM tree maps only the top-level packages it knew then:
 # without this, ``pm`` is unimportable and the launch silently skips PM adoption.
@@ -556,17 +543,6 @@ def _pin_launcher_home() -> None:
 
 
 _pin_launcher_home()
-
-_legacy_post_swap = _legacy_post_swap_invocation(sys.argv[1:])
-if _legacy_post_swap is not None:
-    # This continuation exists precisely because the replacement tree may not
-    # run under the old release's dependency graph. Take it over before PM
-    # activation, launch preparation, or argparse imports any of that graph.
-    from hermes_cli.update_handoff import _continue_legacy_post_swap
-
-    _handoff_path, _argv_tail = _legacy_post_swap
-    raise SystemExit(_continue_legacy_post_swap(_handoff_path, argv_tail=_argv_tail))
-
 
 class RelaunchExit(SystemExit):
     """Exit carrying a relaunched child's status: that child already produced this run's output,

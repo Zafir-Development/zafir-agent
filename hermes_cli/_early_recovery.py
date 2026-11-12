@@ -478,7 +478,7 @@ def _paths_git_wrote(git, root: Path, pre: str, target: str) -> tuple[list[str],
     return restore, added, new_dirs, kept
 
 
-# Launches that start together after a killed update (a restarting gateway or Desktop backend next to
+# Launches that start together after a killed update (a restarting gateway next to
 # the user's CLI) restore one at a time: the claim holder owns the git index, the rest wait for it and
 # relaunch from its tree. An OS lock, not a pid file: the kernel drops it with its owner, so a dead
 # launch's claim is broken without a check-then-unlink race.
