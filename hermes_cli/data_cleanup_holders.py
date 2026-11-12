@@ -19,7 +19,7 @@ def manual_gateway_identity(home: Path) -> dict | None:
     """The ``identify`` answer of the manually launched gateway owning ``home``, None when none runs.
 
     Raises RuntimeError for a gateway this client may not drain: a supervisor (systemd, launchd,
-    Desktop, ...) relaunches it right after a pause, so it would take the profile back.
+    ...) relaunches it right after a pause, so it would take the profile back.
     """
     from gateway.control_socket import identify_gateway, launch_supervisor
     from gateway.status import get_running_pid_identity_strict

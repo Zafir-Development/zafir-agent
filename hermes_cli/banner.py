@@ -8,8 +8,6 @@ import sys
 import threading
 from pathlib import Path
 from hermes_cli import source_check
-# Historical updater import (tests/compat/old_updater_surface.json). In-tree callers use the owner.
-from hermes_cli.source_check import _github_compare_behind
 from hermes_constants import get_hermes_home
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
@@ -24,16 +22,6 @@ logger = logging.getLogger(__name__)
 # ANSI building blocks for conversation display (``_DIM``/``_RST`` are imported by callbacks.py).
 _DIM = "\033[2m"
 _RST = "\033[0m"
-
-
-def _check_via_pypi() -> Optional[int]:
-    # Shim to stop the old updater doing work until relaunch. no registry query.
-    return None
-
-
-def check_via_pypi() -> Optional[int]:
-    # Shim to stop the old updater doing work until relaunch. status is unknown.
-    return None
 
 
 def _quiet(fn, default=None):
@@ -205,24 +193,18 @@ def get_latest_release_tag(repo_dir: Optional[Path] = None) -> Optional[tuple]:
 def format_banner_version_label() -> str:
     """Return the version label shown in the startup banner title."""
     from hermes_cli.config import get_project_root
+
+    root = get_project_root()
+    # A one-commit build has no checkout to inspect, so its stamp is the whole identity: probing
+    # git for a channel/upstream would spawn a process on every launch of a sealed artifact.
     from hermes_cli.steward import read_install_stamp
-    from hermes_cli.update_channel import is_canary_tag
 
-    stamp = read_install_stamp(get_project_root())
-    if stamp.get("distribution") == "desktop-app":
-        label = f"Hermes Agent v{get_version_info().derived_version}"
-        if stamp.get("source") == "commit-build":
-            return f"{label} · commit-build · {str(stamp.get('commit') or '')[:12]}"
-        if stamp.get("tag"):
-            channel = "canary" if is_canary_tag(stamp["tag"]) else "stable"
-            return f"{label} · {channel}"
-        if stamp.get("payload") == "bootstrap":
-            # The old installer shell's CLI backend: the shell never updates
-            # itself (`self`), the managed checkout under it does. Name the
-            # shell so it doesn't read as a plain packaged build.
-            return f"{label} · installer"
-        return label
-
+    stamp = read_install_stamp(root)
+    if stamp.get("source") == "commit-build":
+        label = f"Hermes Agent v{get_version_info().derived_version} ({RELEASE_DATE})"
+        if stamp.get("commit"):
+            return f"{label} · commit-build · {str(stamp['commit'])[:12]}"
+        return f"{label} · commit-build"
     base = f"Hermes Agent v{get_version_info().derived_version} ({RELEASE_DATE})"
     from hermes_cli.config import load_config
     from hermes_cli.update_channel import resolve_update_channel

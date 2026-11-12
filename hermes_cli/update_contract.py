@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional
 
-from hermes_cli.steward import STEWARD_APT_TERMUX, STEWARD_DESKTOP, STEWARD_DOCKER, STEWARD_NIX
+from hermes_cli.steward import STEWARD_APT_TERMUX, STEWARD_DOCKER, STEWARD_NIX
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ def is_commit_build(project_root: Path) -> bool:
 class UpdateRefusal:
     """Why an in-place update is refused, and what to run instead."""
 
-    code: str              # image-marker | image-marker-invalid | docker | nix | apt | desktop-app | <steward>
+    code: str              # image-marker | image-marker-invalid | docker | nix | apt | <steward>
     message: str           # full user-facing text (multi-line ok)
     update_command: str    # the one-line remediation command
 
@@ -67,16 +67,12 @@ def _steward_refusal(steward: str) -> UpdateRefusal:
         return _refusal(steward, method)
     if method is not None:
         return _refusal(steward, method, lambda _command: steward_update_message(steward))
-    # desktop-app and future package managers have no CLI remediation: the
-    # steward's own instructions are the remediation, and
+    # Future package managers have no CLI remediation: the steward's own
+    # instructions are the remediation, and
     # recommended_update_command_for_method would falsely answer "hermes
     # update" for methods it doesn't know.
-    command = (
-        "Manage updates from within the desktop app"
-        if steward == STEWARD_DESKTOP
-        else f"update via {steward}"
-    )
-    return UpdateRefusal(code=steward, message=steward_update_message(steward), update_command=command)
+    return UpdateRefusal(code=steward, message=steward_update_message(steward),
+                         update_command=f"update via {steward}")
 
 
 def evaluate_update_admission(project_root: Path) -> Optional[UpdateRefusal]:
@@ -108,10 +104,8 @@ def evaluate_update_admission(project_root: Path) -> Optional[UpdateRefusal]:
         logger.debug("Image provenance check failed (using heuristics): %s", exc)
 
     # Layer 2: install stamp / steward classification. A sealed tree (no
-    # ``.git``) belongs to a steward — the desktop app bundle, a Docker
-    # image, the Nix store — and only the steward updates it. This is the
-    # rung that covers ``desktop-app``, which the heuristics below never
-    # detect (the payload has no .install_method stamp and no .git).
+    # ``.git``) belongs to a steward — a Docker image, the Nix store — and
+    # only the steward updates it.
     try:
         from hermes_cli.steward import sealed_steward
 

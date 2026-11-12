@@ -2,9 +2,8 @@
 
 Resolution order:
 1. Install stamp (``install-stamp.json``) — written at build time by
-   ``scripts/write_install_stamp.py`` for every packager (Docker, Nix, and
-   the desktop app). The stamp is authoritative
-   for packaged builds.
+   ``scripts/write_install_stamp.py`` for every packager (Docker, Nix).
+   The stamp is authoritative for packaged builds.
 2. Live git — for unstamped source/dev installs with a ``.git`` directory.
 3. Unknown — no stamp and no git. The provenance is unknown.
 """
@@ -32,7 +31,7 @@ class VersionInfo:
     source: Literal["build", "commit-build", "ci", "docker", "fallback", "git", "local", "nix", "unknown"]
     dirty: bool = False
     commit_date: int | None = None
-    distribution: Literal["docker", "nix", "desktop-app"] | None = None
+    distribution: Literal["docker", "nix"] | None = None
 
     @property
     def display_version(self) -> str:
@@ -182,7 +181,7 @@ def _stamp_version_info() -> VersionInfo | None:
         else "build"
     )
     distribution = data.get("distribution")
-    if distribution not in {"docker", "nix", "desktop-app"}:
+    if distribution not in {"docker", "nix"}:
         distribution = None
 
     commit_date = data.get("commitDate")

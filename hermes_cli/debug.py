@@ -249,25 +249,7 @@ class LogSnapshot:
 def _primary_log_path(log_name: str) -> Optional[Path]:
     """Where *log_name* would live if present. Doesn't check existence."""
     from hermes_cli.logs import log_file_path
-    return log_file_path(log_name)  # update/handoff: the ROOT home's, whatever profile is active
-
-
-# Logs written by a client process, invisible to a remote/docker/SSH backend running `debug
-# share`; a bare "(file not found)" would read as "the app logged nothing" and misdirect triage.
-_CLIENT_SIDE_LOGS = {
-    "desktop": (
-        "written by Hermes Desktop on the machine running the app, not by this "
-        "backend. If the desktop connects to a remote/docker/SSH backend, collect "
-        "it on that client machine")}
-
-
-def _missing_log_note(log_name: str) -> str:
-    """Explain a missing log instead of stating a bare absence."""
-    reason = _CLIENT_SIDE_LOGS.get(log_name)
-    if reason is None:
-        return "(file not found)"
-    primary = _primary_log_path(log_name)
-    return f"(not on this host: {reason}{f' — expected at {primary}' if primary else ''})"
+    return log_file_path(log_name)  # update: the ROOT home's, whatever profile is active
 
 
 def _resolve_log_path(log_name: str) -> Optional[Path]:
@@ -331,7 +313,7 @@ def _capture_log_snapshot(
     log_path = _resolve_log_path(log_name)
     if log_path is None:
         primary = _primary_log_path(log_name)
-        tail = "(file empty)" if primary and primary.exists() else _missing_log_note(log_name)
+        tail = "(file empty)" if primary and primary.exists() else "(file not found)"
         return LogSnapshot(path=None, tail_text=tail, full_text=None)
 
     try:
@@ -361,8 +343,8 @@ def _capture_log_snapshot(
 
 # Logs the debug report tails, in output order. ``agent`` gets the full ``--lines`` budget;
 # the rest are capped at 100 lines. Every log but ``errors`` is also uploaded in full.
-_REPORT_LOGS = ("agent", "errors", "gateway", "gui", "desktop", "update", "handoff")
-_FULL_LOGS = ("agent", "gateway", "gui", "desktop", "update", "handoff")
+_REPORT_LOGS = ("agent", "errors", "gateway", "update")
+_FULL_LOGS = ("agent", "gateway", "update")
 
 
 def _tail_budget(name: str, log_lines: int) -> int:
@@ -488,12 +470,9 @@ def build_debug_share(
     for label in (
         "agent.log",
         "gateway.log",
-        "gui.log",
-        "desktop.log",
-        # Update-failure diagnostics: the only files holding the root cause
-        # of a failed update/Desktop rebuild (#100874).
+        # Update-failure diagnostics: the file holding the root cause of a
+        # failed update (#100874).
         "update.log",
-        "desktop-update-handoff.log",
     ):
         content = bundle.get(label)
         if not content:
@@ -541,10 +520,7 @@ def run_debug_share(args):
         for title, label in (
             ("FULL agent.log", "agent.log"),
             ("FULL gateway.log", "gateway.log"),
-            ("FULL gui.log", "gui.log"),
-            ("FULL desktop.log", "desktop.log"),
             ("FULL update.log", "update.log"),
-            ("FULL desktop-update-handoff.log", "desktop-update-handoff.log"),
         ):
             body = bundle.get(label)
             if body:
@@ -591,10 +567,9 @@ _NOUS_PRIVACY_NOTICE = """\
     NOT a public paste service. The following is included:
   • System info (OS, Python/Hermes version, provider, which API keys are
     configured — NOT the actual keys)
-  • Full agent.log, gateway.log, and desktop.log (up to 512 KB each — likely
-    contains conversation content, tool outputs, and file paths), plus
-    update.log and desktop-update-handoff.log when present (update/hand-off
-    output — the root cause of update failures)
+  • Full agent.log and gateway.log (up to 512 KB each — likely contains
+    conversation content, tool outputs, and file paths), plus update.log
+    when present (update output — the root cause of update failures)
 
   • The bundle is viewable only by Nous staff (and allowlisted Discord mods)
     via a Google-login-gated viewer.

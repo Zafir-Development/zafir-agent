@@ -15,10 +15,9 @@ class DataRemovalPlan:
     keep: tuple[Path, ...]
 
 
-def plan_data_removal(home: Path, project: Path, userdata: Path | None = None) -> DataRemovalPlan:
+def plan_data_removal(home: Path, project: Path) -> DataRemovalPlan:
     from hermes_constants import get_default_hermes_root
     from pm.environments import base_venv, installs_root, store_root
-    from hermes_cli.steward import is_bundled_payload
     from tools.checkpoint_pruning import store_lock_path
 
     home = home.resolve()
@@ -34,13 +33,6 @@ def plan_data_removal(home: Path, project: Path, userdata: Path | None = None) -
     }
     if home == machine:
         protected.add(machine / "profiles")
-    if is_bundled_payload(project):
-        from hermes_cli.bundled_app import NotBundledApp, resolve_bundle_layout
-
-        try:
-            protected.add(resolve_bundle_layout(project).app_root)
-        except NotBundledApp as exc:
-            raise ValueError(str(exc)) from exc
     # The canonical source installation may coexist with the invoking package.
     canonical = home / "hermes-agent"
     if (canonical / "hermes_cli" / "__init__.py").is_file():
@@ -70,12 +62,6 @@ def plan_data_removal(home: Path, project: Path, userdata: Path | None = None) -
     if home.is_dir():
         for child in sorted(home.iterdir()):
             visit(child)
-    if home != machine:
-        userdata = None  # Desktop preferences belong to the app, not a named profile.
-    if userdata is not None and not userdata.resolve().is_relative_to(home):
-        if userdata.resolve() == Path.home().resolve() or home.is_relative_to(userdata.resolve()):
-            raise ValueError(f"desktop data directory must not contain the Hermes or user home: {userdata}")
-        visit(userdata.parent.resolve() / userdata.name)
     return DataRemovalPlan(home, tuple(remove), tuple(sorted(keep)))
 
 

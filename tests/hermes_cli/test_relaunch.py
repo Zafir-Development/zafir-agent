@@ -264,3 +264,83 @@ class TestResolveHermesBinWindowsPyGuard:
         monkeypatch.setattr(relaunch_mod.shutil, "which", lambda name: None)
 
         assert relaunch_mod.resolve_hermes_bin() is None
+
+
+class TestNeedsInterpreter:
+    """A launcher script needs the running interpreter prefixed when its python shebang
+    escapes the running venv's bin directory (moved here with the helper)."""
+
+    def test_case_insensitive_match(self, tmp_path, monkeypatch):
+        """Interpreter paths with uppercase must not flag own venv scripts.
+
+        The shebang is lowercased for comparison; the interpreter dir must
+        be too (conda env names, usernames, uv's ephemeral .tmpXXX dirs all
+        carry uppercase - an asymmetric compare would prefix the venv's own
+        console script spuriously).
+        """
+        venv_bin = tmp_path / "MyEnv" / "bin"
+        venv_bin.mkdir(parents=True)
+        interpreter = venv_bin / "python"
+        interpreter.write_text("", encoding="utf-8")
+
+        console_script = venv_bin / "hermes"
+        console_script.write_text(f"#!{interpreter}\nimport hermes_cli\n", encoding="utf-8")
+        monkeypatch.setattr(relaunch_mod.sys, "executable", str(interpreter))
+
+        assert relaunch_mod._needs_interpreter(console_script) is False
+
+    def test_rejects_sibling_directory(self, tmp_path, monkeypatch):
+        """``<venv>/bin-extra/python`` is NOT inside ``<venv>/bin``.
+
+        Substring matching accepted it (the parent dir appears verbatim inside
+        the sibling path), skipping the interpreter prefix for a script whose
+        shebang actually points OUTSIDE the venv. Path-component comparison
+        rejects it.
+        """
+        venv_bin = tmp_path / "venv" / "bin"
+        venv_bin.mkdir(parents=True)
+        interp = venv_bin / "python"
+        interp.write_text("", encoding="utf-8")
+        monkeypatch.setattr(relaunch_mod.sys, "executable", str(interp))
+
+        sibling_script = tmp_path / "sibling"
+        sibling_script.write_text(
+            f"#!{tmp_path}/venv/bin-extra/python\nimport hermes_cli\n",
+            encoding="utf-8",
+        )
+        assert relaunch_mod._needs_interpreter(sibling_script) is True
+
+    def test_strips_flags_before_comparing(self, tmp_path, monkeypatch):
+        """A flagged own-venv shebang is not misclassified by the flag token."""
+        venv_bin = tmp_path / "venv" / "bin"
+        venv_bin.mkdir(parents=True)
+        interp = venv_bin / "python"
+        interp.write_text("", encoding="utf-8")
+        monkeypatch.setattr(relaunch_mod.sys, "executable", str(interp))
+
+        flagged = tmp_path / "flagged"
+        flagged.write_text(f"#!{interp} -S\nimport hermes_cli\n", encoding="utf-8")
+        assert relaunch_mod._needs_interpreter(flagged) is False
+
+    def test_env_shebang_always_escapes(self, tmp_path, monkeypatch):
+        """``env`` resolves through the DE's PATH - not the installer's."""
+        venv_bin = tmp_path / "venv" / "bin"
+        venv_bin.mkdir(parents=True)
+        interp = venv_bin / "python"
+        interp.write_text("", encoding="utf-8")
+        monkeypatch.setattr(relaunch_mod.sys, "executable", str(interp))
+
+        # Even when env itself sits in the venv bin (parent equality would
+        # pass), the PATH resolution semantics mean the shebang escapes.
+        env_script = tmp_path / "envscript"
+        env_script.write_text(
+            f"#!{venv_bin}/env python3\nimport hermes_cli\n", encoding="utf-8"
+        )
+        assert relaunch_mod._needs_interpreter(env_script) is True
+
+        # ...unless env carries an absolute venv interpreter after -S.
+        env_abs = tmp_path / "envabs"
+        env_abs.write_text(
+            f"#!/usr/bin/env -S {interp}\nimport hermes_cli\n", encoding="utf-8"
+        )
+        assert relaunch_mod._needs_interpreter(env_abs) is False
