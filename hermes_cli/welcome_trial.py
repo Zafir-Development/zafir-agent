@@ -1,6 +1,6 @@
-"""The desktop's welcome trial: free inference on ``nous/welcome`` for a first install, once per OS user.
+"""The welcome trial: free inference on ``nous/welcome`` for a first install, once per OS user.
 
-Only the backend the desktop spawned on this machine can claim it, only when this OS user has never
+Only a local backend on this machine can claim it, only when this OS user has never
 used Hermes here (``install_state``), and only with no provider and no Nous identity yet. The claim
 mints a guest stamped with ``WELCOME_CLAIM_FLAG`` in the mint's own write and writes the OS user's
 marker, so the trial is never claimed twice for that user. Another OS account on the same computer is
@@ -65,7 +65,7 @@ class _Ask:
 
 # Cheapest first; the last one reads the disk. Each is a reason the trial cannot be claimed.
 _CLAIM_BLOCKERS: tuple[tuple[str, Callable[[_Ask], bool]], ...] = (
-    ("not the desktop's local backend", lambda _ask: not anon_auth.on_local_desktop_backend()),
+    ("not a local backend on this machine", lambda _ask: not anon_auth.on_local_host_backend()),
     ("guests are switched off", lambda _ask: not anon_auth.guest_allowed()),
     ("a Nous identity exists", lambda _ask: _has_nous_identity()),
     ("a provider is configured",
@@ -75,14 +75,14 @@ _CLAIM_BLOCKERS: tuple[tuple[str, Callable[[_Ask], bool]], ...] = (
 
 
 def claim_blocker(*, assume_fresh: bool = False, configured: Optional[bool] = None) -> Optional[str]:
-    """Why the trial cannot be claimed here, or None when it can. *assume_fresh* is the unpackaged
-    desktop's ``--fresh-install`` switch: it skips only the machine check. *configured* is a
+    """Why the trial cannot be claimed here, or None when it can. *assume_fresh* is the
+    fresh-install switch: it skips only the machine check. *configured* is a
     ``provider_configured()`` answer the caller already has, so the ladder is not walked twice."""
     ask = _Ask(assume_fresh, configured)
     return next((reason for reason, blocks in _CLAIM_BLOCKERS if blocks(ask)), None)
 
 
-def claim_desktop_free_tier(*, assume_fresh: bool = False, force: bool = False) -> Optional[dict[str, Any]]:
+def claim_welcome_trial(*, assume_fresh: bool = False, force: bool = False) -> Optional[dict[str, Any]]:
     """Claim the trial when nothing blocks it: mint the guest, stamp the claim, mark the machine.
     Returns the claimed state, or None when the trial is not available here. A failed mint raises
     the coded ``AuthError`` from :func:`anon_auth.ensure_portal_identity` (memoised with its cooldown;

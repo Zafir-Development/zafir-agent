@@ -8,17 +8,14 @@ answer. Every answer also writes ``offer_version``. A "No thanks" without it pre
 fix (an Enter pressed during startup could save it unseen), so that profile is asked once more, with
 the reason, and any response (Esc or dismiss included) settles it for good. A collect-only answer
 from before the offer dropped that choice stays decided: nothing is sent, and it is not asked again.
-Desktop paints the offer as a composer strip (``consent-strip.tsx`` over the ``shared_metrics.*``
-RPCs). The terminal asks at the end of every ``hermes setup`` flow and, for a profile that never
-answered, once before an interactive ``hermes`` / ``hermes --tui`` chat (which also covers the
-dashboard's Chat tab, a PTY-hosted TUI). The messaging gateway never asks: a chat participant is
-not the install owner.
+The terminal asks at the end of every ``hermes setup`` flow and, for a profile that never answered,
+once before an interactive ``hermes`` / ``hermes --tui`` chat. The messaging gateway never asks: a
+chat participant is not the install owner.
 """
 
 from __future__ import annotations
 
 import logging
-import os
 import sys
 from typing import Any
 
@@ -166,8 +163,7 @@ def offer_consent_if_undecided(config: dict | None = None) -> None:
 
 def offer_consent_before_chat(args: Any) -> None:
     """One-time offer before an interactive chat on a profile that never answered. Skipped for
-    anything without a person at a terminal (``-q``, piped or JSON output, spawned actions) and for
-    a Desktop-spawned pane (the app shows its own strip)."""
+    anything without a person at a terminal (``-q``, piped or JSON output, spawned actions)."""
     from hermes_cli.config import is_managed
     from hermes_cli.setup import is_noninteractive
 
@@ -175,7 +171,7 @@ def offer_consent_before_chat(args: Any) -> None:
         return
     if getattr(args, "safe_mode", False) or getattr(args, "ignore_user_config", False):
         return
-    if os.environ.get("HERMES_DESKTOP") or is_noninteractive():
+    if is_noninteractive():
         return
     if not (sys.stdin.isatty() and sys.stdout.isatty()) or is_managed():
         return

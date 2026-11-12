@@ -102,6 +102,7 @@ PROVIDER_IDENTIFIER_MAX_LENGTH = 64
 _METRIC_IDENTIFIER_CHARACTERS = frozenset("abcdefghijklmnopqrstuvwxyz0123456789._:/@+-")
 _METRIC_IDENTIFIER_START_CHARACTERS = frozenset("abcdefghijklmnopqrstuvwxyz0123456789")
 
+# ``desktop`` is historical: rows from the removed Desktop app stay valid.
 EXECUTION_SURFACES = frozenset({
     "acp", "api", "batch", "cli", "desktop", "gateway", "python", "scheduled_task", "tui",
     "other", "unknown",
@@ -227,6 +228,7 @@ MILESTONES = frozenset({
     "first_gateway_message", "first_scheduled_task", "first_delegation", "first_skill_created",
     "first_skill_reused", "first_mcp_tool_success", "first_long_session",
 })
+# ``desktop`` is historical: rows from the removed Desktop app stay valid.
 SETUP_SURFACES = frozenset({"cli", "desktop", "other"})
 TOKEN_TYPES = frozenset({"input", "output", "cache_read", "cache_write", "reasoning"})
 TTFT_BUCKETS = frozenset({
@@ -344,6 +346,7 @@ CRON_RUN_OUTCOMES = frozenset({"success", "failed", "missed", "skipped", "cancel
 CRON_DELIVERY_KINDS = frozenset({"local", "platform", "webhook", "none", "other"})
 
 # ---- v4 install ----
+# ``desktop_attach``/``serve_boot`` are surfaces of removed clients, kept so their rows drain.
 STARTUP_SURFACES = frozenset({"cli", "desktop_attach", "gateway_boot", "serve_boot", "tui"})
 STARTUP_LATENCY_BUCKETS = frozenset({
     "lt_500ms", "500ms_to_1s", "1s_to_2s", "2s_to_5s", "5s_to_10s", "gte_10s",
@@ -362,6 +365,7 @@ _INSTALL_V4_SNAPSHOT_DIMENSIONS = {
 }
 
 # ---- v5 engagement ----
+# ``desktop`` is historical: rows from the removed Desktop app stay valid.
 ENGAGEMENT_SURFACES = frozenset({"acp", "cli", "cron", "desktop", "gateway", "tui"})
 ACTIVE_MINUTES_BUCKETS = frozenset({"0", "lt_5m", "5m_to_30m", "30m_to_2h", "2h_to_6h", "gte_6h"})
 SURFACES_USED_BUCKETS = frozenset({"0", "1", "2", "3", "gte_4"})
@@ -382,20 +386,22 @@ def long_size_bucket(count: int) -> str:
 UPDATE_RUN_MARK = UPDATE_RUN_METRIC = "hermes.update.run"
 UPDATE_STAGE_MARK = UPDATE_STAGE_METRIC = "hermes.update.stage"
 PROCESS_EXIT_MARK = PROCESS_EXIT_METRIC = "hermes.process.exit"
+# ``desktop`` is historical: receipts parked by the removed Desktop source-checkout hand-off
+# may still be counted after the upgrade.
 UPDATE_KINDS = frozenset({"cli", "desktop"})
 UPDATE_OUTCOMES = frozenset({"failed", "noop", "refused", "success"})
 # ``partial``: committed, but interrupted after the commit point or the user's changes stay parked
-# (only `hermes update` receipts; the Desktop RPC keeps UPDATE_OUTCOMES).
+# (only `hermes update` receipts; the removed Desktop self-update RPC kept UPDATE_OUTCOMES).
 UPDATE_RUN_OUTCOMES = UPDATE_OUTCOMES | {"partial"}
 # `hermes update` pipeline stages, in pipeline order (the receipt's stage marks use these names).
 UPDATE_STAGE_ORDER = ("plan", "snapshot", "apply", "deps", "build", "restart", "verify")
 UPDATE_STAGES = frozenset(UPDATE_STAGE_ORDER)
-# Desktop's packaged updaters (electron-updater, App Installer, Store) fail at their own steps.
-DESKTOP_UPDATE_STAGES = frozenset({"apply", "download", "restart", "verify"})
-UPDATE_FAILED_STAGES = UPDATE_STAGES | DESKTOP_UPDATE_STAGES | {"none", "other"}
+# ``download`` is a retired Desktop packaged-updater stage: rows older releases stored may
+# still carry it, so the value stays valid even though nothing produces it any more.
+UPDATE_FAILED_STAGES = UPDATE_STAGES | {"download", "none", "other"}
 UPDATE_STAGE_OUTCOMES = frozenset({"failed", "skipped", "success"})
 UPDATE_DURATION_BUCKETS = frozenset({"lt_30s", "30s_to_2m", "2m_to_5m", "5m_to_15m", "gte_15m"})
-# package = an OS/app-store style installer applied the update (Desktop packaged builds).
+# package = an OS/app-store style installer applied the update (the removed Desktop packaged builds).
 UPDATE_APPLY_MODES = frozenset({"external", "git", "package", "unknown", "zip"})
 PROCESS_KINDS = frozenset({"cli", "cron", "gateway", "other", "serve", "tui"})
 PROCESS_EXIT_KINDS = frozenset({"clean", "crash", "killed", "watchdog"})
@@ -413,9 +419,11 @@ PROVIDER_SETUP_MARK = PROVIDER_SETUP_METRIC = "hermes.provider_setup.count"
 FEATURE_ADOPTION_METRIC = "hermes.feature_adoption.count"
 # Not a counter: a first-use fact the subscriber turns into at most one adoption row per feature.
 FEATURE_USED_MARK = "hermes.feature.used"
+# ``dashboard``/``desktop`` are surfaces of removed clients, kept so their rows drain.
 PROVIDER_SETUP_SURFACES = frozenset({"cli_model", "cli_setup", "dashboard", "desktop", "tui"})
 PROVIDER_SETUP_EVENTS = frozenset({"abandoned", "completed", "failed", "started"})
 PROVIDER_SETUP_FAILURE_CLASSES = frozenset({"auth", "cancelled", "network", "no_models", "none", "other"})
+# ``desktop`` is historical: adoption rows from the removed Desktop app stay valid.
 FEATURES = frozenset({
     "browser", "bot_mode", "cron", "curator", "delegation", "desktop", "gateway_platform", "kanban", "mcp",
     "memory", "plugins", "projects", "skills_created", "tui", "voice",
@@ -425,6 +433,7 @@ FEATURE_DISABLED_MARK = FEATURE_DISABLED_METRIC = "hermes.feature_disabled.count
 FEATURE_DISABLED_KINDS = frozenset({
     "compression", "curator", "memory", "platform", "plugin", "setting", "skill", "toolset",
 })
+# ``dashboard``/``desktop`` are surfaces of removed clients, kept so their rows drain.
 FEATURE_DISABLED_SURFACES = frozenset({"cli_config", "cli_slash", "cli_tools", "dashboard", "desktop", "tui"})
 FEATURE_DISABLED_EVENTS = frozenset({"disabled", "re_enabled"})
 FEATURE_DISABLED_NAME_MAX_LENGTH = 64
@@ -507,7 +516,7 @@ UPDATE_FAILURE_CLASSES = frozenset({
     "os_error",              # the run ended on an OSError (disk full, permission, file in use)
     "restart_failed",        # the gateway restart failed, or a skipped restart left the fleet owing one
     "subprocess_failed",     # a subprocess error (CalledProcessError, TimeoutExpired) reached the boundary
-    "unknown",               # the reporter sent no reason (Desktop packaged updaters)
+    "unknown",               # the reporter sent no reason (removed Desktop packaged updaters)
     "disk_full",             # out of disk space (ENOSPC, or no room to stage the ZIP)
     "local_changes_parked",  # committed, but the user's stashed changes could not be re-applied (partial)
     "permission_denied",     # the run ended on a PermissionError
@@ -661,129 +670,6 @@ CACHE_BREAK_CAUSES = frozenset({
     "toolset_change",
 })
 # ---- end v5 efficiency ----
-# ---- v5 desktop ----
-# Desktop love/hate: which areas get used, what gets in the way, where first run stops. Every value
-# is a code-defined Desktop surface id; anything the client names outside these sets collapses
-# to `other` before it is recorded.
-DESKTOP_FEATURE_USE_MARK = DESKTOP_FEATURE_USE_METRIC = "hermes.desktop.feature_use"
-DESKTOP_FRICTION_MARK = DESKTOP_FRICTION_METRIC = "hermes.desktop.friction"
-DESKTOP_ONBOARDING_MARK = DESKTOP_ONBOARDING_METRIC = "hermes.desktop.onboarding"
-# Settings views (the legacy `connections` tab redirects to `gateway`).
-DESKTOP_SETTINGS_AREAS = frozenset({
-    "settings_about", "settings_billing", "settings_config_advanced", "settings_config_appearance",
-    "settings_config_browser", "settings_config_chat", "settings_config_memory", "settings_config_model",
-    "settings_config_safety", "settings_config_voice", "settings_config_workspace", "settings_gateway",
-    "settings_keybinds", "settings_keys", "settings_notifications", "settings_other", "settings_providers",
-    "settings_sessions", "settings_vault",
-})
-DESKTOP_FEATURE_AREAS = DESKTOP_SETTINGS_AREAS | {
-    # panes and panels
-    "browser_pane", "file_pane", "review_pane", "terminal_pane",
-    # overlays and pickers
-    "command_palette", "find_in_page", "model_picker", "session_picker", "session_switcher",
-    # first-class features
-    "bot_mode", "projects", "session_search", "skins", "voice_conversation", "voice_dictation",
-    # full pages, plus contributed plugin pages
-    "agents", "artifacts", "capabilities", "command_center", "cron", "extension_page", "kanban", "messaging",
-    "profiles", "session_import", "starmap", "webhooks",
-    "other",
-}
-# notice_dismissed: stable toast ids and dismissible strips the Desktop code defines.
-DESKTOP_NOTICE_IDS = frozenset({
-    "artifacts_partial_load", "background_queue_stuck", "backend_skew", "billing_banner", "billing_block",
-    "build_discontinued", "client_behind", "composer_queue_stuck", "credits",
-    "free_tier_notice", "gateway_error", "gui_skew", "install_method", "mcp_health", "model_warning",
-    "onboarding_handoff", "restored_draft", "runtime_not_ready", "session_compress", "terminal_backend", "tip",
-    "update_available", "voice_live_unavailable", "voice_stop_hint", "other",
-})
-# error_toast: the notifyError summary rule that matched.
-DESKTOP_ERROR_TOAST_CATEGORIES = frozenset({
-    "api_key_missing", "api_key_rejected", "disk_full", "gateway_auth_failed", "method_not_allowed",
-    "microphone_permission", "pool_slot_timeout", "restart_required", "rpc_out_of_sync", "storage_failure",
-    "timeout", "unclassified", "other",
-})
-DESKTOP_SLOW_FRAME_BUCKETS = frozenset({"100ms_to_250ms", "250ms_to_1s", "1s_to_5s", "gte_5s"})
-DESKTOP_FRICTION_DETAILS: dict[str, frozenset[str]] = {
-    "backend_disconnect": frozenset({"backend_exit", "network", "timeout", "other"}),
-    "error_toast": DESKTOP_ERROR_TOAST_CATEGORIES,
-    "notice_dismissed": DESKTOP_NOTICE_IDS,
-    # Electron render-process-gone reasons: crashed -> crash; oom; killed; anything else -> other.
-    "renderer_crash": frozenset({"crash", "killed", "oom", "other"}),
-    "slow_frame": DESKTOP_SLOW_FRAME_BUCKETS,
-}
-DESKTOP_FRICTION_KINDS = frozenset(DESKTOP_FRICTION_DETAILS)
-DESKTOP_FRICTION_DETAIL_VALUES = frozenset().union(*DESKTOP_FRICTION_DETAILS.values())
-# The Desktop first-run flows: the classic provider overlay (store/onboarding.ts), the guided flow
-# (store/onboarding-gate.ts phases), free-tier sign-in, then the consent answer and the first message.
-DESKTOP_ONBOARDING_STEPS = frozenset({
-    "choose_later", "consent", "first_message", "free_tier_ready", "guide", "guide_skip", "model_pick",
-    "provider_api_key", "provider_local", "provider_oauth", "provider_setup", "sign_in",
-})
-DESKTOP_ONBOARDING_EVENTS = frozenset({"abandoned", "completed", "reached"})
-# Bot Mode (a bot's canonical chat or a bot side-chat in front) vs regular Sessions mode, per day.
-DESKTOP_MODE_USE_MARK = DESKTOP_MODE_USE_METRIC = "hermes.desktop.mode_use"
-DESKTOP_MODES = frozenset({"bots", "sessions"})
-DESKTOP_ACTIVE_MINUTES_BUCKETS = frozenset({"0", "lt_5m", "5m_to_30m", "30m_to_2h", "2h_to_6h", "gte_6h"})
-_DESKTOP_ACTIVE_THRESHOLDS = ((300_000, "lt_5m"), (1_800_000, "5m_to_30m"), (7_200_000, "30m_to_2h"),
-                              (21_600_000, "2h_to_6h"))
-
-
-def desktop_active_minutes_bucket(active_ms: Any) -> str:
-    """Bucket a day's active time in one Desktop mode; nothing measurable reads 0."""
-    value = _non_negative_number(active_ms) or 0
-    return "0" if value <= 0 else _bucket(value, _DESKTOP_ACTIVE_THRESHOLDS, "gte_6h")
-# ---- end v5 desktop ----
-
-# ---- v5 desktop actions ----
-# Button presses per day. Action ids are the Desktop keybinding registry plus the typed button
-# table DESKTOP_BUTTON_ACTIONS; contributed/plugin actions collapse to `other`.
-DESKTOP_ACTION_USE_MARK = DESKTOP_ACTION_USE_METRIC = "hermes.desktop.action_use"
-DESKTOP_KEYBIND_ACTION_IDS = frozenset({
-    "appearance.toggleMode", "composer.cancel", "composer.dictate", "composer.focus", "composer.help",
-    "composer.history", "composer.mention", "composer.modelPicker", "composer.newline", "composer.queue",
-    "composer.reasoningDown", "composer.reasoningUp", "composer.send", "composer.sendQueued", "composer.slash",
-    "composer.steer", "composer.voice", "conversation.scrollPageDown", "conversation.scrollPageUp",
-    "hud.snapToPointer", "keybinds.openPanel", "nav.agents", "nav.artifacts", "nav.capabilities",
-    "nav.commandCenter", "nav.commandPalette", "nav.cron", "nav.messaging", "nav.profiles", "nav.settings",
-    "profile.create", "profile.default", "profile.next", "profile.prev", "profile.toggleAll",
-    "session.archive", "session.focusSearch", "session.new", "session.newTab", "session.newWindow",
-    "session.next", "session.prev", "session.togglePin", "view.closeTab", "view.closeTerminal",
-    "view.cycleSidebarGrouping", "view.findInPage", "view.findNext", "view.findPrevious", "view.flipPanes",
-    "view.newTerminal", "view.nextTerminal", "view.prevTerminal", "view.reopenTab", "view.selectionToComposer",
-    "view.showBrowser", "view.showFiles", "view.showTerminal", "view.terminalCopy", "view.terminalPaste",
-    "view.toggleHud", "view.toggleProfileRail", "view.toggleReview", "view.toggleRightSidebar",
-    "view.toggleSidebar", "view.toggleSimpleMode", "view.toggleStatusbar", "view.toggleTabStrip",
-    "workspace.newWorktree", "workspace.openFolder",
-})
-DESKTOP_BUTTON_ACTION_IDS = frozenset({"composer.attach", "message.copy", "message.retry"})
-DESKTOP_ACTION_IDS = DESKTOP_KEYBIND_ACTION_IDS | DESKTOP_BUTTON_ACTION_IDS | {"other"}
-DESKTOP_ACTION_VIAS = frozenset({"click", "menu", "palette", "shortcut"})
-# Dislike signals, each naming its target from a closed set (setting keys are DEFAULT_CONFIG leaf
-# paths, checked against the live schema by shared_metrics_desktop and shape-checked here).
-DESKTOP_DISLIKE_MARK = DESKTOP_DISLIKE_METRIC = "hermes.desktop.dislike"
-DESKTOP_FLOW_IDS = frozenset({
-    "command_palette", "free_tier_sign_in", "keybind_capture", "model_picker", "project_create", "provider_oauth",
-    "session_picker", "session_switcher", "other",
-})
-DESKTOP_FEATURE_TOGGLES = frozenset({
-    "backdrop", "bot_activity_toasts", "composer_popout_gestures", "intro_splash", "native_notifications",
-    "notification_kind", "reactions", "thread_timeline", "tips", "tours", "vibe_hearts", "other",
-})
-DESKTOP_UNDO_TARGETS = frozenset({"closed_tab", "restored_draft", "other"})
-DESKTOP_DISLIKE_TARGETS: dict[str, frozenset[str]] = {
-    "cancelled": DESKTOP_FLOW_IDS,
-    "feature_disabled": DESKTOP_FEATURE_TOGGLES,
-    "quick_close": DESKTOP_FEATURE_AREAS,
-    "rage_click": DESKTOP_ACTION_IDS,
-    "setting_off_default": frozenset({"setting"}),
-    "undo": DESKTOP_UNDO_TARGETS,
-}
-DESKTOP_DISLIKE_SIGNALS = frozenset(DESKTOP_DISLIKE_TARGETS)
-DESKTOP_DISLIKE_TARGET_VALUES = frozenset().union(*DESKTOP_DISLIKE_TARGETS.values())
-DESKTOP_DISLIKE_DIRECTIONS = frozenset({"away_from_default", "none", "to_default"})
-DESKTOP_SETTING_KEY_MAX_LENGTH = 96
-# ---- end v5 desktop actions ----
-
 _ARCHITECTURE_ALIASES = {
     "amd64": "x86_64", "x64": "x86_64", "x86_64": "x86_64",
     "aarch64": "arm64", "arm64": "arm64",
@@ -1028,19 +914,6 @@ _COUNTER_DIMENSION_VALUES: dict[str, dict[str, frozenset[str]]] = {
     ENGAGEMENT_SURFACE_METRIC: {"active_minutes_bucket": ACTIVE_MINUTES_BUCKETS, "surface": ENGAGEMENT_SURFACES},
     MODEL_SWITCH_AFTER_METRIC: {"turns_before_switch_bucket": TURNS_BEFORE_SWITCH_BUCKETS},
     # ---- end v5 engagement ----
-    # ---- v5 desktop ----
-    DESKTOP_FEATURE_USE_METRIC: {"area": DESKTOP_FEATURE_AREAS},
-    DESKTOP_FRICTION_METRIC: {"detail": DESKTOP_FRICTION_DETAIL_VALUES, "kind": DESKTOP_FRICTION_KINDS},
-    DESKTOP_ONBOARDING_METRIC: {"event": DESKTOP_ONBOARDING_EVENTS, "step": DESKTOP_ONBOARDING_STEPS},
-    DESKTOP_MODE_USE_METRIC: {
-        "active_minutes_bucket": DESKTOP_ACTIVE_MINUTES_BUCKETS, "bot_count_bucket": SIZE_BUCKETS,
-        "messages_sent_bucket": SIZE_BUCKETS, "mode": DESKTOP_MODES,
-    },
-    DESKTOP_ACTION_USE_METRIC: {"action": DESKTOP_ACTION_IDS, "count_bucket": SIZE_BUCKETS, "via": DESKTOP_ACTION_VIAS},
-    DESKTOP_DISLIKE_METRIC: {
-        "direction": DESKTOP_DISLIKE_DIRECTIONS, "signal": DESKTOP_DISLIKE_SIGNALS, "target": DESKTOP_DISLIKE_TARGET_VALUES,
-    },
-    # ---- end v5 desktop ----
     # ---- v5 signals ----
     TOOL_UNAVAILABLE_METRIC: {"tool_name": BUILTIN_TOOL_NAMES | RETIRED_TOOL_NAMES},
     PROVIDER_SETUP_METRIC: {
@@ -1101,9 +974,6 @@ _IDENTIFIER_FIELDS: dict[str, dict[str, int]] = {
     },
     MODEL_SWITCH_AFTER_METRIC: _MODEL_ROUTE_MAX_LENGTHS,
     # ---- end v5 engagement ----
-    # ---- v5 desktop ----
-    DESKTOP_DISLIKE_METRIC: {"setting": DESKTOP_SETTING_KEY_MAX_LENGTH},
-    # ---- end v5 desktop ----
     # ---- v5 signals ----
     TOOL_UNAVAILABLE_METRIC: _MODEL_ROUTE_MAX_LENGTHS,
     PROVIDER_SETUP_METRIC: {"provider": PROVIDER_IDENTIFIER_MAX_LENGTH},
@@ -1207,11 +1077,6 @@ _DECISION_MARK_METRICS = {
     # ---- v5 engagement ----
     MODEL_SWITCH_AFTER_MARK: MODEL_SWITCH_AFTER_METRIC,
     # ---- end v5 engagement ----
-    # ---- v5 desktop ----
-    DESKTOP_FEATURE_USE_MARK: DESKTOP_FEATURE_USE_METRIC, DESKTOP_FRICTION_MARK: DESKTOP_FRICTION_METRIC,
-    DESKTOP_ONBOARDING_MARK: DESKTOP_ONBOARDING_METRIC, DESKTOP_MODE_USE_MARK: DESKTOP_MODE_USE_METRIC,
-    DESKTOP_ACTION_USE_MARK: DESKTOP_ACTION_USE_METRIC, DESKTOP_DISLIKE_MARK: DESKTOP_DISLIKE_METRIC,
-    # ---- end v5 desktop ----
     # ---- v5 signals ----
     TOOL_UNAVAILABLE_MARK: TOOL_UNAVAILABLE_METRIC, PROVIDER_SETUP_MARK: PROVIDER_SETUP_METRIC,
     FEATURE_DISABLED_MARK: FEATURE_DISABLED_METRIC,

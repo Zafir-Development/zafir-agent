@@ -20,9 +20,9 @@ _AUTO_CONTINUE_FRESHNESS_MINUTES_DEFAULT = 15
 
 
 def _auto_continue_config() -> tuple[bool, float, int]:
-    """(enabled, freshness window in seconds, max attempts) from ``desktop.auto_continue`` in config.yaml."""
-    desktop = _load_cfg().get("desktop")
-    cfg = desktop.get("auto_continue") if isinstance(desktop, dict) else None
+    """(enabled, freshness window in seconds, max attempts) from ``sessions.auto_continue`` in config.yaml."""
+    sessions = _load_cfg().get("sessions")
+    cfg = sessions.get("auto_continue") if isinstance(sessions, dict) else None
     cfg = cfg if isinstance(cfg, dict) else {}
     try:
         minutes = float(cfg.get("freshness_minutes", _AUTO_CONTINUE_FRESHNESS_MINUTES_DEFAULT))
@@ -598,7 +598,7 @@ def _restore_agent_history_after_turn_error(session: dict, agent) -> bool:
 
 
 def _queued_prompt_snapshot(session: dict) -> dict | None:
-    """The accepted next-turn prompt without its transport handle, for the live-session projection (Desktop may
+    """The accepted next-turn prompt without its transport handle, for the live-session projection (a client may
     reconnect while it is still queued)."""
     queued = session.get("queued_prompt")
     user = _inflight_text(queued.get("text")) if isinstance(queued, dict) else ""

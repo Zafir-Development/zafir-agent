@@ -67,7 +67,6 @@ def user_created_skill(d: dict[str, str]) -> bool:
     return d.get("action") == "created" and d.get("provenance") != "agent_created"
 
 
-_TASK_SURFACE = {"desktop": "desktop", "tui": "tui"}
 # metric -> [(feature, predicate over the recorded dimensions)]. Unattended Hermes-owned work only
 # counts where the user set it up (a cron job, a curator run the user started).
 _FEATURE_RULES: dict[str, tuple[tuple[str, Callable[[dict[str, str]], bool]], ...]] = {
@@ -78,7 +77,6 @@ _FEATURE_RULES: dict[str, tuple[tuple[str, Callable[[dict[str, str]], bool]], ..
     contract.CURATOR_RUN_METRIC: (("curator", lambda d: _success(d) and d.get("trigger") == "manual"),),
     contract.TASK_STARTED_METRIC: (
         ("gateway_platform", lambda d: d.get("platform") not in {None, "none"}),
-        ("desktop", lambda d: d.get("execution_surface") == "desktop"),
         ("tui", lambda d: d.get("execution_surface") == "tui"),
     ),
     contract.TOOL_USAGE_METRIC: (
@@ -87,7 +85,6 @@ _FEATURE_RULES: dict[str, tuple[tuple[str, Callable[[dict[str, str]], bool]], ..
         ("browser", _tool(prefix="browser_")),
         ("voice", _tool("text_to_speech")),
         ("kanban", _tool(prefix="kanban_")),
-        ("projects", _tool("desktop_project")),
     ),
     contract.SLASH_COMMAND_METRIC: (
         ("voice", lambda d: d.get("command") == "voice"),

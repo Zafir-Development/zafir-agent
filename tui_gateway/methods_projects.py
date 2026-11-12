@@ -165,10 +165,10 @@ def _is_session_cwd_junk(cwd: str) -> bool:
 
 
 def _repo_discovery_policy(raw: dict | None = None) -> dict:
-    """Return the effective, profile-local Desktop repository scan policy."""
+    """Return the effective, profile-local repository scan policy."""
     from hermes_cli.config import DEFAULT_CONFIG
-    defaults = DEFAULT_CONFIG["desktop"]
-    source = raw if isinstance(raw, dict) else (_load_cfg().get("desktop") or {})
+    defaults = DEFAULT_CONFIG["projects"]
+    source = raw if isinstance(raw, dict) else (_load_cfg().get("projects") or {})
     if not isinstance(source, dict):
         source = {}
 
@@ -202,7 +202,7 @@ def _repo_discovery_policy_key(policy: dict) -> str:
 def _repo_discovery_policy_is_default(policy: dict) -> bool:
     from hermes_cli.config import DEFAULT_CONFIG
     return _repo_discovery_policy_key(policy) == _repo_discovery_policy_key(
-        _repo_discovery_policy(DEFAULT_CONFIG["desktop"]))
+        _repo_discovery_policy(DEFAULT_CONFIG["projects"]))
 
 
 def _scan_discovered_repos_remote(conn, policy: dict) -> bool:
@@ -211,11 +211,9 @@ def _scan_discovered_repos_remote(conn, policy: dict) -> bool:
     (every root walked to completion, cap not hit) — only then is the cache write
     ``replace=True``; a partial/errored scan must MERGE, or a failed refresh blanks the sidebar.
 
-    The desktop's native repo scan only runs on the local filesystem. On a remote gateway connection the
-    host must scan its own disk so repos with zero Hermes sessions still appear in the sidebar (#81723).
-    Mirrors the desktop's behavior: walk each root (bounded depth), find `.git` directories, record (root,
-    label) pairs into the discovery cache.
-    See #81723.
+    The host scans its own disk so repos with zero Hermes sessions still appear in the sidebar (#81723):
+    walk each configured root (bounded depth), find `.git` directories, record (root, label) pairs into the
+    discovery cache.
     """
     from hermes_cli import projects_db as pdb
     roots = policy.get("roots") or []

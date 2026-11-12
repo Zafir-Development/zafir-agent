@@ -134,13 +134,13 @@ def _claim_before_run(*, assume_fresh):
     opens onboarding next launch."""
     from hermes_cli import anon_auth
     from hermes_cli.onboarding_run import set_run
-    from hermes_cli.welcome_trial import claim_desktop_free_tier, provider_configured
-    if not anon_auth.on_local_desktop_backend():
+    from hermes_cli.welcome_trial import claim_welcome_trial, provider_configured
+    if not anon_auth.on_local_host_backend():
         # A CLI or TUI holds a native ticket too: its start schedules nothing. A rerun (Settings, any
         # Desktop) never claims and never reaches here.
         raise _NoModelForTheRun('First-run onboarding starts only in the Desktop app on this machine.')
     set_run(True)
-    claimed = claim_desktop_free_tier(assume_fresh=assume_fresh)
+    claimed = claim_welcome_trial(assume_fresh=assume_fresh)
     if claimed is None and not (anon_auth.free_inference_active() or provider_configured()):
         raise _NoModelForTheRun('The welcome trial is not available here, and no provider is set up.')
     return claimed

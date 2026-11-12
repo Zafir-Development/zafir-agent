@@ -279,7 +279,7 @@ def stage_local_session(authority, actor, params, *, trusted_policy=None, truste
     receipt ``commit_local_session`` writes (the async RPC commits it off the owner loop).
     ``client_local``: the gateway's own proof that the client is on this host (its connection redeemed a
     ticket minted over the private control socket), never a value the client sends. ``desktop_local``:
-    that client is also the Desktop app (``process_identity.local_desktop_client``); a Desktop chat
+    that client is also the Desktop app (``process_identity.local_host_client``); a Desktop chat
     records it so its turns run as work for the local Desktop (``session_policy.local_desktop_turn``)."""
     if actor.profile_id != authority.profile_id:
         raise RuntimeStoreError('profile_mismatch')

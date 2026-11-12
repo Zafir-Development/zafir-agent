@@ -8,12 +8,12 @@ plugin, ``DEFAULT_CONFIG`` key path; never a value); anything else reads ``custo
 each (kind, name, event) at most once per day.
 
 The surface is the entry point that is running: ``set_process_surface`` from the ``hermes`` command
-dispatch (``tools`` / ``config`` / ``skills`` / ``plugins`` / chat slash commands / the web server) and
-the TUI gateway. A process with no surface (setup wizard, updates) records nothing, nor does a write
+dispatch (``tools`` / ``config`` / ``skills`` / ``plugins`` / chat slash commands) and the TUI
+gateway. A process with no surface (setup wizard, updates) records nothing, nor does a write
 Hermes makes itself inside a surfaced process (migrations, under :func:`hermes_applied_write`): those
 are Hermes applying choices, not a user turning something off.
 
-``save_config``'s callers may hold their own write lock (the dashboard's ``_CONFIG_MUTATION_LOCK``), so
+``save_config``'s callers may hold their own write lock, so
 the hook only runs the cheap gate inline; the diff and the record run on a thread bound to the owning
 profile.
 """
@@ -34,7 +34,6 @@ CUSTOM = "custom"
 _COMMAND_SURFACES = {
     None: "cli_slash", "chat": "cli_slash", "tools": "cli_tools", "config": "cli_config",
     "skills": "cli_config", "plugins": "cli_config",
-    "dashboard": "web", "serve": "web", "gui": "web", "desktop": "web",
 }
 _SETTING_KINDS = {"memory": "memory", "curator": "curator", "compression": "compression"}
 _OFF = frozenset({"false", "off", "no", "0", "none", ""})
@@ -51,10 +50,6 @@ def set_process_surface(command: Any) -> None:
 
 def current_surface() -> str | None:
     surface = _process_surface
-    if surface == "web":
-        from .shared_metrics_setup import web_setup_surface
-
-        return web_setup_surface()
     if surface == "tui_gateway":
         try:
             from tui_gateway.server import _resolve_session_platform

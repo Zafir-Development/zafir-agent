@@ -12,3 +12,4 @@
 # snapshots already in the tree. Append-only history means a new file per stage.
 history/2026-11-09-removal-step-3-desktop/diagram.html
 history/2026-11-10-removal-step-4-dashboard-serve/diagram.html
+history/2026-11-11-removal-step-5-desktop-cli/diagram.html

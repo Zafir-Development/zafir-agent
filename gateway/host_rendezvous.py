@@ -1,7 +1,7 @@
 """Host-wide singleton rendezvous: one lock + one record per ROLE per OS user.
 
-Multiplex-only (Teknium ruling): exactly ONE ``hermes serve`` and ONE ``hermes gateway run``
-per host, each multiplexing every profile. The per-``HERMES_HOME`` gateway lock/PID files
+Multiplex-only (Teknium ruling): exactly ONE ``hermes gateway run`` per host, multiplexing
+every profile. The per-``HERMES_HOME`` gateway lock/PID files
 (``gateway.status``) cannot express that — N profiles are N homes, so N processes each take
 their own flock and none of them ever sees the others. This module adds the missing layer:
 
@@ -21,8 +21,8 @@ A dead PID or a mismatched process incarnation is STALE and ignored — an attac
 never dial a recycled PID's port.
 
 **Relationship to ``spawn-ledger.json``** (``hermes_cli/process_identity.py``): the ledger stays
-the append-only machine roster of every long-lived Hermes process (Desktop's attach ladder reads
-it) and is still written unchanged. It cannot be the host record: it has no lock, no
+the append-only machine roster of every long-lived Hermes process and is still written
+unchanged. It cannot be the host record: it has no lock, no
 single-writer semantics, no removal on exit, and no place to publish a protocol version or
 an authentication handle. The record here is authoritative for "who owns this host role"; the
 ledger remains authoritative for "what is running". Both are written. New host records pair the
@@ -54,23 +54,8 @@ logger = logging.getLogger(__name__)
 #: does not recognise the version refuses to attach instead of guessing.
 HOST_PROTOCOL_VERSION = 1
 
-#: Token-gated endpoint the owner answers with its own identity. An attaching client dials the
-#: RECORDED port and only attaches when the answer is the recorded owner — a record alone proves
-#: nothing about who holds that port right now.
-HOST_IDENTITY_PATH = "/api/host/identity"
-
-#: Bounded: a closed port, a black-holed one or a foreign listener must cost a second, not a hang.
-PROBE_TIMEOUT_S = 2.0
-
 ROLE_GATEWAY = "gateway"
-ROLE_SERVE = "serve"
-#: A Desktop-owned pool child (loopback, random port, per-profile lifecycle). It is NOT a host
-#: owner — the attach/refuse ladder reads ``ROLE_SERVE`` only, so a supervised public dashboard
-#: never stands down behind it (#119824) — but ``hermes plugins install`` from a terminal still
-#: has to reach the backend hosting the open chats (#119644), and this record + 0600 token is
-#: how it dials one on a Desktop-only box.
-ROLE_DESKTOP_SERVE = "desktop-serve"
-_ROLES = (ROLE_GATEWAY, ROLE_SERVE, ROLE_DESKTOP_SERVE)
+_ROLES = (ROLE_GATEWAY,)
 
 # Open lock handles, keyed by (role, resolved lock path): the OS releases the flock when this
 # process dies, which is what makes a crashed owner's host lock re-acquirable without a reaper.
@@ -346,11 +331,8 @@ def record_is_stale(record: Optional[HostRecord]) -> bool:
     """A record nobody may attach to: absent, unknown protocol, dead PID, or PID reuse.
 
     ``None`` from the liveness probe (no psutil, permission denied, an unexpected psutil error)
-    means UNPROVABLE, and an unprovable record is a CANDIDATE, never an owner: it survives this
-    predicate only to be handed to :func:`probe_owner`, which dials the recorded port and makes
-    the owner prove itself. Treating unprovable as dead would let a second process bind a second
-    port; treating it as alive *without the probe* made a record for a long-dead PID a permanent
-    silent outage (attach exited 0 forever, with nothing listening).
+    means UNPROVABLE: the record is not reported stale, so a second process cannot bind a second
+    port on a guess, and the attach path re-proves the owner before dialing it.
     """
     if record is None:
         return True
@@ -377,49 +359,6 @@ def dial_host(record: HostRecord) -> str:
     return "127.0.0.1" if host in ("0.0.0.0", "::", "*", "") else host
 
 
-def probe_owner(record: HostRecord, *, timeout: float = PROBE_TIMEOUT_S) -> Optional[dict]:
-    """Make the recorded endpoint prove it is this record's owner; ``None`` when it does not.
-
-    Two gates, both required: a bounded TCP connect (nothing listening → the owner is gone, even
-    though its record and PID may still look alive during a graceful-shutdown window) and an
-    identity GET authenticated with the 0600 token (a foreign listener that inherited the port
-    answers the connect but cannot answer as PID N of role R).
-
-    Returns the owner's identity payload (``pid``/``role``/``servesSpa``) on success.
-    """
-    if not record.port:
-        return None
-    import socket
-
-    host = dial_host(record)
-    try:
-        with socket.create_connection((host, record.port), timeout=timeout):
-            pass
-    except OSError:
-        logger.debug("host %s owner does not answer at %s:%s", record.role, host, record.port)
-        return None
-
-    import urllib.request
-
-    token = read_token(record.role)
-    headers = {"X-Hermes-Token": token, "Authorization": f"Bearer {token}"} if token else {}
-    request = urllib.request.Request(
-        f"http://{host}:{record.port}{HOST_IDENTITY_PATH}", headers=headers)
-    try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            if response.status != 200:
-                return None
-            payload = json.loads(response.read(65536).decode("utf-8", "replace"))
-    except Exception:
-        logger.debug("host %s identity probe failed at %s:%s", record.role, host, record.port, exc_info=True)
-        return None
-    if not isinstance(payload, dict):
-        return None
-    if payload.get("role") != record.role or payload.get("pid") != record.pid:
-        return None
-    return payload
-
-
 def read_record(role: str, *, include_stale: bool = False) -> Optional[HostRecord]:
     """Published record for ``role``; ``None`` when absent, foreign, corrupt or (by default) stale."""
     path = record_path(role)
@@ -443,9 +382,10 @@ def read_token(role: str) -> str:
 
     This is the handle an attaching client uses when the backend is auth-gated and therefore
     withholds its token from an unauthenticated ``GET /``. Confidentiality is enforced at WRITE
-    time by :func:`_write_private_text` (POSIX ``0o600``; an owner+SYSTEM-only protected DACL on
-    Windows, where mode bits set no ACLs at all). Reading it is therefore evidence of, not proof
-    of, same-OS-user authority — the authority boundary the host lock is scoped to.
+    time by :func:`hermes_cli.private_file.write_private_text` (POSIX ``0o600``; an
+    owner+SYSTEM-only protected DACL on Windows, where mode bits set no ACLs at all). Reading it
+    is therefore evidence of, not proof of, same-OS-user authority — the authority boundary the
+    host lock is scoped to.
     """
     try:
         return token_path(role).read_text(encoding="utf-8-sig").strip()
@@ -463,35 +403,6 @@ def record_token_is_consistent(record: HostRecord) -> bool:
     if not record.token_fingerprint:
         return True
     return token_fingerprint(read_token(record.role)) == record.token_fingerprint
-
-
-def _write_private_text(path: Path, text: str) -> None:
-    """Create/replace ``path`` with owner-only content.
-
-    POSIX: ``0o600`` via tmp + atomic replace. Windows: mode bits set NO ACLs, so the same
-    ``os.open`` would leave a live session token readable by whatever the inherited DACL grants;
-    the SSH runtime's protected owner+SYSTEM DACL writer is the repo's primitive for exactly this
-    credential class and is reused here. It also replaces in place, because ``os.replace`` onto a
-    token file another process still holds open fails on Windows.
-    """
-    if sys.platform == "win32":
-        from hermes_cli.windows_ssh_runtime import write_private_file
-
-        write_private_file(path, text.encode("utf-8"))
-        return
-    tmp = path.with_name(path.name + ".tmp")
-    fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            handle.write(text)
-            handle.flush()
-            with contextlib.suppress(OSError):
-                os.fsync(handle.fileno())
-    except BaseException:
-        with contextlib.suppress(OSError):
-            os.unlink(str(tmp))
-        raise
-    os.replace(str(tmp), str(path))
 
 
 class HostLockOutcome(enum.Enum):
@@ -631,7 +542,9 @@ def publish_record(
         if token:
             # No record without its token: publishing one an attaching client cannot
             # authenticate against would degrade to a silent "attach refused forever".
-            _write_private_text(token_path(role), token)
+            from hermes_cli.private_file import write_private_text
+
+            write_private_text(token_path(role), token)
         atomic_json_write(record_path(role), record.to_json(), mode=0o600)
     except OSError:
         logger.warning("host %s record could not be published; discovery will not find it", role, exc_info=True)

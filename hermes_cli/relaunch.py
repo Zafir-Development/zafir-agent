@@ -59,6 +59,60 @@ def _extract_inherited_flags(argv: Sequence[str]) -> list[str]:
     return flags
 
 
+def _read_head(path: pathlib.Path, size: int = 4096) -> Optional[bytes]:
+    try:
+        with open(path, "rb") as fh:
+            return fh.read(size)
+    except OSError:
+        return None
+
+
+def _shebang_tokens(shebang: str) -> list[str]:
+    return shebang[2:].strip().split()
+
+
+def _shebang_escapes_running_env(shebang: str) -> bool:
+    """Whether a python shebang resolves OUTSIDE the running interpreter's directory.
+
+    Compares PATH COMPONENTS, never substrings: ``<venv>/bin-extra/python`` is not inside
+    ``<venv>/bin``. ``env`` shebangs ALWAYS escape — ``env`` resolves through the shell's cold
+    PATH, not the shell that installed the venv — except the rare ``env -S <abs-interpreter>``
+    form, which is judged by its absolute target.
+
+    The comparison uses the LEXICAL interpreter directory (abspath, not resolve()): on uv venvs
+    the resolved parent is the base interpreter's dir, which makes a valid ``.venv/bin/python``
+    shebang look foreign. Both sides use the SAME case operation (``.lower()``): interpreter paths
+    legitimately carry uppercase (conda env names, usernames, uv's ephemeral build dirs) and an
+    asymmetric compare would flag the venv's own console script as foreign.
+    """
+    tokens = _shebang_tokens(shebang)
+    if not tokens:
+        return True  # bare "#!python": resolves via PATH
+    interp = pathlib.Path(tokens[0])
+    if interp.name in ("env", "env.exe"):
+        rest = [t for t in tokens[1:] if not t.startswith("-")]
+        if not (rest and pathlib.Path(rest[0]).is_absolute()):
+            return True
+        interp = pathlib.Path(rest[0])
+    running_dir = os.path.dirname(os.path.abspath(sys.executable)).lower()
+    return str(interp.parent).lower() != running_dir
+
+
+def _needs_interpreter(bin_path: pathlib.Path) -> bool:
+    """Whether ``bin_path`` is a Python script whose shebang escapes the running venv.
+
+    Native binaries (uv shim, PyInstaller, distro package) and shell wrappers (the installer's
+    bash launcher execs the venv python itself) never need one.
+    """
+    head = _read_head(bin_path, 256)
+    if head is None or not head.startswith(b"#!"):
+        return False
+    shebang = head.decode("utf-8", errors="replace").splitlines()[0].strip()
+    if "python" not in shebang.lower():
+        return False
+    return _shebang_escapes_running_env(shebang)
+
+
 def resolve_hermes_bin() -> Optional[str]:
     """Hermes entry point: ``sys.argv[0]`` if a real executable, else ``which hermes``, else ``None``
     (caller falls back to ``python -m hermes_cli.main``).
@@ -79,8 +133,6 @@ def resolve_hermes_bin() -> Optional[str]:
             return _is_python_script(p)
         # A console script pinned to the running venv (``#!<venv>/bin/python``) keeps the venv and
         # stays exec-able; a shebang that resolves elsewhere (``env python3``) loses it.
-        from hermes_cli.linux_desktop_entry import _needs_interpreter
-
         return _needs_interpreter(pathlib.Path(p))
 
     # Absolute executable (nix store, venv wrappers, …), then relative-to-CWD, then PATH.
