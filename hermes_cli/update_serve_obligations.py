@@ -88,7 +88,7 @@ def defer_unit_serve(runtime: dict) -> bool:
     only gateways, so without this a unit the update could not restart (no root, an aborted run,
     ``--no-gateway-restart``) is never mentioned again. True when the row is discharged (process gone)
     or the reminder was filed; False when it is still owed and nothing durable could be written."""
-    from hermes_cli.main_dashboard import _systemd_restart_commands
+    from hermes_cli.service_restart_helpers import _systemd_restart_commands
 
     if not is_unit_serve_row(runtime):
         return False
@@ -120,7 +120,7 @@ def retain_receipt_manual_serves(receipt: dict) -> list[dict]:
 
 def warn_pending_manual_serves(*, startup: bool = False, pending_manual: list[dict] | None = None) -> None:
     """Warn about manual debt independently of gateway evidence; optionally reuse a snapshot's failed transfers."""
-    from hermes_cli.main_dashboard import _format_restart_commands, _systemd_restart_commands
+    from hermes_cli.service_restart_helpers import _format_restart_commands, _systemd_restart_commands
     from hermes_cli.process_identity import _pid_alive_matches
     from hermes_cli.update_receipt import read_latest_receipt
 
@@ -152,7 +152,7 @@ def warn_pending_manual_serves(*, startup: bool = False, pending_manual: list[di
                 print(f"    Restart its unit: {_format_restart_commands(restart)}", file=stream)
                 continue
             print(f"  ⚠ {row['kind']} [{row['profile']}] pid {row['pid']}: manual restart still pending; this process may still serve pre-update code.", file=stream)
-            print("    Ask its owner to relaunch `hermes serve` / `hermes dashboard` (reconnect Desktop for an SSH backend).", file=stream)
+            print("    Ask its owner to relaunch `hermes serve` / `hermes dashboard`.", file=stream)
         except (OSError, ValueError, KeyError, TypeError) as exc:
             logger.debug("Could not reconcile manual serve obligation %s: %s", path, exc)
             print(f"  ⚠ Manual serve restart reminder could not be verified: {path.name}", file=stream)

@@ -84,10 +84,10 @@ def build_models_payload(
 ) -> dict:
     """Build the ``{providers, model, provider}`` shape every consumer needs. ``explicit_only`` keeps
     only providers the user explicitly configured — hides ambient/auto-seeded credentials from
-    desktop chat pickers. ``pricing_cache_only``: with ``pricing``, use only values already resident
+    chat pickers. ``pricing_cache_only``: with ``pricing``, use only values already resident
     in process caches (normal picker opens, while a background worker warms cold endpoints).
     ``non_blocking_catalogs``: provider catalogs come from the disk cache only — a degraded provider
-    cannot stall the response (GUI picker opens). ``fast_custom_probe`` overrides the
+    cannot stall the response (picker opens). ``fast_custom_probe`` overrides the
     custom-endpoint discovery budget ``for_picker`` otherwise implies (1.5s vs 5s) — ``None`` keeps
     the coupling, ``False`` retains the full 5s budget (#103843)."""
     from hermes_cli.model_switch import list_authenticated_providers
@@ -779,7 +779,7 @@ def _anthropic_oauth_credentials_present() -> bool:
 
 def _filter_explicit_provider_rows(rows: list[dict], ctx: ConfigContext) -> list[dict]:
     """Keep only rows backed by explicit user configuration — ``list_authenticated_providers`` also
-    discovers ambient credentials (e.g. another CLI's login token) Desktop chat pickers must not show."""
+    discovers ambient credentials (e.g. another CLI's login token) chat pickers must not show."""
     from hermes_cli.auth import is_provider_explicitly_configured
 
     current_slug = str(ctx.current_provider or "").strip().lower()

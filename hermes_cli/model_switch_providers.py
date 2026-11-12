@@ -1412,7 +1412,7 @@ def list_picker_providers(
 
 
 def _attach_window_model_notes(providers: list[dict]) -> None:
-    """Nous on a usage-window plan, for the messaging pickers (same words as the CLI/TUI/desktop pickers):
+    """Nous on a usage-window plan, for the messaging pickers (same words as the CLI/TUI pickers):
     ``model_labels`` {id: "Large" | "Free"} (plan shape, any-age snapshot; other levels carry no tag), and
     from a fresh snapshot only (a stale percent would mislabel it) ``plan_line`` (the limit line: "Weekly
     limit reached · resets in 21h · paid models now use your credits (pay as you go)").

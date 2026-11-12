@@ -38,9 +38,9 @@ DEFAULT_CONFIG = {
     },
     # Server-process fd soft limit (clamped to the hard limit) + glibc arena cap; 0/false/null = off.
     "runtime": {"nofile_soft_limit": 4096, "malloc_arena_max": 4},
-    # Global active chat session cap across CLI, TUI/dashboard, and messaging. None/0 = unbounded.
+    # Global active chat session cap across CLI, TUI, and messaging. None/0 = unbounded.
     "max_concurrent_sessions": None,
-    # Soft LRU cap on in-memory TUI/desktop/dashboard sessions. Above it the gateway evicts the
+    # Soft LRU cap on in-memory TUI sessions. Above it the gateway evicts the
     # least-recently-active DETACHED sessions (no live client); reopening re-resumes from disk.
     # 0/null disables.
     "max_live_sessions": 16,
@@ -50,7 +50,7 @@ DEFAULT_CONFIG = {
         # terminal's session (tmux/kitty/wezterm pane, tty). false = resume globally most-recent.
         "terminal_continue": True,
     },
-    # Where the TUI/desktop gateway stages session file attachments (uploads, pasted
+    # Where the TUI gateway stages session file attachments (uploads, pasted
     # text). "hermes-home" (default) keeps <profile home>/attachments — the dir
     # container backends bind-mount, so @file: refs resolve in the sandbox (#76577).
     # "workspace" opts into <session workspace>/.hermes/attachments: staging lands
@@ -184,7 +184,7 @@ DEFAULT_CONFIG = {
         # wrapping Hermes (sandbox runner, managed platform) can describe proxy/credential/ mount
         # layout without editing SOUL.md. Env HERMES_ENVIRONMENT_HINT overrides it.
         "environment_hint": "",
-        # Coding posture: on interactive coding surfaces (CLI, TUI, desktop, ACP) in a code
+        # Coding posture: on interactive coding surfaces (CLI, TUI, ACP) in a code
         # workspace, add a coding brief + live git/workspace snapshot to the system prompt
         # (agent/coding_context.py). "auto" = prompt-only when interactive AND cwd is a code
         # workspace (toolsets untouched, messaging platforms unaffected); "focus" = auto + collapse
@@ -209,7 +209,7 @@ DEFAULT_CONFIG = {
         "verify_on_stop": False,
         # Inactivity warning (seconds), once per run before gateway_timeout; no interrupt. 0 = off.
         "gateway_timeout_warning": 900,
-        # Max seconds any surface (CLI, TUI/Desktop, messaging gateway) blocks an agent awaiting a
+        # Max seconds any surface (CLI, TUI, messaging gateway) blocks an agent awaiting a
         # clarify-tool reply; then it unblocks with "[user did not respond within Xm]". 0 or less =
         # unlimited. Resolved by tools/clarify_gateway.py::resolve_clarify_timeout (a legacy
         # top-level ``clarify.timeout`` still wins when explicitly set).
@@ -294,10 +294,6 @@ DEFAULT_CONFIG = {
         # after 72h) — NOT tmpfs /tmp, which is RAM-capped and fills under load. Must be an existing
         # absolute POSIX path; user-set paths are never auto-pruned.
         "temp_dir": "",
-        # CSS font-family for the desktop app's xterm.js terminal (e.g. "'CaskaydiaCoveNerdFont',
-        # monospace"). Empty = built-in default ("'JetBrains Mono', 'Cascadia Code', 'SF Mono',
-        # Menlo, Consolas, monospace"). Lets users use a Nerd Font without patching the app.
-        "font_family": "",
         "timeout": 180,
         # Seconds between SIGTERM and escalated SIGKILL for host process trees (browser daemons). 0
         # = SIGTERM only.
@@ -441,7 +437,7 @@ DEFAULT_CONFIG = {
         # with the running browser. Turning off deletes ~/.hermes/browser-profile/ so credentials
         # don't outlive consent. Chromium-family only; a profile that can't be copied (Firefox default,
         # Windows browser holding its cookies) gives a fresh, signed-out browser plus a note saying why.
-        # Also gates the browser_exec `local` arg (real-profile session under a cloud backend). Desktop Settings -> Browser.
+        # Also gates the browser_exec `local` arg (real-profile session under a cloud backend).
         "use_real_profile": False,
         # Windows only: a running Chrome/Edge/Brave locks its cookie DB (the last snapshot is reused;
         # with none yet, a fresh browser runs). When on, the agent ASKS first; on approval it runs
@@ -463,7 +459,7 @@ DEFAULT_CONFIG = {
         # `hermes config set browser.camofox.<key>` is accepted and user values are never stripped.
         "camofox": {},
     },
-    # Stale git worktree lifecycle (`hermes -w`, `/worktree new`, subagent isolation, Desktop). The
+    # Stale git worktree lifecycle (`hermes -w`, `/worktree new`, subagent isolation). The
     # sweep runs at `hermes -w` startup and every 6h from the cron ticker over every repo Hermes made
     # a worktree in. Trees idle past their tier (hermes-*/subagent-* 24h, named 72h) that are clean
     # and merged are removed; dirty or unpushed ones are archived to refs/hermes/archive/<tree>
@@ -545,7 +541,7 @@ DEFAULT_CONFIG = {
         "warnings_enabled": True,
         "hard_stop_enabled": False,
         # Unattended gateway/cron platforms hard-stop by default (nobody can /stop a model that
-        # ignores warnings); interactive cli/tui/desktop/acp stay warning-only.
+        # ignores warnings); interactive cli/tui/acp stay warning-only.
         "non_interactive_hard_stop_enabled": True,
         "warn_after": {"exact_failure": 2, "same_tool_failure": 3, "idempotent_no_progress": 2},
         "hard_stop_after": {
@@ -682,7 +678,7 @@ DEFAULT_CONFIG = {
         "prepare_ahead": False,
     },
     # Anthropic prompt caching (Claude via OpenRouter or native API). cache_ttl: "5m" | "1h" | "auto"
-    # (auto = 1h for human-paced sessions — cli/tui/desktop/messaging — and 5m for subagent, cron,
+    # (auto = 1h for human-paced sessions — cli/tui/messaging — and 5m for subagent, cron,
     # oneshot, webhook, kanban, api, tool, batch); other non-falsy values are ignored; falsy (false, null, "off",
     # "disabled", "no", "none") disables caching.
     "prompt_caching": {"cache_ttl": "5m"},
@@ -828,8 +824,6 @@ DEFAULT_CONFIG = {
         # `hermes --tui` auto-resumes the most recent human-facing session (like `hermes -c`).
         # HERMES_TUI_RESUME=<id> always wins.
         "tui_auto_resume_recent": False,
-        # Desktop reopens the last chat/page on cold start (also in Settings → Appearance).
-        "resume_last_session": True,
         # One-time TUI hint ("subagents working · /agents to watch live") on first delegation.
         "tui_agents_nudge": True,
         "bell_on_complete": False,
@@ -849,7 +843,7 @@ DEFAULT_CONFIG = {
         # (final raw only) | "error" (raw only on non-zero exit) | "off".
         "background_process_notifications": "concise",
         "streaming": False,
-        "timestamps": False,      # message timestamps (CLI labels, TUI rows, desktop transcript)
+        "timestamps": False,      # message timestamps (CLI labels, TUI rows)
         "timestamp_format": "%H:%M",  # strftime format, e.g. "%b-%d %H:%M"
         "final_response_markdown": "strip",  # render | strip | raw
         # Preserve recent classic-CLI output across Ctrl+L, /redraw and resize clears; disable if an
@@ -898,8 +892,8 @@ DEFAULT_CONFIG = {
             "first_lines": 2,
             "last_lines": 2,
         },
-        # Gateway: natural mid-turn assistant status messages. Desktop: keep mid-turn narration
-        # between tool calls instead of collapsing to the final message.
+        # Natural mid-turn assistant status messages: keep mid-turn narration between tool calls
+        # instead of collapsing to the final message.
         "interim_assistant_messages": True,
         # Engine warning/failure notifications stay visible unless an operator opts in.
         # Does not suppress task results, manual commands, or existing logs.
@@ -912,7 +906,7 @@ DEFAULT_CONFIG = {
         # still honored at runtime and folded into platforms by migration.
         "tool_preview_length": 0,  # max chars for tool call previews (0 = no limit)
         # Human-phrased status labels for built-in tools ("Reading <file>") in CLI spinner and
-        # gateway/desktop tool-progress; custom/plugin/MCP tools use the raw preview.
+        # gateway tool-progress; custom/plugin/MCP tools use the raw preview.
         "friendly_tool_labels": True,
         # CLI-only post-turn line: "⋯ 12.4s · edited 2 files +18 -3 · read 4 files · ran 3
         # commands". Never in quiet/non-interactive or gateway surfaces (own footer).
@@ -967,14 +961,14 @@ DEFAULT_CONFIG = {
         },
         "copy_shortcut": "auto",  # "auto" (platform default) | ctrl_c | ctrl_shift_c | disabled
         # Petdex animated mascot (github.com/crafter-station/petdex): cosmetic sprite across
-        # CLI/TUI/desktop, managed with `hermes pets`. No effect on prompt caching.
+        # CLI/TUI, managed with `hermes pets`. No effect on prompt caching.
         "pet": {
             "enabled": False,
             "slug": "",   # active pet slug in get_hermes_home()/pets/; empty → first installed
             # auto (detect kitty/iTerm2/sixel, else unicode half-blocks) | kitty | iterm | sixel |
             # unicode | off
             "render_mode": "auto",
-            # Size scalar relative to native 192×208 frames, shared by desktop canvas and CLI/TUI
+            # Size scalar relative to native 192×208 frames, shared by the CLI/TUI pet frame
             # column width. Half-block fallback clamps to a legibility floor.
             "scale": 0.33,
             "unicode_cols": 0,  # Hard override for terminal column width; 0 = derive from scale.
@@ -1009,7 +1003,7 @@ DEFAULT_CONFIG = {
         # completion. Default = agent.turn_liveness.timeout_s. 0 = interrupt at grace.
         # See #100325, #98028.
         "ws_orphan_activity_stale_s": 600.0,
-        # On gateway boot, close tui/desktop/subagent rows orphaned by a dead gateway (start AND
+        # On gateway boot, close tui/subagent rows orphaned by a dead gateway (start AND
         # newest message older than HERMES_TUI_SESSION_TTL_S, default 6h) with
         # end_reason='startup_orphan_reap'; otherwise they stay phantom "active" forever.
         # Messaging-gateway and live sessions are never touched; swept rows stay resumable.
@@ -1196,7 +1190,7 @@ DEFAULT_CONFIG = {
     },
 
     "voice": {
-        # How the Desktop voice conversation is wired:
+        # How the voice conversation is wired:
         #   chained  — STT → Hermes turn → TTS (the stt.* / tts.* providers below)
         #   gpt-live — one full-duplex voice model (OpenAI GPT-Live) owns the mic and speaker and
         #              DELEGATES every real request to Hermes (any model / provider you have
@@ -1213,7 +1207,7 @@ DEFAULT_CONFIG = {
         "submit_mode": "direct",  # TUI: direct submits immediately; draft = editable transcript
         "max_recording_seconds": 120,
         "auto_tts": False,
-        # Desktop remote clients call STT/TTS providers DIRECTLY (config + key fetched over
+        # Remote clients call STT/TTS providers DIRECTLY (config + key fetched over
         # authenticated REST at session start) instead of relaying via the gateway.
         "client_direct": True,
         "beep_enabled": True,  # record start/stop beeps in CLI voice mode
@@ -1247,7 +1241,7 @@ DEFAULT_CONFIG = {
         "enabled": False,
         "surface": "auto",  # eligible surface: "auto" (first claimant) | "cli" | "tui" | "gui"
         "input_device": None,  # PortAudio input device index/name; null = process default
-        "capture": "auto",  # auto | local | client (desktop streams mic via wake.feed)
+        "capture": "auto",  # auto | local | client (a client streams mic via wake.feed)
         # auto: first platform-supported engine (openwakeword, sherpa, porcupine).
         # Explicit choices stay pinned. Porcupine needs PORCUPINE_ACCESS_KEY.
         "provider": "auto",
@@ -1707,7 +1701,7 @@ DEFAULT_CONFIG = {
         # explicit: `hermes plugins update <name>`, or auto_apply below (catalog and tracked git
         # plugins, scan-gated by that same pipeline).
         "auto_update_check_hours": 24,
-        # Opt-in unattended apply (`hermes plugins auto-update on`, Desktop's Plugins tab): catalog +
+        # Opt-in unattended apply (`hermes plugins auto-update on`): catalog +
         # tracked git plugins, same scan/consent pipeline as the manual update (never a widened pin).
         "auto_apply": False,
         # Where third-party Python plugins run. in_process: imported into Hermes (default).
@@ -1937,7 +1931,7 @@ DEFAULT_CONFIG = {
         "done_sub_retention_days": 30,
     },
     # Bot Mode cross-connection relay (tools/bot_relay.py): envelopes queued by message_agent for
-    # agents on other connections wait in an on-disk outbox until the Desktop drains them.
+    # agents on other connections wait in an on-disk outbox until the target profile drains them.
     "bot_mode": {
         # Drain-time TTL (seconds): older envelopes are NOT delivered on drain; the sender gets an
         # error reply (reason 'queued_expired') so a DM can't land hours late as a zombie. 0 = no
@@ -2268,7 +2262,7 @@ DEFAULT_CONFIG = {
         "auto_archive": False,
         # Idle days before auto-archive hides a session (only when auto_archive is true).
         "auto_archive_days": 3,
-        # List delegate_task subagent runs in session lists (desktop sidebar, dashboard, session.list),
+        # List delegate_task subagent runs in session lists (session.list),
         # nested under their parent. Off by default: they are machinery, not conversations.
         "show_subagents": False,
         # VACUUM after a prune that deleted rows (SQLite never reclaims disk on DELETE, #54189). It blocks
@@ -2300,6 +2294,22 @@ DEFAULT_CONFIG = {
         # Seconds before a local session with no viewer is ended (resumable) once its turn settles; 0 = never; after a
         # restart also >= 6h idle. Unset: dashboard.ws_orphan_reap_grace_s: 0 / startup_orphan_sweep: false opt out.
         "orphan_end_grace_s": 300.0,
+        # Auto-continue a turn killed by a crash: resuming re-submits the interrupted prompt if
+        # fresh; a stale one just shows the recovered partial transcript.
+        "auto_continue": {
+            "enabled": True,
+            # How recent the interruption must be to auto-continue (minutes).
+            "freshness_minutes": 15,
+            "max_attempts": 2,  # Crash-loop breaker: max automatic re-runs of one interrupted turn.
+        },
+    },
+    # Git repo discovery for the projects sidebar: which roots the host walks for `.git` dirs.
+    # Empty roots are a safe no-op; users must explicitly configure roots for filesystem scanning.
+    # Session-derived projects remain available.
+    "projects": {
+        "repo_scan_enabled": True,
+        "repo_scan_roots": [],
+        "repo_scan_exclude_paths": [],
     },
     # First-touch onboarding hints (agent/onboarding.py), each latched under `seen` once shown.
     "onboarding": {
@@ -2344,7 +2354,7 @@ DEFAULT_CONFIG = {
         # Full backup zips to retain (older pruned after each success; floored to 1 so the newest is
         # always kept). The quick snapshot always keeps exactly 1.
         "backup_keep": 5,
-        # Uncommitted source-tree changes during NON-interactive updates (desktop, gateway — no TTY;
+        # Uncommitted source-tree changes during NON-interactive updates (gateway — no TTY;
         # interactive updates always stash and ask). stash = stash, pull, restore on top (conflicts
         # stay in a git stash). discard = stash and drop after the pull (stash-and-drop, not reset
         # --hard + clean -fd, so ignored paths like node_modules/venv are never touched).
@@ -2388,7 +2398,7 @@ DEFAULT_CONFIG = {
         # Directories (~ expanded; everything under an entry counts) whose projects a language
         # server may load code from: the project's own .venv/venv interpreter, node_modules
         # TypeScript SDK, svelte.config.js, build files (cargo, Gradle, mix, ...). The worktree of
-        # the launch dir or the session's workspace (hermes -w, a Desktop project, terminal.cwd) is
+        # the launch dir or the session's workspace (hermes -w, a named project, terminal.cwd) is
         # always trusted; in any other checkout (a clone the agent made) only servers that run no
         # project code start, pinned to Hermes-side tools, and the npx tsc / rustfmt lint fallbacks
         # are skipped.
@@ -2428,7 +2438,7 @@ DEFAULT_CONFIG = {
     # External secret sources — pull credentials from secret managers at startup instead of storing
     # them in ~/.hermes/.env.
     # Browser credential vault: which login sources browser_vault may draw from. The local
-    # encrypted vault (`hermes vault add`, Desktop → Settings → Credential Vault) is always on.
+    # encrypted vault (`hermes vault add`) is always on.
     # External password managers are unlocked per session with a masked master-password prompt;
     # headless sessions (cron, webhook, API) never prompt and see them as locked.
     "vault": {
@@ -2476,7 +2486,7 @@ DEFAULT_CONFIG = {
             # Account shorthand / sign-in address for `op read --account`; empty = default.
             "account": "",
             # Env var holding a service-account token for headless auth (exported to op as
-            # OP_SERVICE_ACCOUNT_TOKEN). Unset = interactive/desktop op session.
+            # OP_SERVICE_ACCOUNT_TOKEN). Unset = interactive op session.
             "service_account_token_env": "OP_SERVICE_ACCOUNT_TOKEN",
             # Absolute path to op, used verbatim (avoids trusting PATH). Empty = PATH.
             "binary_path": "",
@@ -2597,65 +2607,6 @@ DEFAULT_CONFIG = {
         # (`*.foo.com`) supported.
         "extra_allowed_hosts": [],
     },
-    "desktop": {  # Hermes Desktop (Electron) launch options; only affect `hermes desktop`.
-        # CSS font-family for the app's chat and UI text (e.g. "OpenDyslexic"). Layered in front
-        # of the active theme's own sans stack so missing glyphs still fall through. Empty = the
-        # theme's face. The terminal pane is terminal.font_family.
-        "font_family": "",
-        # Git repo discovery for the Projects sidebar. Empty roots are a safe
-        # no-op; users must explicitly configure roots for filesystem scanning.
-        # Session-derived projects remain available.
-        "repo_scan_enabled": True,
-        "repo_scan_roots": [],
-        "repo_scan_exclude_paths": [],
-        # Extra Electron flags per launch, e.g. ["--ozone-platform=x11"] or GPU workarounds. List of
-        # strings; a single string is shell-split.
-        "electron_flags": [],
-        # V8 old-space ceiling (MB) for the renderer, applied as --js-flags=--max-old-space-size=N by
-        # the app itself (also for Start-menu / .desktop launches). 0 = Chromium's default limit.
-        # A ceiling turns a machine-wide freeze into a bounded renderer reload (#77311).
-        "renderer_max_old_space_mb": 0,
-        # Linux Ozone backend, bridged to ELECTRON_OZONE_PLATFORM_HINT (explicit env wins). auto =
-        # Chromium default; x11 = XWayland, for compositors that ignore always-on-top for Wayland
-        # clients (e.g. COSMIC) — also puts the HUD on the solid-window input path; wayland = force
-        # a native Wayland surface.
-        # See #84011.
-        "ozone_platform_hint": "auto",
-        # Bridged to HERMES_DESKTOP_DISABLE_GPU: auto = disable GPU only on remote displays
-        # (SSH/VNC/RDP); true = always software rendering (no-GPU VMs where the GPU path hangs);
-        # false = always keep GPU on.
-        "disable_gpu": "auto",
-        # Linux keychain for token storage (Chromium --password-store). auto = detect KWallet (KDE
-        # env) or any org.freedesktop.secrets provider via D-Bus;
-        # gnome-libsecret|kwallet|kwallet5|kwallet6|basic force one (basic = unencrypted). Bridged
-        # to HERMES_DESKTOP_PASSWORD_STORE; ignored off-Linux.
-        "password_store": "auto",
-        # Expose the renderer's accessibility tree to the OS (macOS/Windows) so dictation/IME tools
-        # that insert text via the accessibility APIs can reach the composer (#118271, #92607).
-        # False bridges to HERMES_DESKTOP_RENDERER_ACCESSIBILITY=0 and skips the tree (perf opt-out).
-        "renderer_accessibility": True,
-        # Linux: False preserves an existing custom XDG launcher entry; missing entries
-        # are still created. True keeps the generated entry current on each launch.
-        "manage_launcher_entry": True,
-        # macOS only: code-signing identity (login-keychain cert; self-signed works) to re-sign
-        # locally rebuilt apps so the Designated Requirement — and thus TCC grants — survives
-        # updates. Empty = default ad-hoc identifier-pinned signing.
-        "macos_signing_identity": "",
-        # Windows only: explicit ssh client for SSH connections, the -G config probe and SSH
-        # terminals, e.g. "C:\\Program Files\\Git\\usr\\bin\\ssh.exe" when the in-box OpenSSH is
-        # missing or broken. Empty = System32 OpenSSH, then Git for Windows' ssh.exe, then PATH.
-        # Read by the app before its first window; restart to apply. Ignored off-Windows.
-        "ssh_path": "",
-        # Auto-continue a turn killed by a crash: resuming re-submits the interrupted prompt if
-        # fresh; a stale one just shows the recovered partial transcript.
-        "auto_continue": {
-            "enabled": True,
-            # How recent the interruption must be to auto-continue (minutes).
-            "freshness_minutes": 15,
-            "max_attempts": 2,  # Crash-loop breaker: max automatic re-runs of one interrupted turn.
-        },
-    },
-
     "nous": {
         # Upper bound (seconds) on the Nous auth keepalive tick, which derives from the
         # server-issued credential lifetime (raising above it has no effect). 0 disables the

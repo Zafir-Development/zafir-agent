@@ -1,7 +1,7 @@
 """config.get / config.set must honor params.profile (issue #95760).
 
-A single dashboard backend in desktop app-global remote mode serves every
-profile. projects.* RPCs already bind params.profile via @_profile_scoped;
+A single gateway backend in app-global remote mode serves every profile.
+projects.* RPCs already bind params.profile via @_profile_scoped;
 config.get / config.set did not, so reads and persistent writes used the
 launch profile's config.yaml for every focused profile.
 """
@@ -28,7 +28,7 @@ def _write_cfg(home: Path, cwd: str, roots: list[str]) -> None:
         yaml.safe_dump(
             {
                 "terminal": {"cwd": cwd},
-                "desktop": {"repo_scan_roots": list(roots)},
+                "projects": {"repo_scan_roots": list(roots)},
                 "display": {"busy_input_mode": "queue"},
             }
         ),
@@ -79,12 +79,12 @@ def test_config_get_full_reads_params_profile_yaml_not_launch(tmp_path, monkeypa
 
     launch_resp = _get({"key": "full"})
     assert launch_resp["result"]["config"]["terminal"]["cwd"] == LAUNCH_CWD
-    assert launch_resp["result"]["config"]["desktop"]["repo_scan_roots"] == LAUNCH_ROOTS
+    assert launch_resp["result"]["config"]["projects"]["repo_scan_roots"] == LAUNCH_ROOTS
 
     _reset_cfg_cache()
     worker_resp = _get({"key": "full", "profile": "code"})
     assert worker_resp["result"]["config"]["terminal"]["cwd"] == WORKER_CWD
-    assert worker_resp["result"]["config"]["desktop"]["repo_scan_roots"] == WORKER_ROOTS
+    assert worker_resp["result"]["config"]["projects"]["repo_scan_roots"] == WORKER_ROOTS
 
     # Launch file must be untouched by the focused-profile read.
     assert _read_yaml(launch)["terminal"]["cwd"] == LAUNCH_CWD

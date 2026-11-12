@@ -313,8 +313,8 @@ NOTICE_KEY = "sessions.auto_prune"
 
 
 def notice_payload(advice: Advice) -> dict:
-    """``notification.show`` payload for TUI/Desktop: a short status-line ``text`` plus the full
-    question in ``detail`` (Desktop's expandable toast body; Ink prints it into the transcript)."""
+    """``notification.show`` payload for the TUI: a short status-line ``text`` plus the full
+    question in ``detail`` (the TUI prints it into the transcript)."""
     d = advice.disk
     return {"text": f"⚠ Low disk ({_gb(d.free_bytes)} free) · /autoprune on|off|later",
             "detail": "\n".join(advice_lines(advice)), "level": "warn", "kind": "sticky", "ttl_ms": None,
@@ -368,7 +368,7 @@ _SAVE_FAILED = "Could not save sessions.auto_prune; check disk space and config.
 
 
 def run_command(args: str, home: Optional[Path] = None) -> str:
-    """``/autoprune [on|off|later|status]`` — the one handler behind the CLI, TUI, Desktop and
+    """``/autoprune [on|off|later|status]`` — the one handler behind the CLI, TUI and
     messaging surfaces."""
     arg = (args or "").strip().lower()
     sessions = _effective_sessions(home) or {}

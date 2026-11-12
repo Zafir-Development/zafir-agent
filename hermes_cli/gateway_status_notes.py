@@ -6,7 +6,7 @@ from hermes_cli.config import get_hermes_home
 
 def _incompatible_owner_verdict() -> str | None:
     """``incompatible: <reason>`` when the gateway answering for this home is one this Hermes's clients
-    (TUI, Desktop, chat) refuse, e.g. an older Hermes's daemon left running across an upgrade."""
+    (TUI, chat) refuse, e.g. an older Hermes's daemon left running across an upgrade."""
     from hermes_cli.gateway_runtime import discover_gateway_endpoint
     try:
         observed = discover_gateway_endpoint(get_hermes_home(), timeout=1.5)
@@ -25,7 +25,7 @@ def report_incompatible_owner(pids) -> bool:
         return False
     running = f"Gateway is running (PID: {', '.join(map(str, pids))})" if pids else "The running gateway"
     print(f"✗ {running} but cannot serve this Hermes ({stale})")
-    print("  It was started by another Hermes version; TUI, Desktop and chat cannot attach to it.")
+    print("  It was started by another Hermes version; TUI and chat cannot attach to it.")
     print("  Replace it with this version:")
     print("    hermes gateway restart")
     return True

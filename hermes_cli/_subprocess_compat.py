@@ -14,7 +14,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Mapping, NoReturn, Sequence
+from typing import Mapping, Sequence
 
 __all__ = [
     "FILTER_DISCOVERY_FAILED",
@@ -55,13 +55,6 @@ _DIFF_RENDERING_SUBCOMMANDS = frozenset({"diff", "show", "log", "blame"})
 # Options that consume the FOLLOWING token, so that value is never mistaken for the subcommand
 # (``-C diff`` is a path; ``-c diff=x`` is a config pair).
 _GIT_VALUE_OPTS = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path"}
-
-
-def run(cmd, **kwargs) -> NoReturn:
-    # Shim to suppress old updater work until relaunch. Do not start its installer.
-    from hermes_cli._old_updater import stop_for_relaunch
-
-    stop_for_relaunch()
 
 
 def harden_git_argv(args: Sequence[str]) -> list[str]:
@@ -165,13 +158,13 @@ _CREATE_NEW_PROCESS_GROUP = 0x00000200
 # console-subsystem descendant (git, gh, cmd, node, powershell, …) allocates its own — a visible
 # flash per spawn, including inside third-party libraries no per-site sweep can reach. A
 # CREATE_NO_WINDOW child instead OWNS a hidden console all descendants inherit (A/B verified on
-# Windows 11 by the desktop backend fix, commit aa2ae36c3f: with per-site hide flags neutered,
+# Windows 11 by the windowless-backend fix, commit aa2ae36c3f: with per-site hide flags neutered,
 # naive git/gh/cmd spawns don't flash under a hidden-console parent and do under a console-less one).
 # 1. Combining them means DETACHED_PROCESS governs and the no-window bit is dead. 2. See #54220, #56747.
 _CREATE_NO_WINDOW = 0x08000000
 # Escape any Win32 job object the parent belongs to. Without this a detached child inherits the
-# parent's job, and when that parent (Electron, Tauri, Windows Terminal, the Desktop bootstrap
-# installer) dies the OS tears down the whole job — taking the "detached" child with it. Critical
+# parent's job, and when that parent (Electron, Tauri, Windows Terminal, a bootstrap installer)
+# dies the OS tears down the whole job — taking the "detached" child with it. Critical
 # for the post-update gateway watcher spawned from inside Electron's job.
 _CREATE_BREAKAWAY_FROM_JOB = 0x01000000
 
@@ -192,11 +185,11 @@ def windows_detach_flags() -> int:
     inherit, so they don't allocate visible flashing ones. This deliberately replaces the old
     ``DETACHED_PROCESS`` approach: MSDN specifies CREATE_NO_WINDOW is *ignored* when combined with
     DETACHED_PROCESS, and a truly console-less daemon re-creates the per-descendant console-flash bug
-    (#54220/#56747) at every spawn — see the note on ``_DETACHED_PROCESS`` above. Electron (Desktop app) and
-    Tauri (bootstrap installer) wrap their children in job objects; without breakaway, those children die
+    (#54220/#56747) at every spawn — see the note on ``_DETACHED_PROCESS`` above. Electron and Tauri
+    wrap their children in job objects; without breakaway, those children die
     when the parent process exits even though they have their own console. This was the missing flag that
-    made the post-update gateway respawn watcher silently die alongside the Tauri updater after the Electron
-    Desktop's update flow finished.
+    made the post-update gateway respawn watcher silently die alongside the Tauri updater after the
+    Electron app's update flow finished.
     """
     if not IS_WINDOWS:
         return 0
@@ -237,7 +230,7 @@ def no_prompt_git_kwargs() -> dict:
     env["GIT_TERMINAL_PROMPT"] = "0"
     env["GCM_INTERACTIVE"] = "Never"
     # Every network git spawn (fetch/pull/shallow heal) runs under a console-less
-    # desktop backend on Windows; hide the per-spawn console (#117781).
+    # gateway backend on Windows; hide the per-spawn console (#117781).
     return {"stdin": subprocess.DEVNULL, "env": env, "creationflags": windows_hide_flags()}
 
 def suppress_platform_ver_console() -> None:

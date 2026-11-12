@@ -865,7 +865,7 @@ def launchd_restart():
         if pid is not None:
             # Graceful in-band restart via SIGUSR1 (mirrors systemd); the budget covers both the idle wait
             # and the drain. A bare SIGTERM would lose the resume_pending handoff. Announce BEFORE waiting:
-            # surfaces with no other feedback (desktop updater) read silence as "update stuck".
+            # surfaces with no other feedback (an update's live output) read silence as "update stuck".
             wait_budget = _gw()._get_restart_exit_wait_budget()
             print(f"→ Stopping gateway (PID {pid}) — draining in-flight runs (up to {wait_budget:.0f}s)...")
             from hermes_cli.update_cmd_drain_report import drain_progress_reporter

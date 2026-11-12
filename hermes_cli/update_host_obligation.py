@@ -55,9 +55,8 @@ def host_obligation_path() -> Path:
     clears the same record, while a second install of the same OS user (another checkout, a ZIP
     install) owes its own, so its completed restart never erases this install's debt (review S3).
     """
-    # Not ``gateway.host_rendezvous.host_state_dir``: ``gateway.status`` imports ``utils`` -> ruamel,
-    # absent from the historical interpreter an old updater's takeover arms this record in; the
-    # recovery module's stdlib copy of the rule is drift-tested against the gateway resolver.
+    # Not ``gateway.host_rendezvous.host_state_dir``: the recovery module's stdlib copy of the
+    # host-state rule is drift-tested against the gateway resolver.
     from hermes_cli.update_restart_recovery import _host_state_dir
 
     install = os.path.normcase(str(Path(__file__).resolve().parents[1]))
@@ -136,8 +135,7 @@ def arm_host_obligation(
 ) -> bool:
     """Arm the host record, else ``marker`` (the arming profile's per-home breadcrumb). Never raises.
 
-    The one fallback for every arm (``hermes update``'s commit point, a historical updater's
-    takeover). An unwritable host state dir (``HERMES_GATEWAY_LOCK_DIR`` on a read-only mount, a
+    The fallback for every arm (``hermes update``'s commit point). An unwritable host state dir (``HERMES_GATEWAY_LOCK_DIR`` on a read-only mount, a
     container UID that does not own ``$HOME``) must never disarm the obligation (#117275), but the
     marker is visible to the arming profile only: it settles the debt only on an install PROVEN to
     have no other profile, and an unreadable profile roster proves nothing (review S2 residual).
@@ -166,7 +164,7 @@ def arm_host_obligation(
         return True
     logger.error("Could not arm the update-restart obligation in %s%s; an interrupted update will not warn.",
                  host_obligation_path(), hidden)
-    # ASCII: a historical updater's takeover may print through a legacy console code page.
+    # ASCII: a legacy console code page may garble the warning.
     print("  Warning: could not record the pending gateway-restart obligation where every profile sees it "
           "(state dir not writable) - restart gateways with `hermes gateway restart` if this update is "
           "interrupted.", file=sys.stderr)
@@ -268,24 +266,10 @@ def _record_mutex(path: Path):
 
 
 def _marker_mutex():
-    """``update_lock.marker_mutex``. A historical updater imported ``update_lock`` before its pull and
-    then lazily imports this pulled module, so its in-memory copy predates the mutex: load the pulled
-    ``update_lock`` (stdlib-only) beside it, which locks the same sidecar every current process does."""
-    import importlib.util
-    import sys
-
+    """``update_lock.marker_mutex``: one sidecar lock shared by every process of this install."""
     from hermes_cli import update_lock
 
-    if hasattr(update_lock, "marker_mutex"):
-        return update_lock.marker_mutex
-    name = "hermes_cli._update_lock_pulled"
-    pulled = sys.modules.get(name)
-    if pulled is None:
-        spec = importlib.util.spec_from_file_location(name, update_lock.__file__)
-        pulled = importlib.util.module_from_spec(spec)
-        sys.modules[name] = pulled  # before exec: dataclasses resolve the module by name
-        spec.loader.exec_module(pulled)
-    return pulled.marker_mutex
+    return update_lock.marker_mutex
 
 
 def _owners(record: dict) -> list[str]:

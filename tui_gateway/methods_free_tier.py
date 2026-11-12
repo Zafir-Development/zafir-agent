@@ -1,6 +1,6 @@
 """Nous free-tier JSON-RPC handlers. ``free_tier.status`` answers from the
 auth store with zero network and zero side effects; ``free_tier.provision`` retries a welcome-trial claim
-that failed (desktop-only entry); ``free_tier.ack_notice``
+that failed (TUI entry); ``free_tier.ack_notice``
 persists the one-time notice flag on the free-tier identity itself, so it dies with that identity.
 ``free_tier.challenge_result`` records a presentation hint for the pending attempt; the
 backend still exchanges with the portal to determine whether the credential is cleared.
@@ -21,8 +21,8 @@ _profile_scoped = _registry.profile_scoped
 @_profile_scoped
 def _(rid, params: dict) -> dict:
     """``{has_guest, enabled, available, notice_pending, model, label}`` for the focused profile.
-    ``available``: a guest that carries inference here (the welcome trial, on the desktop's local
-    backend). ``enabled``: available, or the trial can still be claimed on this machine. Whether
+    ``available``: a guest that carries inference here (the welcome trial, on a local backend).
+    ``enabled``: available, or the trial can still be claimed on this machine. Whether
     inference actually runs on it is a ROUTE question answered by ``setup.runtime_check.free_tier``.
     ``notice_pending`` is true until ``free_tier.ack_notice`` ran for this identity.
     ``nudge_due_in``: seconds until the sign-in offer after a finished task is due (install-wide,
@@ -74,7 +74,7 @@ def _(rid, params: dict) -> dict:
         from hermes_cli.auth_constants import AuthError
         if _trial_claimable():
             try:
-                welcome_trial.claim_desktop_free_tier(force=True)
+                welcome_trial.claim_welcome_trial(force=True)
             except AuthError as exc:   # memoised by the mint primitive before it re-raised
                 logger.info("welcome trial claim failed: %s", exc)
             if not params.get("profile"):

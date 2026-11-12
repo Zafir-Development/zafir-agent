@@ -270,7 +270,7 @@ def _is_terminal_first_party_env(name: str) -> bool:
 # gateway). PYTHONHOME is included because a gateway-inherited value redirects the standard-library search
 # of ANY child interpreter — including unrelated system/venv Pythons — to the Hermes venv's stdlib, which
 # crashes with version-mismatch errors before a child script even imports a package (#75018). Hermes itself
-# treats PYTHONHOME as contamination in its own child processes (managed_uv.py, sqlite_runtime.py), so
+# treats PYTHONHOME as contamination in its own child processes (the update path, sqlite_runtime.py), so
 # stripping it from subprocess envs is consistent. Users who need PYTHONHOME for a specific child can set it
 # explicitly in the command. PYTHONPATH is NOT included here — it's handled by
 # _strip_hermes_owned_pythonpath() which removes only Hermes-owned entries, preserving user-set paths.

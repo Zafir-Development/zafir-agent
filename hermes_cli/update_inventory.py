@@ -24,7 +24,7 @@ class RuntimeRecord:
     kind: str                     # gateway | dashboard | serve
     profile: str
     pid: Optional[int] = None
-    supervisor: str = "manual"    # systemd | launchd | desktop | windows-service | service | manual | manual-serve
+    supervisor: str = "manual"    # systemd | launchd | windows-service | service | manual | manual-serve
     code_sha: Optional[str] = None       # stamped running-code sha
     # See #91283.
     code_version: Optional[str] = None
@@ -83,25 +83,18 @@ def _detect_supervisor_for_pid(pid: int, service_pids: set, windows_service_pids
 # update's restart phase, and the receipt records per-runtime outcomes against them. Display
 # strings are derived by describe_restart_mechanism — never the other way around.
 _RESTART_MECHANISMS = {
-    "systemd": "systemd", "launchd": "launchd", "desktop": "desktop",
+    "systemd": "systemd", "launchd": "launchd",
     "windows-service": "windows-service", "manual-serve": "respawn-argv",
-    "desktop-ssh": "desktop-ssh",
 }
 
 _MECHANISM_DESCRIPTIONS = {
     "systemd": "systemctl restart (drain-first SIGUSR1 when supported)",
     "launchd": "launchctl kickstart -k (drain-first, per-label domain)",
-    "desktop": "Desktop app respawns its serve backend",
     "windows-service": "sc.exe stop before venv mutation, sc.exe start after update",
     "respawn-argv": "stop before code swap, relaunch with recorded launch args",
-    "desktop-ssh": "the remote Desktop that spawned it over SSH respawns it when it reconnects",
 }
 
 _SERVE_KINDS = ("serve", "dashboard")
-# Serve backends a Desktop client owns and recycles: this app's own pool child (``desktop``) or one
-# another machine's Desktop spawned here over SSH (``desktop-ssh``). The updater never restarts
-# either; stopping one out from under its client only makes the client respawn it.
-CLIENT_OWNED_SERVE_SUPERVISORS = frozenset({"desktop", "desktop-ssh"})
 
 
 def _restart_mechanism(supervisor: str, profile: str) -> str:
@@ -204,7 +197,7 @@ def _collect_gateway_runtimes(plan: UpdatePlan, profile_homes: list, seen: set[i
                 seen.add(pid)
                 from gateway.control_socket import launch_supervisor
 
-                # The protocol's "none" (manual or desktop) is no answer: classify it outside-in.
+                # The protocol's "none" (manual) is no answer: classify it outside-in.
                 declared = launch_supervisor(record)
                 sup = declared if declared else supervisor(pid)
             else:
@@ -234,9 +227,9 @@ def _loaded_backend_launchd_jobs() -> list:
     to ``[]`` — classification falls back to the spawner probe and never aborts the inventory.
     See #116503."""
     with suppress(Exception):
-        from hermes_cli import main_dashboard as _dash
+        from hermes_cli.service_restart_helpers import _loaded_launchd_backend_jobs
 
-        return _dash._loaded_launchd_backend_jobs()
+        return _loaded_launchd_backend_jobs()
     return []
 
 
@@ -248,14 +241,14 @@ def _launchd_owner_for_ledger_entry(entry: dict, pid: int, jobs: list) -> tuple[
     fights the job's own KeepAlive respawn. The loaded-job match (live PID, an ancestor, or the
     normalized ``ProgramArguments``) is the authoritative classification. See #116503."""
     with suppress(Exception):
-        from hermes_cli import main_dashboard as _dash
-        from hermes_cli.dashboard_procs import _process_ancestors
+        from hermes_cli.process_inventory import _process_ancestors
+        from hermes_cli.service_restart_helpers import _launchd_job_owning_backend
 
         try:
             cmdline = shlex.split(str(entry.get("argv") or "")) or None
         except ValueError:
             cmdline = None
-        return _dash._launchd_job_owning_backend(pid, cmdline, jobs, ancestors=_process_ancestors(pid))
+        return _launchd_job_owning_backend(pid, cmdline, jobs, ancestors=_process_ancestors(pid))
     return None
 
 
@@ -268,34 +261,21 @@ def _systemd_owner_for_ledger_pid(pid: int) -> tuple[str, str | None] | None:
     cgroup membership (a hand-started dashboard inside some unrelated unit's cgroup is still manual);
     ``None`` off Linux, when unreadable, or when no unit owns it."""
     with suppress(Exception):
-        from hermes_cli import main_dashboard as _dash
+        from hermes_cli.service_restart_helpers import _systemd_owner_for_pid
 
-        return _dash._systemd_owner_for_pid(pid)
+        return _systemd_owner_for_pid(pid)
     return None
-
-
-def _is_desktop_ssh_ledger_entry(entry: dict) -> bool:
-    """Is this row the backend a (possibly remote) Desktop spawned over SSH? The canonical argv
-    predicate also classifies rows written before the ledger carried ``isolated``, which is exactly
-    the pre-update serve the first update after this change inventories."""
-    from hermes_cli._startup_fast import is_desktop_ssh_backend_argv
-
-    try:
-        return is_desktop_ssh_backend_argv(shlex.split(str(entry.get("argv") or "")))
-    except ValueError:
-        return False
 
 
 def _collect_ledger_runtimes(plan: UpdatePlan, seen: set[int]) -> None:
     """Serve/dashboard backends from the spawn ledger — runtimes the gateway collectors can never see
-    (a manual `hermes serve --host <ip>` for a remote Desktop, a long-lived `hermes dashboard`).
-    ledger_entries() live-verifies (pid, create_time) so PID reuse never fabricates a row. Desktop-
-    supervised backends (spawner still alive) restart via the Desktop's own respawn, not ours.
-    A backend owned by a loaded launchd job is classified ``launchd`` (kickstart restart, never a
-    detached argv respawn) — the spawner probe cannot see that (#116503); one that is a systemd
-    unit's MainPID is ``systemd`` for the same reason (#141021)."""
+    (a manual `hermes serve --host <ip>`, a long-lived `hermes dashboard`) left by a release that
+    still shipped those commands. ledger_entries() live-verifies (pid, create_time) so PID reuse
+    never fabricates a row. A backend owned by a loaded launchd job is classified ``launchd``
+    (kickstart restart, never a detached argv respawn) — the spawner probe cannot see that
+    (#116503); one that is a systemd unit's MainPID is ``systemd`` for the same reason (#141021)."""
     with _probe("Serve/dashboard ledger inventory"):
-        from hermes_cli.process_identity import ledger_entries, spawner_is_dead
+        from hermes_cli.process_identity import ledger_entries
 
         launchd_jobs = _loaded_backend_launchd_jobs()
         for entry in ledger_entries():
@@ -312,12 +292,6 @@ def _collect_ledger_runtimes(plan: UpdatePlan, seen: set[int]) -> None:
             job = _launchd_owner_for_ledger_entry(entry, pid, launchd_jobs) if launchd_jobs else None
             if job:
                 supervisor, detail["launchd_domain"], detail["launchd_label"] = "launchd", job[0], job[1]
-            elif _is_desktop_ssh_ledger_entry(entry):
-                # No local spawner, so the probe below would read manual-serve and file a reminder
-                # nobody here can discharge; its token file and owner nonce belong to the client.
-                supervisor = "desktop-ssh"
-            elif spawner_is_dead(entry) is False:
-                supervisor = "desktop"
             elif unit := _systemd_owner_for_ledger_pid(pid):
                 supervisor, detail["systemd_unit"], detail["systemd_scope"] = "systemd", unit[0], unit[1]
             else:
@@ -423,11 +397,10 @@ def match_runtime_outcomes(
     Serve/dashboard runtimes are reconciled in their OWN vocabulary and never borrow the gateway's
     outcome: with ``stale_serve_pids`` a pre-update serve whose incarnation is gone counts as
     ``restarted``, one still alive is ``unaccounted``; without the probe an untouched serve stays
-    ``unaccounted``. A Desktop-supervised serve is ``deferred`` only when the survivor probe RAN
-    and still lists its pid: the restart phase is forbidden to restart it out from under the app (it
-    hosts the live Desktop chats), so it is handed back to its supervisor and surfaced. Without a
-    probe result it remains ``unaccounted``, rather than claiming the app owns an unknown
-    incarnation. The probe itself fails closed (unreadable ledger -> every planned serve is listed
+    ``unaccounted``. A manually launched serve is ``deferred`` only when the survivor probe RAN
+    and still lists its pid: the restart phase is forbidden to restart it out from under its owner,
+    so it is handed back to the reminder flow and surfaced. Without a probe result it remains
+    ``unaccounted``, rather than claiming the owner is known. The probe itself fails closed (unreadable ledger -> every planned serve is listed
     as surviving), so ``deferred`` means "not shown to be gone", not "observed alive". See #111494.
 
     ``live_gateway_pids`` (profile -> gateway PIDs alive for that profile AFTER the restart phase:
@@ -502,14 +475,8 @@ def match_runtime_outcomes(
                 if any(_serve_unit_matches_profile(r.profile, u) for u in failed_set):
                     return "failed"
                 if stale_serves is not None and r.pid not in stale_serves:
-                    # Incarnation-verified: the pre-update process is gone (replaced by its unit or client).
+                    # Incarnation-verified: the pre-update process is gone (replaced by its unit).
                     return "restarted"
-                if r.supervisor in CLIENT_OWNED_SERVE_SUPERVISORS:
-                    if stale_serves is not None:
-                        # Still alive on pre-update code, but a Desktop client owns it and the restart phase
-                        # must not kill it (_DESKTOP_SERVE_SKIP_REASON); only that client can pick up the new code.
-                        return "deferred"
-                    return "unaccounted"
                 if stale_serves is not None:
                     return "unaccounted"
                 return "restarted" if any(_serve_unit_matches_profile(r.profile, s) for s in restarted_set) else "unaccounted"
@@ -570,17 +537,7 @@ def report_unaccounted_runtimes(outcomes: list[dict[str, Any]]) -> bool:
         print()
         print("  ⚠ Manual serve restarts deferred to their owner (reminders retained until the old processes exit):")
         for o in manual:
-            print(f"    • {o['kind']} [{o['profile']}] pid {o['pid']}: relaunch `hermes serve` / `hermes dashboard`, or reconnect Desktop for an SSH backend")
-    deferred = [o for o in outcomes if o.get("outcome") == "deferred" and o.get("mechanism") != "respawn-argv"]
-    if deferred:
-        # Surfaced but not escalated: the updater has no authority over these, so holding
-        # ``fleet_restart_pending`` for them would never be discharged. See #111494.
-        print()
-        print("  ℹ Left to the Desktop app (still on pre-update code until it is relaunched):")
-        for o in deferred:
-            action = ("owned by a Desktop connected over SSH; it picks up the update when that Desktop reconnects"
-                      if o.get("mechanism") == "desktop-ssh" else "relaunch the Desktop app to pick up the update")
-            print(f"    • {o['kind']} [{o['profile']}] pid {o['pid']} — {action}")
+            print(f"    • {o['kind']} [{o['profile']}] pid {o['pid']}: relaunch `hermes serve` / `hermes dashboard`")
     external = [o for o in outcomes if o.get("outcome") == "external"]
     if external:
         # Surfaced but not escalated: another install's updater owns these restarts. See #120240.
@@ -602,7 +559,7 @@ def report_unaccounted_runtimes(outcomes: list[dict[str, Any]]) -> bool:
     if any(o.get("kind") in _SERVE_KINDS for o in missed):
         # A serve/dashboard is not reachable by any `gateway restart` command: name the process, not the wrong verb.
         # See #100479.
-        from hermes_cli.main_dashboard import _systemd_restart_commands
+        from hermes_cli.service_restart_helpers import _systemd_restart_commands
 
         for o in missed:
             if o.get("kind") in _SERVE_KINDS and o.get("systemd_unit"):

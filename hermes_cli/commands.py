@@ -62,15 +62,13 @@ class CommandDef:
     # Key in ``hermes_cli.slash_exec.EXECUTORS`` (a string, not a callable: keeps this module
     # import-light for the gateway).
     execute: str | None = None
-    argument_mode: str | None = None  # desktop composer: options|text|mixed; None inferred
-    # Desktop availability: None = offered; "hidden" = runs but out of the popover; else a reason.
-    desktop: str | None = None
-    # Desktop subcommand scope.  When set, the desktop surface only offers
-    # (completion) and forwards (exec) these subcommands — the first argument
-    # token must be one of them.  Use when a command family mixes desktop-
-    # relevant review actions with CLI-hub mutations (e.g. /skills install),
-    # so offering the command doesn't widen the whole family.
-    desktop_subcommands: tuple[str, ...] | None = None
+    argument_mode: str | None = None  # composer mode: options|text|mixed; None inferred
+    # Review-subcommand scope.  When set, a surface that only forwards staged-write
+    # review verbs offers (completion) and forwards (exec) just these subcommands —
+    # the first argument token must be one of them.  Use when a command family mixes
+    # review actions with CLI-hub mutations (e.g. /skills install), so exposing the
+    # command does not widen the whole family.
+    review_subcommands: tuple[str, ...] | None = None
 
     def describe(self) -> str:
         """Localized description (``slash.<name>.description``); ``description`` is the English source."""
@@ -90,9 +88,9 @@ COMMAND_REGISTRY: list[CommandDef] = [
     CommandDef("topic", "Enable or inspect Telegram DM topic sessions", "Session",
                gateway_only=True, args_hint="[off|help|session-id]"),
     CommandDef("clear", "Clear screen and start a new session", "Session",
-               cli_only=True, desktop="terminal"),
+               cli_only=True),
     CommandDef("redraw", "Force a full UI repaint (recovers from terminal drift)", "Session",
-               cli_only=True, desktop="terminal"),
+               cli_only=True),
     CommandDef("history", "Show conversation history", "Session",
                cli_only=True),
     CommandDef("save", "Export the current conversation (bare /save shows usage)", "Session",
@@ -103,7 +101,7 @@ COMMAND_REGISTRY: list[CommandDef] = [
     CommandDef("undo", "Back up N user turns and re-prompt (default 1)", "Session",
                args_hint="[N]"),
     CommandDef("rewind", "Rewind to an earlier prompt to edit & resend it, or fork from there (Esc Esc)",
-               "Session", cli_only=True, args_hint="[N | fork N]", desktop="terminal"),
+               "Session", cli_only=True, args_hint="[N | fork N]"),
     CommandDef("title", "Set a title for the current session", "Session", args_hint="[name]"),
     CommandDef("handoff", "Hand off this session to a messaging platform (Telegram, Discord, etc.)", "Session",
                args_hint="<platform>", cli_only=True, argument_mode="options"),
@@ -111,14 +109,13 @@ COMMAND_REGISTRY: list[CommandDef] = [
                "Session", aliases=("fork",), args_hint="[--here] [name]"),
     CommandDef("worktree", "Show, list, create, or prune isolated git worktrees", "Session",
                cli_only=True, args_hint="[new [name]|list|prune [--dry-run]]",
-               subcommands=("new", "list", "prune"), desktop="terminal"),
+               subcommands=("new", "list", "prune")),
     CommandDef("compress", "Compress conversation context (add 'here [N]' to keep recent N turns; --preview shows what would happen)", "Session",
                aliases=("compact",), args_hint="[here [N] | focus topic | --preview|--dry-run]"),
     CommandDef("rollback", "List or restore filesystem checkpoints (restores keep your hand-edits; --all overrides)", "Session",
                args_hint="[number] [--all]"),
     CommandDef("snapshot", "Create or restore state snapshots of Hermes config/state", "Session",
-               cli_only=True, aliases=("snap",), args_hint="[create|restore <id>|prune]",
-               desktop="terminal"),
+               cli_only=True, aliases=("snap",), args_hint="[create|restore <id>|prune]"),
     CommandDef("export", "Export a profile (config, skills, theme) to a shareable archive", "Configuration",
                cli_only=True, args_hint="[profile] [-o output.tar.gz]"),
     CommandDef("import", "Import a shared profile archive as a new profile", "Configuration",
@@ -180,7 +177,7 @@ COMMAND_REGISTRY: list[CommandDef] = [
     CommandDef("profile", "Show active profile name and home directory", "Info",
                busy_policy="dispatch", execute="profile"),
     CommandDef("sethome", "Set this chat as the home channel", "Session",
-               gateway_only=True, aliases=("set-home",), desktop="terminal"),
+               gateway_only=True, aliases=("set-home",)),
     CommandDef("resume", "Resume a previously-named session", "Session",
                args_hint="[name]", argument_mode="mixed"),
     CommandDef("sessions", "Browse and resume previous sessions", "Session"),
@@ -190,14 +187,14 @@ COMMAND_REGISTRY: list[CommandDef] = [
                cli_only=True),
     CommandDef("model", "Switch model (session-scoped; --global to persist)", "Configuration",
                args_hint="[model|reset] [--provider name] [--reasoning level] [--global|--session] [--refresh]",
-               busy_policy="reject", busy_handler="model", desktop="hidden"),
+               busy_policy="reject", busy_handler="model"),
     CommandDef("codex-runtime", "Toggle codex app-server runtime for OpenAI/Codex models",
                "Configuration", aliases=("codex_runtime",), args_hint="[auto|codex_app_server]",
                busy_policy="reject", busy_handler="codex-runtime"),
     CommandDef("personality", "Set a predefined personality", "Configuration",
                args_hint="[name]", argument_mode="options"),
     CommandDef("statusbar", "Toggle the context/model status bar", "Configuration",
-               cli_only=True, aliases=("sb",), desktop="terminal"),
+               cli_only=True, aliases=("sb",)),
     CommandDef("battery", "Toggle a color-coded battery indicator in the status bar",
                "Configuration", cli_only=True, args_hint="[on|off|status]",
                subcommands=("on", "off", "status")),
@@ -209,13 +206,13 @@ COMMAND_REGISTRY: list[CommandDef] = [
                subcommands=("staged", "all", "session")),
     CommandDef("verbose", "Cycle tool progress display: off -> new -> all -> verbose",
                "Configuration", cli_only=True, gateway_config_gate="display.tool_progress_command",
-               busy_policy="dispatch", desktop="terminal"),
+               busy_policy="dispatch"),
     CommandDef("focus", "Toggle focus view — show only your prompt and the final response",
                "Configuration", cli_only=True, args_hint="[on|off|status]",
                subcommands=("on", "off", "status")),
     CommandDef("footer", "Toggle gateway runtime-metadata footer on final replies",
                "Configuration", args_hint="[on|off|status]", subcommands=("on", "off", "status"),
-               busy_policy="dispatch", desktop="terminal"),
+               busy_policy="dispatch"),
     CommandDef("yolo", "Toggle YOLO mode (skip all dangerous command approvals)",
                "Configuration", busy_policy="dispatch"),
     CommandDef("approvals", "Show or set the persistent dangerous-command approval mode",
@@ -226,22 +223,20 @@ COMMAND_REGISTRY: list[CommandDef] = [
                subcommands=("none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra", "show", "hide", "on", "off", "full", "clamp", "--global")),
     CommandDef("fast", "Fast mode — OpenAI Priority Processing / Anthropic Fast Mode (normal/fast/auto/cold/ultrafast)", "Configuration",
                args_hint="[normal|fast|auto|cold|ultrafast|status] [--global]",
-               subcommands=("normal", "fast", "auto", "cold", "ultrafast", "ultra", "status", "on", "off", "--global"),
-               desktop="advanced"),
+               subcommands=("normal", "fast", "auto", "cold", "ultrafast", "ultra", "status", "on", "off", "--global")),
     CommandDef("skin", "Show or change the display skin/theme", "Configuration",
                cli_only=True, args_hint="[name]", argument_mode="options"),
     CommandDef("indicator", "Pick the TUI busy-indicator style", "Configuration",
                cli_only=True, args_hint=f"[{'|'.join(INDICATOR_STYLES)}]",
-               subcommands=INDICATOR_STYLES, desktop="terminal"),
+               subcommands=INDICATOR_STYLES),
     CommandDef("voice", "Toggle voice mode", "Configuration",
-               args_hint="[on|off|tts|status]", subcommands=("on", "off", "tts", "status"),
-               desktop="composer-voice"),
+               args_hint="[on|off|tts|status]", subcommands=("on", "off", "tts", "status")),
     CommandDef("wake", "Toggle the 'Hey Hermes' wake word listener", "Configuration",
                cli_only=True, args_hint="[on|off|status]", subcommands=("on", "off", "status")),
     CommandDef("busy", "Control how messages behave while Hermes is working", "Configuration",
                args_hint="[queue|steer|interrupt|status]",
                subcommands=("queue", "steer", "interrupt", "status"),
-               busy_policy="dispatch", desktop="terminal"),
+               busy_policy="dispatch"),
     CommandDef("autoprune", "Turn automatic pruning of old sessions on or off", "Configuration",
                args_hint="[on|off|later|status]", subcommands=("on", "off", "later", "status"),
                busy_policy="dispatch", execute="autoprune", argument_mode="options"),
@@ -250,18 +245,18 @@ COMMAND_REGISTRY: list[CommandDef] = [
     CommandDef("tools", "Manage tools: /tools [list|disable|enable] [name...]", "Tools & Skills",
                args_hint="[list|disable|enable] [name...]", cli_only=True, argument_mode="options"),
     CommandDef("toolsets", "List available toolsets", "Tools & Skills",
-               cli_only=True, desktop="terminal"),
+               cli_only=True),
     CommandDef("skills", "Search, install, inspect, or manage skills",
                "Tools & Skills", cli_only=True,
                gateway_config_gate="skills.write_approval",
                subcommands=("search", "browse", "inspect", "install", "audit",
                             "pending", "approve", "reject", "diff", "approval"),
-               # Desktop exposes only the write-approval review slice — the
+               # Expose only the write-approval review slice — the
                # same surface the gateway handler offers.  The hub mutations
                # (search/browse/inspect/install/audit) run a full interactive
-               # CLI hub that must not be reachable from a desktop exec
+               # CLI hub must not be reachable through the review surface
                # (#98330 review).
-               desktop_subcommands=("pending", "approve", "reject", "diff",
+               review_subcommands=("pending", "approve", "reject", "diff",
                                     "approval")),
     CommandDef("memory", "Review pending memory writes / toggle the approval gate",
                "Tools & Skills", args_hint="[pending|approve|reject|approval] [id|on|off]",
@@ -278,8 +273,7 @@ COMMAND_REGISTRY: list[CommandDef] = [
                "Tools & Skills", args_hint="[notes]"),
     CommandDef("cron", "Manage scheduled tasks", "Tools & Skills",
                cli_only=True, args_hint="[subcommand]",
-               subcommands=("list", "add", "create", "edit", "pause", "resume", "run", "remove"),
-               desktop="terminal"),
+               subcommands=("list", "add", "create", "edit", "pause", "resume", "run", "remove")),
     CommandDef("suggestions", "Review suggested automations (accept/dismiss)",
                "Tools & Skills", aliases=("suggest",), args_hint="[accept|dismiss N | catalog]",
                subcommands=("accept", "dismiss", "catalog", "clear")),
@@ -287,8 +281,7 @@ COMMAND_REGISTRY: list[CommandDef] = [
                "Tools & Skills", aliases=("bp",), args_hint="[name] [slot=value ...]"),
     CommandDef("curator", "Background skill maintenance (status, run, pin, archive, list-archived)",
                "Tools & Skills", args_hint="[subcommand]",
-               subcommands=("status", "run", "pause", "resume", "pin", "unpin", "restore", "list-archived"),
-               desktop="advanced"),
+               subcommands=("status", "run", "pause", "resume", "pin", "unpin", "restore", "list-archived")),
     CommandDef("kanban", "Multi-profile collaboration board (tasks, links, comments)",
                "Tools & Skills", args_hint="[subcommand]",
                subcommands=("init", "boards", "create", "list", "ls", "show", "assign",
@@ -297,18 +290,18 @@ COMMAND_REGISTRY: list[CommandDef] = [
                             "archive", "tail", "dispatch", "stats", "notify-subscribe",
                             "notify-list", "notify-unsubscribe", "log", "runs",
                             "heartbeat", "assignees", "context", "specify", "gc"),
-               busy_policy="dispatch", desktop="advanced"),
+               busy_policy="dispatch"),
     CommandDef("reload", "Reload .env variables into the running session", "Tools & Skills",
-               cli_only=True, desktop="terminal"),
+               cli_only=True),
     CommandDef("reload-mcp", "Reload MCP servers from config", "Tools & Skills",
-               aliases=("reload_mcp",), desktop="advanced"),
+               aliases=("reload_mcp",)),
     CommandDef("reload-skills", "Re-scan ~/.hermes/skills/ for newly installed or removed skills",
-               "Tools & Skills", aliases=("reload_skills",), desktop="advanced"),
+               "Tools & Skills", aliases=("reload_skills",)),
     CommandDef("browser", "Connect browser tools to your live Chromium-family browser via CDP", "Tools & Skills",
                cli_only=True, args_hint="[connect|disconnect|status]",
                subcommands=("connect", "disconnect", "status")),
     CommandDef("plugins", "List installed plugins and their status",
-               "Tools & Skills", cli_only=True, desktop="terminal", args_hint="[update|auto-update [on|off]]",
+               "Tools & Skills", cli_only=True, args_hint="[update|auto-update [on|off]]",
                subcommands=("update", "auto-update")),
 
     # Info
@@ -320,28 +313,28 @@ COMMAND_REGISTRY: list[CommandDef] = [
     CommandDef("palette", "Open the fuzzy command palette (also Ctrl+P)", "Info",
                cli_only=True, busy_policy="dispatch"),
     CommandDef("restart", "Gracefully restart the gateway after draining active runs", "Session",
-               gateway_only=True, busy_policy="dispatch", desktop="terminal"),
+               gateway_only=True, busy_policy="dispatch"),
     CommandDef("usage", "Show token usage and rate limits; `reset` redeems a banked Codex limit reset", "Info",
                args_hint="[reset [--force]]"),
     CommandDef("subscription", "View your Nous plan and change it in the browser", "Info",
                cli_only=True, aliases=("upgrade",)),
     CommandDef("login", "Sign in with a Nous account (keeps your connectors)", "Info",
-               busy_policy="dispatch", desktop="settings"),
+               busy_policy="dispatch"),
     CommandDef("topup", "Show your Nous balance and manage billing on the portal", "Info"),
     CommandDef("insights", "Show usage insights and analytics", "Info",
-               args_hint="[days]", desktop="advanced"),
+               args_hint="[days]"),
     CommandDef("platforms", "Show gateway/messaging platform status", "Info",
-               cli_only=True, aliases=("gateway",), desktop="terminal"),
+               cli_only=True, aliases=("gateway",)),
     CommandDef("platform", "Pause, resume, or list a failing gateway platform", "Info",
                gateway_only=True, args_hint="<pause|resume|list> [name]"),
     CommandDef("copy", "Copy the last assistant response to clipboard", "Info",
-               cli_only=True, args_hint="[number]", desktop="terminal"),
+               cli_only=True, args_hint="[number]"),
     CommandDef("paste", "Attach clipboard image from your clipboard", "Info",
-               cli_only=True, desktop="terminal"),
+               cli_only=True),
     CommandDef("image", "Attach a local image file for your next prompt", "Info",
-               cli_only=True, args_hint="<path>", desktop="terminal"),
+               cli_only=True, args_hint="<path>"),
     CommandDef("update", "Update Hermes Agent to the latest version", "Info",
-               busy_policy="dispatch", desktop="terminal"),
+               busy_policy="dispatch"),
     CommandDef("version", "Show Hermes Agent version", "Info", aliases=("v",),
                busy_policy="dispatch", execute="version"),
     CommandDef("debug", "Upload debug report (system info + logs) and get shareable links", "Info",
@@ -349,7 +342,7 @@ COMMAND_REGISTRY: list[CommandDef] = [
 
     # Exit
     CommandDef("quit", "Exit the CLI (use --delete to also remove session history)", "Exit",
-               cli_only=True, aliases=("exit",), args_hint="[--delete]", desktop="terminal")]
+               cli_only=True, aliases=("exit",), args_hint="[--delete]")]
 
 
 # Distinguishes ``mixed`` (subcommands plus free-text) from ``options``; no subcommands => ``text``.
@@ -367,28 +360,9 @@ def infer_argument_mode(cmd: CommandDef) -> str | None:
     return "text" if hint else None
 
 
-def command_desktop_meta(cmd: CommandDef) -> dict[str, object]:
+def command_catalog_meta(cmd: CommandDef) -> dict[str, object]:
     """Wire shape for ``commands.catalog`` — reads the CommandDef, nothing else."""
-    meta: dict[str, object] = {"argument_mode": infer_argument_mode(cmd), "desktop": cmd.desktop}
-    if cmd.desktop_subcommands is not None:
-        meta["desktop_subcommands"] = list(cmd.desktop_subcommands)
-    return meta
-
-
-def desktop_surface_registry() -> dict[str, str | None]:
-    """``/name`` (and every alias) -> ``desktop`` disposition for EVERY registry command.
-
-    Offered built-ins (no ``desktop=`` value) map to ``None``: the desktop needs their names
-    too, or offline it cannot tell ``/context`` from a skill command and files it under
-    Skills / routes it down the extension path until the live catalog warms up.
-
-    The registry stays the ONLY place a command's desktop disposition is authored.
-    """
-    return {
-        f"/{key}": cmd.desktop or None
-        for cmd in COMMAND_REGISTRY
-        for key in (cmd.name, *cmd.aliases)
-    }
+    return {"argument_mode": infer_argument_mode(cmd)}
 
 
 # Every name and alias -> its CommandDef.

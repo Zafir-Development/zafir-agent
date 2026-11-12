@@ -531,7 +531,7 @@ def resolve_persist_behavior(
     default; an unreadable config -> False.
 
     1. ``--once`` explicitly opts out → ``False`` (next turn only). 2. ``--session`` explicitly opts out →
-    ``False`` (this session only). 3. 4. Applies to every surface (CLI, gateway, Desktop picker) so no
+    ``False`` (this session only). 3. 4. Applies to every surface (CLI, gateway, TUI picker) so no
     client has to hardcode ``--global``. 5. ``model.persist_switch_by_default: true`` also covers provider picks (a pick between two providers sharing one ``base_url`` is tenant selection on the same backend, not exploration;
     session-scoping it silently serves the next chat with the other twin's key). 6. Without that opt-in, provider switches stay exploratory — the user is trying a different backend for this conversation, not reconfiguring the default. The key defaults to ``False`` (a plain ``/model <name>`` affects only the current session); users who want the old persist-by-default behavior can set it to ``true``; a one-off ``--global`` always persists, and ``--session`` / ``--once`` always opt out. See #86414.
     """

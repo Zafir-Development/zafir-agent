@@ -340,8 +340,8 @@ def discover_gateway_endpoint(profile_home: str | Path, *, timeout: float = 2.0)
 
 
 def _update_fenced(homes) -> bool:
-    """True while an update owns the install, judged the way main's launchers and the Desktop
-    judge ``.hermes-update-in-progress``: a live (or still being written) marker, or a dead or
+    """True while an update owns the install, judged the way main's launchers judge
+    ``.hermes-update-in-progress``: a live (or still being written) marker, or a dead or
     malformed one while the checkout lock is held (a killed update's tree still runs). A dead
     marker over a free lock is a killed update: it never blocks a launch.
 

@@ -1,4 +1,4 @@
-"""Filesystem adapter for Desktop workspaces executed over SSH."""
+"""Filesystem adapter for workspaces executed over SSH."""
 
 from __future__ import annotations
 

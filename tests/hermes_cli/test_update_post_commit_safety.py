@@ -115,7 +115,7 @@ _CHILD = textwrap.dedent('''
     receipt = copy.deepcopy(update_receipt._current.get().data)
     # The completion process never inherits the parent's open receipt context.
     update_receipt._current.reset(update_receipt._current.get().current_token)
-    request = {"schema": 1, "source": str(source), "home": str(home), "branch": "main", "desktop": False,
+    request = {"schema": 1, "source": str(source), "home": str(home), "branch": "main",
                "assume_yes": True, "gateway_mode": mode.startswith("ipc-"),
                "no_gateway_restart": mode == "config-ro",
                "pre_update_version": None, "snapshot_id": None, "sibling_snapshots": {}, "plan": None,
@@ -312,7 +312,7 @@ _ZIP_PARENT = textwrap.dedent('''
             raise RuntimeError("Could not restart Windows gateway service(s): HermesGatewayProbe")
     hermes_main._resume_windows_gateways_after_update = scm
     update_cmd._prepare_git_command = lambda **_: (True, None, False)
-    def via_zip(args, *, had_desktop_app_before_update, target_sha=None, completion_request=None, **kwargs):
+    def via_zip(args, *, target_sha=None, completion_request=None, **kwargs):
         completion_request["expected_sha"] = target_sha
         completion_request["apply_mode"] = "zip"
         update_cmd._complete_source_update(completion_request)

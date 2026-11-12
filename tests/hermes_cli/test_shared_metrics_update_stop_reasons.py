@@ -67,6 +67,18 @@ def test_a_pre_apply_exit_reads_its_own_class_in_process_and_parked(rows, stop, 
         assert "alice" not in kept and kept in {"-", "Windows gateway recovery failed"}
 
 
+def test_a_parked_receipt_from_the_removed_desktop_hand_off_still_reads_its_kind(rows):
+    """``initiator=desktop`` is historical vocabulary: a receipt parked by the removed Desktop
+    source-checkout hand-off is still counted (``kind`` stays a shipped metric value)."""
+    receipt = _run(None)
+    receipt["initiator"] = "desktop"
+
+    run, _ = update_metrics.update_receipt_fields(receipt)
+
+    assert run["kind"] == "desktop"
+    assert contract.counter_dimensions_are_valid(contract.UPDATE_RUN_METRIC, run)
+
+
 @pytest.mark.parametrize(("stderr", "argv", "code", "expected"), [
     ("fatal: Unable to create '/x/.git/index.lock': File exists.", ["git", "merge"], 128, "git_index_locked"),
     ("git fetch timed out after 300s (a stalled remote)", ["git", "fetch"], 124, "git_timeout"),
@@ -121,61 +133,6 @@ def test_exits_before_the_receipt_opens_count_once_and_leave_the_holders_receipt
         ("lock_held", "refused", "none"), ("git_in_progress", "failed", "other")]
     assert all(contract.counter_dimensions_are_valid(contract.UPDATE_RUN_METRIC, r) for r in rows.runs())
     assert (rows.home / "logs/update_receipts/latest.json").read_bytes() == holders
-
-
-def _marker(home, *lines: str) -> None:
-    (home / ".hermes-update-in-progress").parent.mkdir(parents=True, exist_ok=True)
-    (home / ".hermes-update-in-progress").write_text("".join(f"{line}\n" for line in lines))
-
-
-def test_an_exit_before_the_receipt_reads_desktop_only_under_its_own_hand_off(rows, monkeypatch):
-    """Invariant: a pre-receipt exit carries the initiator its receipt would: ``desktop`` when the
-    marker names this process as the hand-off's delegate or names its hand-off partner, ``cli`` when
-    the marker belongs to some other update (a terminal `hermes update` refused by a Desktop run)."""
-    import os
-
-    from hermes_cli.update_cmd_common import _record_stop
-
-    monkeypatch.delenv("HERMES_UPDATE_HANDOFF_PID", raising=False)
-    pid, other = os.getpid(), 999_999
-    _marker(rows.home, other, 1, "ct:1.000", f"delegate:{pid} ct:2.000")  # the posix/Windows hand-off
-    _record_stop("lock_held", without_receipt="refused")
-    monkeypatch.setenv("HERMES_UPDATE_HANDOFF_PID", str(other))  # the Tauri updater's claim
-    _marker(rows.home, other, 1, "ct:1.000")
-    _record_stop("git_in_progress", without_receipt="failed")
-    monkeypatch.delenv("HERMES_UPDATE_HANDOFF_PID")  # a CLI run refused by someone else's update
-    _record_stop("lock_held", without_receipt="refused")
-    (rows.home / ".hermes-update-in-progress").unlink()
-    _record_stop("managed_install", without_receipt="refused")
-
-    assert [(r["failure_class"], r["kind"]) for r in rows.runs()] == [
-        ("lock_held", "desktop"), ("git_in_progress", "desktop"), ("lock_held", "cli"), ("managed_install", "cli")]
-
-
-def test_a_lock_refusal_of_the_hand_offs_own_update_child_is_a_failed_run(rows, monkeypatch):
-    """Invariant: when the lock refuses the claim whose delegate line names this very process, the
-    Desktop quit to run this update and reports the refusal as a failed update, so the row reads
-    ``failed`` (also for its child: Windows relaunches the updater under the named process); a refusal under someone else's claim (Tauri partner, a CLI run) stays ``refused``."""
-    import os
-
-    from hermes_cli.update_cmd_common import _record_stop
-
-    monkeypatch.delenv("HERMES_UPDATE_HANDOFF_PID", raising=False)
-    pid, other = os.getpid(), 999_999
-    _marker(rows.home, other, 1, "ct:1.000", f"delegate:{pid} ct:2.000")  # our own hand-off's claim
-    _record_stop("lock_held", without_receipt="refused")
-    _marker(rows.home, other, 1, "ct:1.000", f"delegate:{os.getppid()} ct:2.000")  # Windows: relaunched child
-    _record_stop("lock_held", without_receipt="refused")
-    monkeypatch.setenv("HERMES_UPDATE_HANDOFF_PID", str(other))
-    _marker(rows.home, other, 1, "ct:1.000")
-    _record_stop("lock_held", without_receipt="refused")
-    monkeypatch.delenv("HERMES_UPDATE_HANDOFF_PID")
-    _record_stop("lock_held", without_receipt="refused")
-
-    assert [(r["outcome"], r["kind"], r["failure_class"]) for r in rows.runs()] == [
-        ("failed", "desktop", "lock_held"), ("failed", "desktop", "lock_held"), ("refused", "desktop", "lock_held"),
-        ("refused", "cli", "lock_held")]
-    assert all(contract.counter_dimensions_are_valid(contract.UPDATE_RUN_METRIC, r) for r in rows.runs())
 
 
 @pytest.mark.skipif(sys.platform == "win32" or os.geteuid() == 0, reason="POSIX permissions; root ignores them")
@@ -266,9 +223,6 @@ def test_an_exception_before_the_apply_names_its_exit_through_the_command_bounda
                         lambda args: update_receipt.begin_update_receipt())
     monkeypatch.setattr(main, "_run_pre_update_backup", lambda args: None)
     monkeypatch.setattr(main, "_pause_windows_gateways_for_update", boom if site == "pause" else lambda: None)
-    monkeypatch.setattr(main, "_desktop_packaged_executable", lambda d: None)
-    monkeypatch.setattr(main, "_desktop_dist_exists", lambda d: False)
-    monkeypatch.setattr(main, "_installed_desktop_apps", list)
     monkeypatch.setattr(update_cmd, "_prepare_git_command", lambda **_: (False, ["git"], False))
     monkeypatch.setattr(update_cmd, "_source_completion_request", lambda *a: {"home": str(rows.home)})
     monkeypatch.setattr(main, "_resolve_update_branch", lambda args: "main")

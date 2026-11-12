@@ -1,9 +1,9 @@
 """Record of who carries inference, for ``setup.status`` and ``setup.ready``.
 
-It runs once per process on a daemon thread: at ``hermes serve`` boot, and on the gateway when the
-local Desktop first connects (``tui_gateway.methods_onboarding.begin_local_desktop_boot``). It never
-creates an identity: the desktop's welcome-trial claim (``hermes_cli.welcome_trial``) and the first
-hosted connector action are the only creators. For the desktop's local backend it first records a
+It runs once per process on a daemon thread: on the gateway, and when a local client first connects
+(``tui_gateway.methods_onboarding.begin_local_desktop_boot``). It never creates an identity: the
+welcome-trial claim (``hermes_cli.welcome_trial``) and the first hosted connector action are the only
+creators. On a local backend it first records a
 fresh install's onboarding decision (``onboarding_run.latch_first_install``) and settles a claim cut
 off before its marker write (``welcome_trial.settle_interrupted_claim``). Then it inventories
 credentials cheap-first, resolves which provider carries inference, records the answer in process
@@ -21,7 +21,7 @@ from typing import Any, Dict, Optional
 
 logger = logging.getLogger("hermes_cli.auth")
 
-# The desktop's first ``setup.status`` waits this long for the record before falling back to a live probe.
+# A client's first ``setup.status`` waits this long for the record before falling back to a live probe.
 SETUP_READY_WAIT_SECONDS = 8.0
 SETUP_READY_EVENT = "setup.ready"
 
@@ -219,7 +219,7 @@ def _settle_install() -> bool:
     try:
         from hermes_cli import anon_auth
         from hermes_cli.onboarding_run import latch_first_install
-        if anon_auth.on_local_desktop_backend():
+        if anon_auth.on_local_host_backend():
             latch_first_install()
     except Exception:
         settled = False

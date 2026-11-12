@@ -96,9 +96,9 @@ def transition(tmp_path):
     )
     (package / "source_build.py").write_text(
         "from hermes_cli.probe import event\n"
-        "def build_update_products(root, *, desktop, after_dependencies=None):\n"
+        "def build_update_products(root, *, after_dependencies=None):\n"
         "    after_dependencies()\n"
-        "    event('build', desktop=desktop)\n"
+        "    event('build')\n"
     )
     (package / "update_launch_files.py").write_text(
         "from hermes_cli.probe import event\n"
@@ -194,7 +194,7 @@ def transition(tmp_path):
     new = git("rev-parse", "HEAD")
     request = {
         "schema": 1, "source": str(root), "home": str(home), "branch": "main",
-        "desktop": True, "assume_yes": True, "gateway_mode": True,
+        "assume_yes": True, "gateway_mode": True,
         "pre_update_version": "old", "snapshot_id": "active-before",
         "sibling_snapshots": {"work": "work-before"},
         "plan": {"runtimes": [{"kind": "gateway", "profile": "work"}]},
@@ -303,8 +303,6 @@ def test_missing_child_result_is_an_owed_completion_and_releases_lock(transition
     assert receipt["exit_code"] == 0
     assert [row["step"] for row in receipt["followups"]] == ["completion"]
     assert "Update failed" not in out
-    # The Desktop hand-off scripts must not read this as a plain "Update complete." (review P4).
-    assert "Desktop app build owed: the update completion did not finish" in out
     # This process resumes what the lost child never did, and the gateway watcher hears success.
     assert request["windows_resume"]["resume_needed"] is False
     assert (Path(request["home"]) / ".update_exit_code").read_text(encoding="utf-8-sig").strip() == "0"
@@ -348,38 +346,6 @@ def test_lost_completion_with_parked_local_changes_stays_partial(transition, mon
 
 
 @pytest.mark.platforms("posix")
-@pytest.mark.parametrize("never_built", ["dependencies", "refused", "died"])
-@pytest.mark.parametrize("desktop", [True, False])
-def test_desktop_build_that_never_ran_is_named_for_the_handoff(transition, capsys, never_built, desktop):
-    """Review P4 (F6): the hand-off scripts read ``Desktop app build owed:`` to tell the user the app is
-    stale. The builder prints it only when the build fails; a run whose build never ran (dependency
-    sync failed, the tail refused by the update lock, the prepared child died) must print it too."""
-    scripts = Path(update_completion.__file__).parents[1] / "scripts/desktop-update"
-    for script in ("posix.sh", "windows.ps1"):  # the exact prefix the hand-off scripts match
-        assert "Desktop app build owed: " in (scripts / script).read_text(encoding="utf-8-sig")
-    assert update_completion.DESKTOP_BUILD_OWED == "Desktop app build owed:"
-    root, _git, _old, _new, request = transition
-    request["desktop"] = desktop
-    shutil.copy2(update_completion.__file__, root / "hermes_cli/update_completion.py")
-    if never_built == "dependencies":
-        (root / "pm/__init__.py").write_text("def sync_venv(**kw): raise RuntimeError('dependency refused')\n",
-                                            encoding="utf-8")
-    elif never_built == "refused":
-        (root / "hermes_cli/source_completion.py").write_text(
-            "def complete_source_checkout(*args, **kwargs):\n"
-            "    raise RuntimeError('an update is still running (pid 1); wait for it to exit')\n", encoding="utf-8")
-    else:
-        (root / "hermes_cli/source_completion.py").write_text(
-            "import os\n"
-            "def complete_source_checkout(*args, **kwargs): os.kill(os.getpid(), 9)  # posix-only test\n",
-            encoding="utf-8")
-    result = update_completion.run_completion(request)
-    out = capsys.readouterr().out
-    assert result["exit_code"] == 0, out
-    owed = [line.strip() for line in out.splitlines() if line.strip().startswith("Desktop app build owed: ")]
-    assert len(owed) == (1 if desktop else 0), out
-
-
 def test_unwritable_gateway_status_never_fails_a_settled_commit(tmp_path, monkeypatch):
     """Review P1: the bootstrap's gateway status write is best effort, like
     ``_write_gateway_update_exit_code``; the committed run still answers its result with exit 0."""

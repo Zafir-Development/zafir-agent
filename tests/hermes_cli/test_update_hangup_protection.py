@@ -13,7 +13,7 @@ import signal
 import sys
 
 
-from hermes_cli.main_dashboard import _UpdateOutputStream, _finalize_update_output, _install_hangup_protection
+from hermes_cli.update_output import _UpdateOutputStream, _finalize_update_output, _install_hangup_protection
 from hermes_cli.update_cmd import _log_only_write, _print_update_completion, _run_logged_subprocess
 
 

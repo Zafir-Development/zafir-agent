@@ -85,7 +85,7 @@ def flush_before_hard_exit(timeout_s: float = EXIT_FLUSH_TIMEOUT_S) -> bool:
     def _flush() -> None:
         if runtimes is not None:
             runtimes.shutdown_runtimes()
-        if stores is not None:  # every store that deferred a write, root/Desktop ones included
+        if stores is not None:  # every store that deferred a write, root-profile ones included
             stores.drain_deferring_stores(deadline - _DRAIN_MARGIN_S)  # done before the join gives up
 
     try:
@@ -131,7 +131,6 @@ def begin_process(kind: str) -> None:
     try:
         from hermes_constants import get_hermes_home
 
-        from .shared_metrics_desktop import ONBOARDING_LATCH_DIRNAME
         from .shared_metrics_setup import markers_dir as setup_markers_dir
         from .shared_metrics_update import _collection_on
 
@@ -141,8 +140,7 @@ def begin_process(kind: str) -> None:
         if not _collection_on():
             home = get_hermes_home()
             purge_pending_receipts(home)  # parked while on / left by the installer, never counted once off
-            latches = home / "telemetry" / "shared_metrics" / ONBOARDING_LATCH_DIRNAME  # an opt-out outside Desktop
-            for directory in (markers_dir(home), setup_markers_dir(home), latches):  # likewise pending exits/setups
+            for directory in (markers_dir(home), setup_markers_dir(home)):  # likewise pending exits/setups
                 shutil.rmtree(directory, ignore_errors=True)
             return
         from gateway.status import get_process_start_time

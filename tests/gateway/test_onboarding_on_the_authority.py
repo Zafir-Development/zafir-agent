@@ -218,7 +218,7 @@ async def test_start_from_a_secondary_profile_claims_in_the_default_home(tmp_pat
 
     def claim(*, assume_fresh):
         claims.append(Path(get_hermes_home()))
-    monkeypatch.setattr("hermes_cli.welcome_trial.claim_desktop_free_tier", claim)
+    monkeypatch.setattr("hermes_cli.welcome_trial.claim_welcome_trial", claim)
     runner = desktop.authority.runner
     runner.config = SimpleNamespace(multiplex_profiles=True)
     work_db = SessionDB(db_path=work / "state.db")
@@ -231,8 +231,8 @@ async def test_start_from_a_secondary_profile_claims_in_the_default_home(tmp_pat
         "user_id": "uid:1", "provider": "local", "profile_id": str(work), "instance_id": "owner",
         "profile_scope": "host"})
     try:
-        from hermes_cli.process_identity import serving_local_desktop
-        with serving_local_desktop(True):  # what ws._dispatch_request binds for the declared Desktop socket
+        from hermes_cli.process_identity import serving_local_host
+        with serving_local_host(True):  # what ws._dispatch_request binds for the declared Desktop socket
             started = await connection.dispatch({"jsonrpc": "2.0", "id": 1, "method": "onboarding.start", "params": {}})
         assert "result" in started, started
         assert claims == [home]

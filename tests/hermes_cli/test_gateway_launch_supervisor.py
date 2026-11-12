@@ -66,7 +66,7 @@ def test_restart_of_a_manual_gateway_stops_it_and_runs_a_new_one(monkeypatch):
     monkeypatch.setattr(gw, "_wait_for_gateway_exit", lambda **k: None)
     monkeypatch.setattr(gw, "_wait_for_api_server_port_free", lambda *a, **k: None)
     monkeypatch.setattr(gw, "run_gateway", lambda **k: calls.__setitem__("started", True))
-    monkeypatch.setattr("hermes_cli.main_dashboard._get_systemd_service_for_pid", lambda pid: None)
+    monkeypatch.setattr("hermes_cli.service_restart_helpers._get_systemd_service_for_pid", lambda pid: None)
 
     gw._cmd_restart(SimpleNamespace(system=False, all=False, force=False))
 

@@ -26,8 +26,8 @@ _EXIT_HOOKED = False
 
 
 def _stop_at_exit() -> None:
-    """The process that boots the server stops it on a clean exit, whatever surface it is (the
-    desktop backend also stops it in its shutdown handler; the second call is a no-op). Processes
+    """The process that boots the server stops it on a clean exit, whatever surface it is (a
+    second call is a no-op). Processes
     that only adopted another's server never stop it. A hard kill still leaves an orphan, which the
     next boot adopts or replaces."""
     global _EXIT_HOOKED

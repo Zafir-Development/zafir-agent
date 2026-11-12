@@ -583,7 +583,7 @@ def _scan_gateway_pids(
         hermes_home_assignments,
         command_line_names_hermes_home,
     )
-    from hermes_cli.dashboard_procs import _hermes_home_for_pid, _normalized_home_for_compare
+    from hermes_cli.process_inventory import _hermes_home_for_pid, _normalized_home_for_compare
     from hermes_cli.gateway_migrate_guards import pid_is_other_users
     current_home_path = get_hermes_home().resolve()
     current_home = str(current_home_path)
@@ -706,7 +706,7 @@ def _windows_process_listing() -> str | None:
     # has been removed as part of the WMIC deprecation — fall back to PowerShell's Get-CimInstance. A spawn
     # failure or timeout (result is None) trips the fallback. ``hermes update`` hung exactly there on
     # slow-WMI machines where the full Win32_Process scan exceeds its budget (#87134). bounded_probe_run
-    # also hides the console window: this scan runs inside the windowless pythonw.exe gateway/desktop
+    # also hides the console window: this scan runs inside the windowless pythonw.exe gateway
     # backend, so a bare wmic/powershell spawn would flash a conhost window on every watchdog probe.
     from hermes_cli._subprocess_compat import bounded_probe_run
     wmic_path = shutil.which("wmic")
@@ -823,7 +823,7 @@ def find_windows_gateway_services(
     """Profile gateways supervised by real, Hermes-owned Windows services. Service-logon processes may
     hide their command lines, so identity = Hermes's own PID file + a parent chain ending at a running
     SCM service PID whose name or binary path is Hermes's (``gateway_windows.hermes_owns_windows_service``).
-    The whole service subtree is returned so the Desktop preflight exempts exactly what the updater stops
+    The whole service subtree is returned so the updater's preflight exempts exactly what it stops
     through the SCM; a gateway under any other service (a Scheduled Task's svchost) is a plain process."""
     if sys.platform != "win32":
         return []
@@ -1801,11 +1801,11 @@ def _reap_unsupervised_gateway_orphans(
 
     ``min_age_s`` spares a candidate younger than the grace: a gateway claims
     ``gateway.pid``/``gateway.lock`` only after imports + runner setup, so a process
-    that a previous Desktop generation (or a concurrent ``gateway start``) just launched
+    that a previous gateway generation (or a concurrent ``gateway start``) just launched
     is scan-visible but not yet record-visible, and the argv sweep cannot tell it from
     a corpse. Reaping it writes a planned-stop marker it consumes seconds later — a clean
-    exit 0 with no supervisor to revive it (#122533). The Desktop boot sweep passes a
-    grace; stop/restart keep reaping at once.
+    exit 0 with no supervisor to revive it (#122533). A cold-start sweep passes a grace;
+    stop/restart keep reaping at once.
     """
     try:
         supervised_host = supports_systemd_services()
@@ -1818,7 +1818,7 @@ def _reap_unsupervised_gateway_orphans(
     # A Scheduled Task gateway whose conhost/VBS bootstrap has already exited is invisible to
     # `_reaper_candidate_is_supervisor_owned` (the parent chain breaks before services.exe, fail-open), yet
     # it is alive and supervised. After that launcher exits the task is typically Ready, not Running —
-    # treating only Running as supervised still kills the detached gateway on every desktop serve start
+    # treating only Running as supervised still kills the detached gateway on every supervised start
     # (#86098, #87001).
     if is_windows():
         try:
@@ -1839,7 +1839,7 @@ def _reap_unsupervised_gateway_orphans(
     except Exception:
         return False
     if min_age_s > 0:
-        from hermes_cli.dashboard_procs import _process_age_seconds
+        from hermes_cli.process_inventory import _process_age_seconds
 
         def _old_enough(pid: int) -> bool:
             try:  # an undeterminable age must never widen the reap
@@ -2098,7 +2098,7 @@ def _windows_scheduled_task_state(task_name: str) -> str | None:
     """Locale-independent Task Scheduler state, or None on failure.
 
     Query the COM API directly: Get-ScheduledTask auto-loads the CIM module,
-    which can stall desktop backend startup for the entire ten-second timeout.
+    which can stall gateway startup for the entire ten-second timeout.
     Keep the existing supervisor semantics (Ready and Queued count as owned).
     """
     if not is_windows():
@@ -2144,7 +2144,7 @@ def _windows_scheduled_task_supervises(task_name: str) -> bool:
     Used to treat Task Scheduler as a gateway supervisor on Windows: the orphan-reap sweep must not kill a
     gateway that a scheduled task launched and left detached. After the bootstrap exits the task is Ready,
     not Running; a Running-only check still writes the planned-stop marker, the gateway exits cleanly with
-    code 0, and the scheduler never restarts it — silently killing A2A/messaging on every desktop-app launch
+    code 0, and the scheduler never restarts it — silently killing A2A/messaging on every launch
     (#86098, #87001).
     """
     return _windows_scheduled_task_state(task_name) in _WINDOWS_TASK_SUPERVISOR_STATES
@@ -2956,8 +2956,8 @@ def _build_wsl_interop_paths(path_entries: list[str]) -> list[str]:
     Windows PATH (``/mnt/c/WINDOWS/System32``…), so ``powershell.exe``/``cmd.exe`` break unless persisted.
 
     Only the which()-resolved tool dirs and the hardcoded System32 family belong here. The
-    shell PATH is deliberately NOT scraped: WSL appends every Windows PATH entry (Desktop app,
-    git, node dirs under ``/mnt/``) ahead of the interop defaults, and persisting those into the
+    shell PATH is deliberately NOT scraped: WSL appends every Windows PATH entry (git, node
+    dirs under ``/mnt/``) ahead of the interop defaults, and persisting those into the
     unit makes the gateway open 9p (Plan 9 interop) connections to each of them at start — enough
     to exhaust the 9p server connection limit (#73163). Interop tools don't need them."""
     if not is_wsl():
@@ -3779,7 +3779,7 @@ def _systemd_graceful_restart_action(system: bool, pid: int) -> str | None:
     # ``agent.restart_drain_timeout``. The wait budget must cover BOTH phases plus headroom (#77184) — the
     # raw drain timeout covers only the second. Announce the wait BEFORE it runs: it can last the full
     # budget while the old gateway finishes in-flight agent runs, and it streams into surfaces with no other
-    # feedback — the desktop updater's live output most of all, where a silent stop here reads as "update
+    # feedback — an update's live output most of all, where a silent stop here reads as "update
     # stuck" (#44515).
     wait_budget = _get_restart_exit_wait_budget()
     print(
@@ -5393,7 +5393,7 @@ def _restart_all(system: bool, detach: bool = False) -> None:
         print(f"    hermes -p {owner.profile_label} gateway restart --all")
         sys.exit(GATEWAY_FATAL_CONFIG_EXIT_CODE)
     # No live owner: stop/kill/start as the host root, not as the invoking profile (whose own
-    # gateway the run-side guard would refuse — the host stayed down after a Desktop update).
+    # gateway the run-side guard would refuse — the host stayed down after an update).
     with restart_all_verb_scope(owner) as owe_online_notice:
         _restart_all_as_host(owner, system, detach, owe_online_notice)
 
@@ -5466,8 +5466,8 @@ def _cmd_restart(args):
         _restart_all(system, getattr(args, "detach", False))
         return
 
-    # Reap orphans only past the refusal guards above (#125394): the Desktop backend used to reap
-    # before spawning this command, so a refused restart still cost the profile its gateway. From
+    # Reap orphans only past the refusal guards above (#125394): an earlier front end used to
+    # reap before spawning this command, so a refused restart still cost the profile its gateway. From
     # here every path restarts (service manager, external-supervisor hand-back, manual fallback),
     # and the reap stays best-effort: a scan failure must not abort the restart (#77276).
     try:
@@ -5488,7 +5488,7 @@ def _cmd_restart(args):
 
     # Linger only explains a FAILED systemd unit restart. Without an installed unit the
     # detached run below is the restart; bailing here left `hermes gateway restart` a
-    # silent exit-0 no-op on any Linux login session (Desktop read it as success).
+    # silent exit-0 no-op on any Linux login session (which read as success).
     if kind == "systemd" and supports_systemd_services():
         linger_ok, _detail = get_systemd_linger_status()
         if linger_ok is not True:

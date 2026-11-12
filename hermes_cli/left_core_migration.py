@@ -7,8 +7,8 @@ contract is the one memory providers established (``memory_provider_migration``,
 reuses; memory is not a row because its plugin name comes from ``memory.provider``, not a table):
 
 * ``hermes update`` installs the plugin for every profile home sharing the venv that uses the feature.
-* Agent start and gateway start retry once per process for the active home (Desktop users update
-  through the app and never run ``hermes update``), honouring ``security.allow_lazy_installs``.
+* Agent start and gateway start retry once per process for the active home (a launch that never
+  runs ``hermes update`` still migrates), honouring ``security.allow_lazy_installs``.
 * After a failed attempt (catalog miss or unreachable, failed install) starts skip the row for
   an hour, doubling with each further failure up to a week, so an offline
   machine pays the network round trip once, not on every ``hermes chat``, and a home whose install
@@ -20,7 +20,7 @@ Installs go through the normal catalog install path at the reviewed pin (kill li
 constraints, enable). Unattended dependency consent covers only these rows: the feature shipped in
 core, so its users already accepted its dependencies. Agent/gateway start always installs with it
 (nothing can answer a prompt there); ``hermes update`` in a terminal still asks. Every outcome
-reaches the user (terminal, Desktop, chat); an outcome no terminal shows waits in the home for its next
+reaches the user (terminal, chat); an outcome no terminal shows waits in the home for its next
 turn someone sees (:func:`claim_kept_notices`).
 """
 
@@ -732,7 +732,7 @@ def host_install_hint(base_url: str) -> str:
 
 def recover_for_provider(name: Optional[str]) -> None:
     """Runtime resolution of *name*, a provider a left-core plugin supplies, in a home that uses it and lacks
-    the plugin: run :func:`recover_at_startup` now. The CLI and Desktop resolve the provider before the agent
+    the plugin: run :func:`recover_at_startup` now. The CLI resolves the provider before the agent
     (whose start runs the migration) exists, so they would otherwise stop at "unknown provider" on a home no
     ``hermes update`` migrated. Outcomes print in a declared terminal front end (:func:`serve_notices_on_stderr`),
     else wait for the home's next turn someone sees."""
@@ -746,7 +746,7 @@ def recover_for_provider(name: Optional[str]) -> None:
     if feature is None or _installs_held.get():  # held: a read-only diagnostic consumes no kept notice either
         return
     # A terminal front end shows outcomes now, also those another process (the gateway this CLI started) kept;
-    # otherwise (Desktop, gateway, a detached turn) the home's next watched turn in any process gets them. Never
+    # otherwise (gateway, a detached turn) the home's next watched turn in any process gets them. Never
     # inferred from a TTY: a foreground `hermes gateway run` has one, and its resolutions serve the chat user.
     say = (lambda message: print(message, file=sys.stderr)) if _terminal_front_end else None
     if say is not None:

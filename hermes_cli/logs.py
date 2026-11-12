@@ -10,10 +10,7 @@ Usage examples::
     hermes logs -f                 # follow agent.log in real time
     hermes logs errors             # last 50 lines of errors.log
     hermes logs gateway -n 100    # last 100 lines of gateway.log
-    hermes logs gui -f            # follow gui.log (dashboard/pty/ws)
-    hermes logs desktop -f        # follow desktop.log (Electron app boot/backend)
     hermes logs update            # last 50 lines of update.log (hermes update mirror)
-    hermes logs handoff           # last 50 lines of desktop-update-handoff.log
     hermes logs --level WARNING    # only WARNING+ lines
     hermes logs --session abc123   # filter by session ID substring
     hermes logs --component tools  # only tool-related lines
@@ -36,27 +33,18 @@ LOG_FILES = {
     "agent": "agent.log",
     "errors": "errors.log",
     "gateway": "gateway.log",
-    "gui": "gui.log",
-    "desktop": "desktop.log",
     # Full stdout/stderr mirror of the last `hermes update` runs (written by
-    # hermes_cli.main's _UpdateOutputStream; append-only across runs). When a
-    # Desktop-driven update fails at the Electron rebuild the ONLY artifacts
-    # holding the root cause are this file and the hand-off log below, so
-    # `hermes logs list` (a directory scan) showing them without readable
-    # keys was an inconsistency of its own.
+    # hermes_cli.main's _UpdateOutputStream; append-only across runs) — the
+    # root cause of a failed update lives here.
     "update": "update.log",
-    # Desktop-driven update hand-off (scripts/desktop-update/windows.ps1 +
-    # posix.sh): stage log including the `desktop --force-build --build-only`
-    # retry stderr.
-    "handoff": "desktop-update-handoff.log",
     # Every stdio MCP subprocess's stderr (tools/mcp_tool.py redirects it
     # here, with per-server session markers) — the "MCP output channel".
     "mcp": "mcp-stderr.log",
 }
 
 # Written to the ROOT home whatever profile is active: ``hermes update`` mutates the checkout every
-# profile shares, and its mirror (main_dashboard) + the Desktop hand-off scripts write <root>/logs.
-ROOT_HOME_LOGS = frozenset({"update", "handoff"})
+# profile shares.
+ROOT_HOME_LOGS = frozenset({"update"})
 
 
 def log_file_path(log_name: str) -> Optional[Path]:
@@ -68,9 +56,9 @@ def log_file_path(log_name: str) -> Optional[Path]:
     return home / "logs" / filename
 
 
-# "2026-04-05 22:35:00[,123]" at the start of a line; update.log /
-# desktop-update-handoff.log stamp with the shell's ISO-8601 "T" shape
-# ("2026-09-29T21:36:18+08:00", "=== hermes update started 2026-09-29T21:36:18 ===").
+# "2026-04-05 22:35:00[,123]" at the start of a line; update.log stamps
+# with the shell's ISO-8601 "T" shape ("2026-09-29T21:36:18+08:00",
+# "=== hermes update started 2026-09-29T21:36:18 ===").
 _TS_RE = re.compile(r"(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2})")
 _LEVEL_RE = re.compile(r"\s(DEBUG|INFO|WARNING|ERROR|CRITICAL)\s")
 # Logger name: the token before ":" after the level and optional "[session]" tag,
@@ -169,8 +157,8 @@ def tail_log(
     Parameters
     ----------
     log_name
-        Which log to read: ``"agent"``, ``"errors"``, ``"gateway"``, ``"gui"``,
-        ``"desktop"``, ``"update"``, ``"handoff"``.
+        Which log to read: ``"agent"``, ``"errors"``, ``"gateway"``, ``"update"``,
+        ``"mcp"``.
     num_lines
         Number of recent lines to show (before follow starts).
     follow

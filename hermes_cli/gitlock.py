@@ -890,11 +890,10 @@ def convert_treeless_checkout(repo_root: Path, **run_kwargs) -> bool:
 def convert_treeless_checkout_first(repo_root: Path) -> None:
     """Run the one-time conversion as the update's first new-code step. Never raises.
 
-    Both update hand-offs (``update_completion._prepare`` and an older updater's
-    ``_update_takeover.prepare``) call this before minutes of dependency work: a Desktop built before
-    the fix keeps walking history during that window, and on a treeless checkout every walk
-    downloads trees again (#129514: 434 GB, disk full mid-update). Runs in the dependency-free
-    bootstrap interpreter.
+    The update completion (``update_completion._prepare``) calls this before minutes of
+    dependency work: a build that predates the fix keeps walking history during that window, and
+    on a treeless checkout every walk downloads trees again (#129514: 434 GB, disk full
+    mid-update). Runs in the dependency-free bootstrap interpreter.
     """
     from hermes_cli._subprocess_compat import no_prompt_git_kwargs
 

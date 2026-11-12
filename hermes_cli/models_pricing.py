@@ -25,7 +25,7 @@ _pricing_provider_cache_keys: dict[tuple[str, str], str] = {}
 
 # A failed fetch caches its empty result too, so an unreachable endpoint isn't re-dialed on every
 # call — but only until this deadline. Cached forever, one blip at startup would mean no live model
-# discovery for the life of a process that runs for weeks (gateway, desktop backend), silently:
+# discovery for the life of a process that runs for weeks (gateway, long-lived daemon), silently:
 # every caller falls back to a curated list meanwhile.
 _FAILED_CATALOG_TTL_SECONDS = 120.0
 

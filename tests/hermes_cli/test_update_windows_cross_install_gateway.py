@@ -60,7 +60,6 @@ def test_update_pause_takes_only_this_installs_gateways(monkeypatch, host_gatewa
 def test_foreign_gateways_do_not_suppress_cold_start(monkeypatch, host_gateways):
     monkeypatch.setattr(cli_main, "_is_windows", lambda: True)
     monkeypatch.setattr(main_install_repair, "_is_windows", lambda: True)
-    monkeypatch.setattr(update_cmd, "_desktop_owns_gateway_lifecycle", lambda: False)
     monkeypatch.setattr(gateway_mod, "find_gateway_pids",
                         lambda **_kw: [host_gateways["foreign"], host_gateways["foreign_default"]])
     spawned = []

@@ -8,7 +8,7 @@ redraw loop that made the lingering process burn CPU, but not the lingering
 process itself.
 
 ``tools/computer_use/tool.py`` registers an ``atexit`` hook that stops the
-cached backend, mirroring ``browser_tool``'s
+cached backend, mirroring the browser resolver's
 ``atexit.register(_emergency_cleanup_all_sessions)``.
 
 These assert the behavior contract — the hook is registered, it stops a live

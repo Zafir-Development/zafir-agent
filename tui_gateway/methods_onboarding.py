@@ -33,10 +33,10 @@ def _run_state(*, assume_fresh: bool = False) -> dict:
     remote backends answer at once and run onboarding only from Settings. On the local backend the
     answer comes from the boot computation (``onboarding_due``); ``--fresh-install`` asks live."""
     from hermes_cli import onboarding_due
-    from hermes_cli.anon_auth import on_local_desktop_backend
+    from hermes_cli.anon_auth import on_local_host_backend
     from hermes_cli.onboarding_run import should_run
 
-    if not on_local_desktop_backend():
+    if not on_local_host_backend():
         return {"run": should_run(assume_fresh=assume_fresh), "eligible": False, **_active_run()}
     due = _due_now(assume_fresh=True) if assume_fresh else onboarding_due.read(_due_now, stamp=_due_stamp)
     return {**due, **_active_run()}
@@ -112,13 +112,13 @@ def begin_local_desktop_boot() -> None:
     global _local_desktop_boot_started
     from agent.memory_provider import spawn_context_thread
     from hermes_cli import free_tier_bootstrap
-    from hermes_cli.process_identity import serving_local_desktop
+    from hermes_cli.process_identity import serving_local_host
     from tui_gateway.launch_profile_policy import launch_profile_scope_if_multiplexed
 
     with _local_desktop_boot_lock:
         first, _local_desktop_boot_started = not _local_desktop_boot_started, True
     # The record and the latch are the launch profile's; the connecting profile may be another one.
-    with launch_profile_scope_if_multiplexed(), serving_local_desktop(True):  # threads copy this context
+    with launch_profile_scope_if_multiplexed(), serving_local_host(True):  # threads copy this context
         if not first:
             spawn_context_thread(free_tier_bootstrap.resettle_after_failed_boot, name="free-tier-resettle").start()
             return
@@ -154,12 +154,12 @@ def _claim_before_run(scope: dict, *, assume_fresh: bool):
     5080, with no chat either: the desktop lands on provider setup and sign-in, not a chat that fails."""
     from hermes_cli import anon_auth
     from hermes_cli.onboarding_run import set_run
-    from hermes_cli.welcome_trial import claim_desktop_free_tier, provider_configured
-    if not anon_auth.on_local_desktop_backend():  # gateway/session_onboarding.py::_claim_before_run
+    from hermes_cli.welcome_trial import claim_welcome_trial, provider_configured
+    if not anon_auth.on_local_host_backend():  # gateway/session_onboarding.py::_claim_before_run
         raise _NoModelForTheRun("First-run onboarding starts only in the Desktop app on this machine.")
     set_run(True)
     with _session_profile_runtime_scope(scope):
-        claimed = claim_desktop_free_tier(assume_fresh=assume_fresh)
+        claimed = claim_welcome_trial(assume_fresh=assume_fresh)
         if claimed is None and not (anon_auth.free_inference_active() or provider_configured()):
             raise _NoModelForTheRun("The welcome trial is not available here, and no provider is set up.")
     return claimed

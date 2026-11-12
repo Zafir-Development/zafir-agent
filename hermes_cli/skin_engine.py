@@ -16,8 +16,8 @@ class SkinConfig:
     name: str
     description: str = ""
     colors: dict[str, str] = field(default_factory=dict)
-    # Paired palettes for the opposite background polarity (mirrors the desktop app's
-    # colors/darkColors pairing): a light terminal prefers `light_colors` (falling back to
+    # Paired palettes for the opposite background polarity (a light/dark palette pairing):
+    # a light terminal prefers `light_colors` (falling back to
     # `colors`), and vice versa for `dark_colors`.
     light_colors: dict[str, str] = field(default_factory=dict)
     dark_colors: dict[str, str] = field(default_factory=dict)

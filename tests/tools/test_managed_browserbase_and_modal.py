@@ -101,7 +101,7 @@ def _install_fake_tools_package():
         call_llm=lambda *args, **kwargs: "",
     )
     # Keep unrelated imports real; only replace the collaborators this fixture
-    # isolates. tools.browser_tool imports redact_cdp_url;
+    # isolates. The browser resolver imports redact_cdp_url;
     # hermes_cli.auth (imported transitively by nous_account /
     # tool_backend_helpers) imports sanitize_borrowed_credential_payload.
     sys.modules["agent.redact"] = types.SimpleNamespace(
@@ -113,7 +113,7 @@ def _install_fake_tools_package():
 
     # Stubs for the browser-provider plugin layer introduced in PR #25214.
     # Install just enough stand-ins to isolate
-    # ``tools.browser_tool``'s top-level imports. The actual lifecycle
+    # the browser resolver's top-level imports. The actual lifecycle
     # tests instantiate the real plugin classes via _load_tool_module
     # below, so the stubs only need to satisfy import + isinstance.
     class _StubBrowserProvider:

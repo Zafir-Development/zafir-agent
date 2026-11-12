@@ -3,8 +3,8 @@
 Two failure modes this file pins (independent review R15):
 
 * **Selector drift.** A hand list of "update files" misses whatever the update
-  modules import next (``_subprocess_compat``, ``desktop_build_lock``,
-  ``memory_provider_migration``, the ``scripts/build`` compilers). Here the
+  modules import next (``_subprocess_compat``, ``memory_provider_migration``,
+  the ``scripts/build`` compilers). Here the
   update entry points' real imports are read from the source (Python AST, ESM
   ``import``/``step()`` literals) and every module they reach must start the
   suite that runs it, or be one of the classifier's declared shared hubs.
@@ -269,7 +269,6 @@ def test_every_set_lane_reaches_its_consumer_whatever_the_other_lanes_say(combo)
 _R15_CASES = {
     "scripts/build/tui.mjs": ("e2e_upgrade",),
     "hermes_cli/_subprocess_compat.py": ("e2e_upgrade",),
-    "hermes_cli/desktop_build_lock.py": ("e2e_upgrade",),
     "hermes_cli/memory_provider_migration.py": ("e2e_upgrade",),
     "hermes_cli/source_build.py": ("e2e_upgrade",),
     "hermes_cli/source_completion.py": ("e2e_upgrade",),

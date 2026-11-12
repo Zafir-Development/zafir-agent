@@ -463,10 +463,8 @@ class SessionSchemaMixin:
 
     def _defer_stale_fts_for_holders(self, cursor: sqlite3.Cursor, foreign_holders) -> bool:
         """Record a deferral diagnostic for the foreign processes holding the DB; True = defer
-        (holders remain). After ``_FTS_HOLDER_ESCALATE_ATTEMPTS`` deferrals spanning
-        ``_FTS_HOLDER_ESCALATE_SECONDS``, provably inactive orphan Desktop backends are
-        reaped and the holders re-checked. The orphan reap is the only exit, so a supervised
-        peer (never an orphan) blocks forever: once the SAME PID set has blocked
+        (holders remain). A holder is another Hermes process (a live gateway, a session browser),
+        never something this rebuild may kill: once the SAME PID set has blocked
         ``_FTS_HOLDER_FUTILE_ATTEMPTS`` deferrals over ``_FTS_HOLDER_FUTILE_SECONDS`` the
         record is marked ``futile`` and the escalation names the holders and the remedy that
         works from inside a gateway session (stop only the other holder; this process's own
@@ -492,17 +490,6 @@ class SessionSchemaMixin:
         holder_pids = sorted({pid for pid, _path in foreign_holders if pid > 0})
         if holder_pids != record.get("holder_pids"):
             holders_since, holders_attempts = now, 1
-        if attempts >= _FTS_HOLDER_ESCALATE_ATTEMPTS and now - first_seen >= _FTS_HOLDER_ESCALATE_SECONDS:
-            reaped = self._reap_inactive_orphan_desktop_holders(
-                foreign_holders, min_age_seconds=_FTS_HOLDER_ESCALATE_SECONDS,
-            )
-            if reaped:
-                logger.error(
-                    "Reaped inactive orphan Desktop backend(s) %s after %d "
-                    "state.db FTS rebuild deferrals; checking holders again.", reaped, attempts,
-                )
-                foreign_holders = self._foreign_state_db_holders()
-                holder_pids = sorted({pid for pid, _path in foreign_holders if pid > 0})
         futile = bool(holder_pids) and (
             holders_attempts >= _FTS_HOLDER_FUTILE_ATTEMPTS and now - holders_since >= _FTS_HOLDER_FUTILE_SECONDS
         )

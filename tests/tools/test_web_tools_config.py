@@ -431,20 +431,12 @@ class TestParallelClientConfig:
         fake_parallel.Parallel = Parallel
         fake_parallel.AsyncParallel = AsyncParallel
         sys.modules["parallel"] = fake_parallel
-        # The fake parallel module above answers every SDK touch; the real
-        # lazy-dep gate (a version-pinned metadata check) must not refuse first
-        # on an install without the parallel extra.
-        self._lazy_gate_patch = patch(
-            "tools.lazy_deps.ensure", lambda *args, **kwargs: None
-        )
-        self._lazy_gate_patch.start()
 
     def teardown_method(self):
         import tools.web_tools
         tools.web_tools._parallel_client = None
         os.environ.pop("PARALLEL_API_KEY", None)
         sys.modules.pop("parallel", None)
-        self._lazy_gate_patch.stop()
 
     def test_creates_client_with_key(self):
         """PARALLEL_API_KEY set → creates Parallel client."""
@@ -507,15 +499,12 @@ class TestExaClientConfig:
 
         fake_exa.Exa = Exa
         sys.modules["exa_py"] = fake_exa
-        self._lazy_gate_patch = patch("tools.lazy_deps.ensure", lambda *args, **kwargs: None)
-        self._lazy_gate_patch.start()
 
     def teardown_method(self):
         import tools.web_tools
         tools.web_tools._exa_client = None
         os.environ.pop("EXA_API_KEY", None)
         sys.modules.pop("exa_py", None)
-        self._lazy_gate_patch.stop()
 
     def test_multiplexed_profiles_search_with_their_own_key(self, tmp_path, monkeypatch):
         """One process serving two profiles: each turn's search goes out with its own profile's key, and a

@@ -194,7 +194,7 @@ async def forward(view, name, rest):
         print(refusal(name) if resolve_command(name) else f"Unknown command: /{name} (use /help)")
         return
     if reply.get("type") in ("skill", "send"):
-        # A prompt directive is the client's durable submit (same contract as Ink and Desktop):
+        # A prompt directive is the client's durable submit (same contract as the TUI client):
         # a skill body, or the turn a command built (/plan, /goal's kickoff...) after its notice.
         if reply.get("notice"):
             print(reply["notice"])

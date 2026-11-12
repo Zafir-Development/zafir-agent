@@ -522,56 +522,6 @@ def _refusing_job(monkeypatch):
     monkeypatch.setattr(update_lock, "update_tree_job", lambda: event)
 
 
-def test_the_takeover_finish_child_is_never_silently_outside_the_job(tmp_path, monkeypatch):
-    """F03: the takeover's update_finish child builds the checkout. It goes through the job bind;
-    a refused bind still runs it (the update committed) but is receipted."""
-    import json
-
-    from hermes_cli import _update_takeover, update_receipt
-
-    root = tmp_path / "checkout"
-    (root / "hermes_cli").mkdir(parents=True)
-    started = tmp_path / "started"
-    (root / "hermes_cli" / "update_finish.py").write_text(
-        f"import sys\nopen({str(started)!r}, 'w').close()\nopen(sys.argv[2], 'w').write('{{}}')\n", encoding="utf-8")
-    monkeypatch.setenv("HERMES_HOME", str(tmp_path / "home"))
-    monkeypatch.setattr(sys, "path", list(sys.path))
-    monkeypatch.setattr(_update_takeover, "prepare", lambda request: (Path(sys.executable), dict(os.environ)))
-    _refusing_job(monkeypatch)
-    context = tmp_path / "request.json"
-    context.write_text(json.dumps({"root": str(root), "receipt": {}}), encoding="utf-8")
-    monkeypatch.setattr(sys, "argv", ["takeover", str(context), str(tmp_path / "result.json")])
-    with update_receipt.update_receipt_scope():
-        code = _update_takeover.main()
-        steps = update_receipt._current.get().data.get("steps", [])
-    assert code == 0 and started.exists()
-    assert any(s["name"] == "update_custody" and s["ok"] is False for s in steps), steps
-
-
-def test_the_old_updater_runs_its_takeover_in_the_job(tmp_path, monkeypatch, capsys):
-    """N11: the old updater's takeover child syncs and builds the checkout. With this updater
-    holding the checkout lock it is bound before it runs; a refused bind is said out loud."""
-    from hermes_cli import _old_updater
-
-    started = tmp_path / "started"
-    lock = UpdateLock(path=tmp_path / "m", install_root=tmp_path)
-    assert lock.acquire()
-    try:
-        _refusing_job(monkeypatch)
-        code = _old_updater._run_in_custody(
-            [sys.executable, "-c", f"open({str(started)!r}, 'w').close()"], tmp_path, cwd=tmp_path)
-    finally:
-        lock.release()
-    assert code == 0 and started.exists()
-    assert "would not take the takeover" in capsys.readouterr().out
-
-
-
-# --- C3: a normal release never frees the checkout under a build descendant ------------------
-
-# The launcher's own argv says "hermes: update custody", which the live-system guard reads as
-# `hermes update`; this test runs it in-process against a tmp_path checkout, never a real one.
-@pytest.mark.live_system_guard_bypass
 def test_a_build_descendant_left_by_its_leader_never_writes_after_a_normal_release(tmp_path):
     """C3: npm exits while a builder grandchild it started keeps running. The launcher returns
     only once that grandchild is gone, so after the owner's ordinary release a contender

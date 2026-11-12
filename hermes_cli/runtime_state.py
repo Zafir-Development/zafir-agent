@@ -15,9 +15,7 @@ import time
 import uuid
 
 from pm.environments import dependency_home_root, install_state_dir, runtime_facts_path
-# Private aliases: this module calls them through its globals (tests patch ``_atomic_bytes``
-# here) and updaters shipped before PM import them by these names mid-swap
-# (tests/compat/old_updater_surface.json). New code imports the pm.filesystem names.
+# Private aliases this module calls through its globals (tests patch ``_atomic_bytes`` here).
 from pm.filesystem import (
     durable_write_bytes as _atomic_bytes,
     file_digest as _digest,

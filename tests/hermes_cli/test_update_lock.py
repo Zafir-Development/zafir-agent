@@ -496,8 +496,8 @@ def test_unwritable_marker_location_refuses_instead_of_running_unlocked(tmp_path
 
 
 def test_an_unwritable_marker_location_says_why_the_update_needs_it_and_how_to_fix_it(tmp_path):
-    """Review P2 (5411135165): the refusal stays (the marker is what the Desktop gate, gateways and
-    the other updaters read), so it must say what the path is for and how to make it writable."""
+    """Review P2 (5411135165): the refusal stays (the marker is what gateways, installers and the
+    other updaters read), so it must say what the path is for and how to make it writable."""
     blocker = tmp_path / "home"
     blocker.write_bytes(b"a file where the marker directory should be")
     lock = UpdateLock(path=blocker / "marker")
@@ -505,7 +505,7 @@ def test_an_unwritable_marker_location_says_why_the_update_needs_it_and_how_to_f
     assert lock.acquire() is False
     message = describe_holder(lock.holder)
     assert str(blocker) in message
-    assert "Desktop app" in message and "other updaters" in message, message
+    assert "gateway or installer" in message and "other updaters" in message, message
     assert "read-only filesystem" in message, message
 
 _HOLD_CHECKOUT = """
@@ -728,19 +728,17 @@ class TestAncestryHandoff:
 
     @pytest.mark.platforms("any")
     def test_grandchild_adopts_orchestrator_marker_without_psutil(self, marker, tmp_path):
-        """Regression: the desktop hand-off's grandchild refused its own orchestrator.
+        """Regression: an update child two processes below the lock holder refused its orchestrator.
 
         The posix shim (grandparent) holds the marker and spawns ``hermes update``
-        (direct child — adopts via getppid). An old-updater update into a PM tree
-        then hands off again: ``_old_updater._run_child`` spawns
-        ``_update_takeover.py`` as ``python -I -S -B``, where psutil cannot import
+        (direct child — adopts via getppid). A further hand-off to a fresh
+        interpreter runs as ``python -I -S -B``, where psutil cannot import
         (-S skips site-packages). The psutil-only ancestry walk returned False for
-        the two-hops-up shim, and the takeover child refused with exit 2 —
-        "Another Hermes update is already running (PID <the shim itself>)" —
-        observed live on a macOS rehearsal install, then again on Windows, where
-        the stdlib walk had no /proc and no ps. Marked for every lane: the Windows
-        lane only imports files carrying a platforms marker, which is how the
-        Windows half went unseen. The stdlib fallback walk is what must adopt here.
+        the two-hops-up shim and the child refused with exit 2 — "Another Hermes
+        update is already running (PID <the shim itself>)". Marked for every lane:
+        the Windows lane only imports files carrying a platforms marker, which is
+        how the Windows half went unseen. The stdlib fallback walk is what must
+        adopt here.
         """
         import subprocess
         import sys

@@ -14,7 +14,7 @@ def test_zip_completion_failure_does_not_run_old_followup(tmp_path, monkeypatch,
     monkeypatch.setattr(update_cmd_zip, "_abort_zip_update_if_dirty_tree", lambda: None)
     monkeypatch.setattr(update_cmd_zip, "_download_and_swap_zip", lambda *a: None)
     monkeypatch.setattr(update_cmd, "_should_zip_fallback_on_update_error", lambda exc: True)
-    request = {"expected_sha": None, "desktop": True}
+    request = {"expected_sha": None}
     completion = Mock(side_effect=SystemExit(23))
     monkeypatch.setattr(update_cmd, "_complete_source_update", completion)
     monkeypatch.setattr(update_cmd, "_run_post_update_maintenance", lambda **kw: pytest.fail("old maintenance"))
@@ -25,6 +25,6 @@ def test_zip_completion_failure_does_not_run_old_followup(tmp_path, monkeypatch,
         else:
             update_cmd._handle_update_called_process_error(
                 subprocess.CalledProcessError(1, ["git", "fetch"]), SimpleNamespace(branch="main"),
-                False, True, completion_request=request)
+                False, completion_request=request)
     assert error.value.code == 23
     completion.assert_called_once_with(request)

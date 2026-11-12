@@ -84,27 +84,27 @@ def test_scoped_reconciliation_matrix(monkeypatch, capsys, name, old, marker, li
         assert target.read_bytes() == before
 
 
-DESKTOP = RuntimeRecord(kind="serve", profile="default", pid=901, supervisor="desktop", restart_via="desktop-respawn")
-DESKTOP_RECEIPT = {"outcome": "failed", "plan": {"runtimes": [{"kind": "serve", "profile": "default", "supervisor": "desktop"}]}}
+SUPERVISED_SERVE = RuntimeRecord(kind="serve", profile="default", pid=901, supervisor="launchd")
+SUPERVISED_SERVE_RECEIPT = {"outcome": "failed", "plan": {"runtimes": [{"kind": "serve", "profile": "default", "supervisor": "launchd"}]}}
 
 # (name, receipt, live runtimes, gateway_state per profile, checkout, pending)
 GATEWAYLESS_CASES = [
-    # #118742: Desktop app only, no gateway was ever installed.
-    ("desktop-only", {}, [DESKTOP], {}, "new", False),
+    # #118742: a served-only install, no gateway was ever installed.
+    ("serve-only", {}, [SUPERVISED_SERVE], {}, "new", False),
     ("nothing-running", {}, [], {}, "new", False),
-    ("gateway-stopped-cleanly", {}, [DESKTOP], {"default": "stopped"}, "new", False),
+    ("gateway-stopped-cleanly", {}, [SUPERVISED_SERVE], {"default": "stopped"}, "new", False),
     ("gateway-startup-failed", {}, [], {"default": "startup_failed"}, "new", False),
     # HEAD carries a local commit on top of the pulled SHA (#119367).
-    ("carried-local-commit", {}, [DESKTOP], {}, "hotfix", False),
+    ("carried-local-commit", {}, [SUPERVISED_SERVE], {}, "hotfix", False),
     # Receipts neither discharge nor block: the old manual row is history, not the live host.
     ("manual-receipt-gatewayless-host", {"outcome": "success", "plan": {"runtimes": [MANUAL]}}, [], {}, "new", False),
-    ("desktop-receipt-stopped-gateway", DESKTOP_RECEIPT, [DESKTOP], {"default": "running"}, "new", True),
-    ("named-profile-gateway-gone", {}, [DESKTOP], {"work": "running"}, "new", True),
+    ("serve-receipt-stopped-gateway", SUPERVISED_SERVE_RECEIPT, [SUPERVISED_SERVE], {"default": "running"}, "new", True),
+    ("named-profile-gateway-gone", {}, [SUPERVISED_SERVE], {"work": "running"}, "new", True),
     ("state-record-without-state", {}, [], {"default": None}, "new", True),
     ("unclassified-serve", {}, [RuntimeRecord(kind="serve", profile="default", pid=902, supervisor="manual")], {}, "new", True),
     ("manual-serve-without-identity", {}, [RuntimeRecord(kind="serve", profile="work", pid=903, supervisor="manual-serve", restart_via="respawn-argv")], {}, "new", True),
     ("gateway-runtime-without-fleet-row", {}, [RuntimeRecord(kind="gateway", profile="default", pid=904, supervisor="manual")], {}, "new", True),
-    ("checkout-diverged", {}, [DESKTOP], {}, "elsewhere", True),
+    ("checkout-diverged", {}, [SUPERVISED_SERVE], {}, "elsewhere", True),
 ]
 
 

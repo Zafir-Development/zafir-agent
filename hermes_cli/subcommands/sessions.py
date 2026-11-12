@@ -150,18 +150,18 @@ def build_sessions_parser(subparsers, *, cmd_sessions: Callable) -> None:
             "and are older than AGE (default 30 days). Ordinary prune can "
             "never reach these — it only ever selects ended sessions")
     _flag(sessions_prune, "--force",
-        help="With no gateway running: run even while another Hermes process (Desktop, dashboard, cron) holds state.db — rewriting the store under a live writer can leave every agent refusing turns until all writers are stopped. With the gateway running, prune always goes through it")
+        help="With no gateway running: run even while another Hermes process (gateway, cron) holds state.db — rewriting the store under a live writer can leave every agent refusing turns until all writers are stopped. With the gateway running, prune always goes through it")
 
     sessions_archive = sessions_subparsers.add_parser(
         "archive", help="Bulk-archive (soft-hide) sessions matching filters — no deletion")
     _add_session_filter_args(sessions_archive, "Only archive sessions older than AGE (duration like '5h'/'2d', "
                              "bare number of days, or ISO timestamp)")
-    _flag(sessions_archive, "--include-open", help="Also archive never-ended sessions, e.g. Desktop chats")
+    _flag(sessions_archive, "--include-open", help="Also archive never-ended sessions")
 
     sessions_optimize = sessions_subparsers.add_parser(
         "optimize", help="Reclaim disk space: merge FTS5 segments + VACUUM (no data change)")
     _flag(sessions_optimize, "--force",
-        help="Run even while another Hermes process (gateway, Desktop, dashboard, cron) holds state.db — rewriting the store under a live writer can leave every agent refusing turns until all writers are stopped")
+        help="Run even while another Hermes process (gateway, cron) holds state.db — rewriting the store under a live writer can leave every agent refusing turns until all writers are stopped")
 
     sessions_clean_markers = sessions_subparsers.add_parser("clean-markers",
         help="Permanently clear stale tool-call marker content left by sessions from before #78148",
@@ -193,12 +193,12 @@ def build_sessions_parser(subparsers, *, cmd_sessions: Callable) -> None:
     _flag(sessions_optimize_storage, "--yes", "-y", default=False,
         help="Skip the disk-space confirmation prompt")
     _flag(sessions_optimize_storage, "--force",
-        help="Run even while another Hermes process (gateway, Desktop, dashboard, cron) holds state.db — rewriting the store under a live writer can leave every agent refusing turns until all writers are stopped; the rebuild then paces itself so that process stays responsive (much slower)")
+        help="Run even while another Hermes process (gateway, cron) holds state.db — rewriting the store under a live writer can leave every agent refusing turns until all writers are stopped; the rebuild then paces itself so that process stays responsive (much slower)")
 
     sessions_repair = sessions_subparsers.add_parser(
         "repair", help="Repair a malformed state.db schema so hidden sessions reappear",
         description="Recover a state.db whose schema is malformed (e.g. 'table "
-            "messages_fts already exists'), which makes Desktop/Dashboard show "
+            "messages_fts already exists'), which makes every surface show "
             "no sessions. A backup is made first; sessions and messages are "
             "preserved and the FTS search index is rebuilt if needed.")
     _flag(sessions_repair, "--check-only",
@@ -300,8 +300,8 @@ def build_sessions_parser(subparsers, *, cmd_sessions: Callable) -> None:
         "pin", help="Pin session(s) — durable keep flag, exempt from auto-archive",
         description="Set the durable 'keep' flag on one or more sessions. Pinned "
             "sessions are exempt from the sessions.auto_archive stale sweep "
-            "and always appear in listings. The same flag drives the Desktop "
-            "sidebar's Pinned section — pin from either surface, both see it.")
+            "and always appear in listings. The same flag is shared by every "
+            "surface — pin from one, all see it.")
     sessions_pin.add_argument(
         "session_ids", nargs="+", help="Session ID(s) or unique prefix(es) to pin")
 

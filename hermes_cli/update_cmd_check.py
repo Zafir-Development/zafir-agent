@@ -1,6 +1,6 @@
 """Steps of ``hermes update --check``: debris cleanup, channel target, scoped fetch, verdict.
 
-``update_cmd._cmd_update_check`` (a frozen updater surface, see ``tests/compat``) orchestrates
+``update_cmd._cmd_update_check`` orchestrates
 these. Facade helpers are read through ``_uc()`` at call time and origin helpers are imported
 per function, so test patches on ``hermes_cli.update_cmd`` and the origin modules stay effective.
 """

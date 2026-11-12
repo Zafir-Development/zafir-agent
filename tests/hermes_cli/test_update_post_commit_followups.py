@@ -120,7 +120,7 @@ def test_failed_tui_build_raises_product_build_error(tmp_path, monkeypatch, caps
 
     monkeypatch.setattr(source_build, "build_source_tui", broken_tui)
     with pytest.raises(source_build.ProductBuildError) as failure:
-        source_build.build_update_products(tmp_path, desktop=False)
+        source_build.build_update_products(tmp_path)
     assert [name for name, _ in failure.value.failures] == ["TUI build"]
     assert "npm run build exited 1" in str(failure.value)
 
@@ -154,7 +154,7 @@ def test_failed_config_migration_is_owed_and_later_maintenance_runs(tmp_path, mo
     owed: list = []
     assert maint._run_post_update_maintenance(
         assume_yes=True, gateway_mode=False, pre_update_snapshot_id=None,
-        had_desktop_app_before_update=False, pre_update_version=None, followups=owed) is True
+        pre_update_version=None, followups=owed) is True
     assert [step for step, _ in owed] == ["config_migration"]
     assert calls[0] == "repair_windows_home_acl"
     assert ("commit_graph", update_cmd._m().PROJECT_ROOT) in calls
@@ -204,27 +204,6 @@ def test_owed_restart_rearms_a_settled_obligation_and_a_later_run_keeps_owing_it
     # A later verify with nothing live to restart still owes the named gateway (and keeps it armed).
     assert fleet_verify._named_gateways_still_owed()
     assert fleet._fleet_restart_obligation_armed()
-
-
-def test_followup_line_is_the_one_both_desktop_handoffs_parse(tmp_path, monkeypatch, capsys):
-    """The hand-offs read owed follow-ups from this printed line (review regression 1): pin the
-    producer against the exact parsers in posix.sh (sed) and windows.ps1 (.NET regex)."""
-    import re
-    from pathlib import Path
-
-    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
-    update_receipt.record_followup("gateway_restart", "x" * 900)
-    update_receipt.record_followup("windows_resume", "Windows gateway recovery failed: 'quoted' reason")
-    out = capsys.readouterr().out
-    scripts = Path(__file__).resolve().parents[2] / "scripts/desktop-update"
-    posix = (scripts / "posix.sh").read_text(encoding="utf-8")
-    function = re.search(r"^owed_followup_steps\(\) \{.*?^\}", posix, re.DOTALL | re.MULTILINE).group(0)
-    steps = subprocess.run(["bash", "-c", f"{function}\nowed_followup_steps"], env={**os.environ, "OUT": out},
-                           capture_output=True, text=True, encoding="utf-8", check=True).stdout.strip()
-    assert steps == "gateway_restart windows_resume"
-    pattern = re.search(r"\[regex\]::Matches\(\(\$res\.Output -join \"`n\"\), \"([^\"]+)\"\)",
-                        (scripts / "windows.ps1").read_text(encoding="utf-8")).group(1)
-    assert [m.group(1) for m in re.finditer(pattern, out)] == ["gateway_restart", "windows_resume"]
 
 
 def test_interrupt_after_the_run_closed_as_success_never_tells_the_gateway_1(tmp_path, monkeypatch):

@@ -1,6 +1,6 @@
 """Opening a profile's session store read-only for a browsing client.
 
-The native session listener (TUI/Desktop over ``/api/ws``) reads another profile's ``state.db``
+The native session listener (TUI over ``/api/ws``) reads another profile's ``state.db``
 without owning it: browsing must never initialize, migrate or repair that store — only the
 profile's gateway owner does. A store that lags the declared schema but has no owner is reconciled
 once, in additive form; an owned or corrupt store is refused by name.
