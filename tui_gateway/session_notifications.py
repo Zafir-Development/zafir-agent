@@ -1,5 +1,5 @@
 """Per-session notification poller: kanban/loop/delegation events routed to the owning session,
-desktop UI wiring, HUD surface note. Bodies are rebound onto server.py's globals at install time
+per-turn client surface note. Bodies are rebound onto server.py's globals at install time
 (method_ctx.bind_module), so they reference server.py globals bare."""
 
 from __future__ import annotations
@@ -835,35 +835,6 @@ def _async_delegation_display_metadata(evt: dict) -> dict:
             **({"duration_seconds": duration} if isinstance(duration, (int, float)) else {})}
 
 
-_desktop_ui_wired = False
-
-
-def _wire_desktop_sinks() -> None:
-    """Idempotently wire process-registry and desktop-tool sinks to renderer events: `agent.terminal.output` and
-    `terminal.close` (drops a tab without killing the process) route to the window owning the process; desktop-only
-    tools pass the turn's ``HERMES_UI_SESSION_ID`` as ``sid``. `_emit` is thread-safe."""
-    global _desktop_ui_wired
-    from tools.process_registry import process_registry
-
-    def _owner_sid(session) -> str:
-        # session may be None (process already finished/pruned) — the tab can still linger and be closed.
-        session_key = str(getattr(session, "session_key", "") or "") if session is not None else ""
-        if not session_key:
-            return ""
-        with _sessions_lock:
-            return next((sid for sid, s in _sessions.items() if str(s.get("session_key") or "") == session_key), "")
-    if getattr(process_registry, "on_output", None) is None:
-        process_registry.on_output = lambda session, chunk: _emit(
-            "agent.terminal.output", _owner_sid(session), {"process_id": session.id, "chunk": chunk})
-    if getattr(process_registry, "on_close", None) is None:
-        process_registry.on_close = lambda session, pid: _emit("terminal.close", _owner_sid(session), {"process_id": pid})
-    if not _desktop_ui_wired:
-        with contextlib.suppress(Exception):
-            from tools import desktop_ui
-            desktop_ui.set_emitter(lambda sid, event, payload: _emit(event, sid, payload))
-            _desktop_ui_wired = True
-
-
 # (stop_event, thread) for every poller started in this process, pruned of dead threads on each spawn. Test teardowns
 # reap leaked pollers through it: an unjoined poller steals events off the process-global queue in a LATER test.
 _notification_pollers: list = []
@@ -871,7 +842,6 @@ _notification_pollers: list = []
 
 def _start_notification_poller(sid: str, session: dict) -> threading.Event:
     """Start the background notification poller for a TUI session (thread name is greppable)."""
-    _wire_desktop_sinks()
     stop = threading.Event()
     t = threading.Thread(target=_notification_poller_loop, args=(stop, sid, session), daemon=True, name=f"tui-notif-poller-{sid}")
     _notification_pollers[:] = [(s, th) for (s, th) in _notification_pollers if th.is_alive()] + [(stop, t)]
@@ -880,21 +850,11 @@ def _start_notification_poller(sid: str, session: dict) -> threading.Event:
 
 
 def _hud_surface_note(session: dict) -> str:
-    """The per-surface note for this turn ("" for the plain app window): HUD -> the read-the-window-below
-    prior; voice-live -> the spoken-delegation contract with the recent transcript."""
+    """The per-surface note for this turn ("" for the plain app window): barge-in and the
+    spoken-delegation contract with the recent transcript for a live-voice turn."""
     from gateway.session_surface import surface_note
-    surface, agent = session.get("client_surface"), session.get("agent")
-    direct = getattr(agent, "valid_tool_names", None) or set()
-    if surface == "hud":
-        from tools.tool_search_catalog import TOOL_CALL_NAME
-        if TOOL_CALL_NAME in direct:
-            # Tool search defers the desktop tools by default: they stay callable through the
-            # tool_call bridge, so the HUD note must count them and name the bridge (main 312f6bc2fd6).
-            from agent.prompt_builder import hud_surface_note
-            from agent.tool_executor import _tool_search_scoped_names
-            return hud_surface_note(direct, _tool_search_scoped_names(agent))
-    committed = {"surface": surface, "voice_context": session.get("voice_live_context")}
-    return surface_note(committed, direct)
+    committed = {"surface": session.get("client_surface"), "voice_context": session.get("voice_live_context")}
+    return surface_note(committed, getattr(session.get("agent"), "valid_tool_names", None) or set())
 
 
 def _prepend_note(run_message: Any, note: str) -> Any:

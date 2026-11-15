@@ -139,16 +139,6 @@ def _emit_reasoning_delta(sid: str, text: str) -> None:
 
 
 def _agent_cbs(sid: str) -> dict:
-    # Late import: bind_module rebinds this function to server.py's globals and skips plain imports.
-    from tui_gateway.theme_bridge import theme_request
-
-    def _read_block(method: str, timeout: int):
-        # read_terminal / read_preview (desktop GUI): server request like clarify; the preview
-        # read gets longer since a URL tab extracts text from a live page.
-        return lambda start=None, count=None: _ask(
-            method, sid, {k: v for k, v in (("start", start), ("count", count)) if v is not None},
-            timeout=timeout)
-
     callbacks = {
         "tool_start_callback": lambda tc_id, name, args: _on_tool_start(sid, tc_id, name, args),
         "tool_complete_callback": lambda tc_id, name, args, result: _on_tool_complete(sid, tc_id, name, args, result),
@@ -166,22 +156,10 @@ def _agent_cbs(sid: str) -> dict:
         "notice_callback": lambda n: _agent_notice_update(sid, n),
         "notice_clear_callback": lambda key: _emit("notification.clear", sid, {"key": key}),
         "clarify_callback": lambda questions: _clarify_block(sid, questions),
-        "read_terminal_callback": _read_block("terminal.read", 30),
-        "read_preview_callback": _read_block("preview.read", 45),
-        # drive_preview / annotate_preview (desktop GUI): same budget as the preview read it ends with.
-        # The probe ladder lives in server.py (_preview_action_request) so an
-        # absent renderer fails fast instead of burning 45s per action (#94272).
-        "drive_preview_callback": lambda payload: _preview_action_request(sid, dict(payload)),
-        # read_window_below (desktop GUI): main process enumerates native windows.
-        "read_window_below_callback": lambda: _ask("window.read", sid, {}, timeout=30),
         # manage_connections card. Fire-and-forget: the tool thread waits on its own operation
         # (tools/connectors/run.py), and the card drives it through connection.respond by op_id.
         "connection_callback": lambda payload: _emit("connection.request", sid, dict(payload)) and None,
-        # tour (desktop GUI): renderer drives driver.js and answers the ``tour`` request.
-        "tour_callback": lambda payload: _tour_request(sid, payload),
-        # set_theme (desktop GUI): theme.apply with the tour probe ladder, or a theme.pick card.
-        "theme_callback": lambda payload: theme_request(sid, payload),
-        "setup_beat_callback": lambda payload: _setup_beat_request(sid, payload)}
+    }
 
     # Interim assistant commentary (text alongside tool calls), gated on display.interim_assistant_
     # messages; _run_prompt_submit overwrites it per turn and clears it so a stale closure can't fire.
@@ -196,7 +174,7 @@ def _apply_project_workspace(task_id: str, path: str, _name: str = "") -> None:
     and push session.info. The ONLY auto-cwd path — an explicit tool call, never a `cd`."""
     if not path:
         return
-    # task_id is the durable session_key; _sessions (and desktop event routing) key by sid.
+    # task_id is the durable session_key; _sessions (and event routing) key by sid.
     key = str(task_id or "")
     with _sessions_lock:
         sid, session = (key, _sessions[key]) if key in _sessions else next(
@@ -360,7 +338,7 @@ def _load_fallback_model():
 
 def _load_prefill_messages() -> list:
     """Configured prefill messages, resolved like the CLI (env > ``prefill_messages_file`` > legacy
-    ``agent.*``). Desktop/TUI agents never run the CLI bootstrap, so without this the setting was
+    ``agent.*``). TUI agents never run the CLI bootstrap, so without this the setting was
     ignored there (#60456). Relative paths resolve against the active profile home, per call."""
     from hermes_cli.cli_config_load import _load_prefill_messages as _load, _resolve_prefill_messages_file
     from hermes_constants import get_hermes_home
@@ -370,7 +348,7 @@ def _load_prefill_messages() -> list:
 def _sync_agent_fallback_with_config(sid: str, session: dict) -> None:
     """Adopt ``fallback_providers`` edits into the cached agent at turn start.
 
-    Desktop/TUI chats keep one agent across turns, and ``_make_agent`` reads the chain once: a chat
+    TUI chats keep one agent across turns, and ``_make_agent`` reads the chain once: a chat
     opened before ``hermes fallback add`` kept an empty chain forever and a provider-quota 429 ended in
     a provider error with a healthy fallback configured (#95066). Same per-turn contract the messaging
     gateway applies to its cached agents (``GatewayRunner._refresh_fallback_model``): the config is

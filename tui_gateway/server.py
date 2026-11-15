@@ -181,8 +181,7 @@ _DETAIL_MODES = frozenset({"hidden", "collapsed", "expanded"})
 # Desktop-polled and under GIL pressure block the WS read loop (false "needs setup", stalled
 # interrupts); voice.*/wake.* = SYNCHRONOUS faster-whisper install (300s); session.workspace.move =
 # git subprocess probes on an arbitrary (maybe slow) mount; session.save = a full stored-session read + JSON
-# render (up to sessions.max_export_messages rows, ~0.8s at the default cap); onboarding.start = session
-# creation + a prompt.submit; onboarding.state = a bounded wait on the boot-time due answer.
+# render (up to sessions.max_export_messages rows, ~0.8s at the default cap).
 _LONG_HANDLERS = frozenset({
     "session.foreign.list", "session.foreign.preview", "session.foreign.import",
     "billing.state", "subscription.state", "subscription.preview", "subscription.change",
@@ -198,7 +197,7 @@ _LONG_HANDLERS = frozenset({
     "setup.runtime_check", "setup.status", "free_tier.provision", "voice.toggle", "voice.record", "voice.tts", "wake.start",
     "wake.status", "session.active_list", "session.branch", "session.compress", "session.list",
     "session.resume", "session.save", "session.workspace.move", "shell.exec", "skills.manage", "slash.exec",
-    "onboarding.start", "onboarding.state", "subagent.roster",
+    "subagent.roster",
     "command.dispatch",  # /goal draft invokes the auxiliary model; never block the RPC reader
     "shared_metrics.set",  # consent reconcile waits on the metrics store's write lock
 })
@@ -675,7 +674,7 @@ def _open_requests(sid: str) -> list[dict]:
     if (session := _sessions.get(sid)) is not None:
         with session.get("history_lock", threading.Lock()):
             mirrored = session.get("_compute_host_open_request")
-            return [dict(mirrored)] if isinstance(mirrored, dict) and mirrored.get("replayable", True) else []
+            return [dict(mirrored)] if isinstance(mirrored, dict) else []
     return []
 
 
@@ -967,7 +966,7 @@ def _enable_gateway_prompts() -> None:
 
 
 def _ask(method: str, sid: str, params: dict, timeout: float | None = 300) -> str:
-    """Server→client request whose answer is one string under ``value`` (sudo, secret, vault prompts, GUI reads,
+    """Server→client request whose answer is one string under ``value`` (sudo, secret, vault prompts,
     MCP setup). Empty string when the renderer skipped, timed out, or was cancelled."""
     from tui_gateway import server_requests
     result = server_requests.send(method, sid, params, timeout=timeout)
@@ -977,7 +976,7 @@ def _ask(method: str, sid: str, params: dict, timeout: float | None = 300) -> st
 
 
 def _clarify_timeout_seconds() -> float | None:
-    """Clarify wait for the TUI/desktop bridge from the canonical config (gateway/CLI parity); 300s
+    """Clarify wait for the TUI bridge from the canonical config (gateway/CLI parity); 300s
     historical default if config can't be read; ``<= 0`` = unlimited → None (never auto-skip)."""
     with contextlib.suppress(Exception):
         from tools.clarify_gateway import get_clarify_timeout
@@ -996,110 +995,6 @@ def _clarify_block(sid: str, questions: list[dict]) -> dict:
     result = server_requests.send("clarify", sid, {"questions": wire}, timeout=_clarify_timeout_seconds(),
                                   qids=[e["qid"] for e in questions])
     return result or {"answers": {}, "outcome": "undelivered"}
-
-
-# A tour action is a DOM op the renderer answers in ms; the generous deadline exists only because a
-# preview tour's first action injects the engine into a live page.
-_TOUR_TIMEOUT_S = 45
-# Until a session's client has proven it answers at all, hold it to a deadline a working renderer cannot miss.
-_TOUR_PROBE_TIMEOUT_S = 10
-
-_TOUR_BRIDGE_UNAVAILABLE = json.dumps({
-    "success": False,
-    "error": ("No Hermes Desktop window answered the tour request. The tour is driven by the desktop app's "
-              "renderer, which updates separately from this backend, so an app build older than the tour tool "
-              "has nothing listening. Update the Hermes Desktop app and start a new session. Do not retry tour "
-              "in this session.")})
-
-
-def _tour_request(sid: str, payload: dict) -> str:
-    """Bridge the tour tool callback onto a ``tour`` server request without paying for a client that cannot answer: against
-    an older app nobody answers ``tour`` and each action would block the full deadline, stacking per
-    turn. First action per session gets the short probe deadline; unanswered → bridge marked unavailable
-    for that session; once answered, the full deadline. Verdict lives on the record, so a new session re-probes.
-
-    The renderer's ``tour`` handler ships in the desktop bundle, but the tool is offered by this
-    backend — and the two update on different clocks. The model then does what the schema tells it to and
-    tries the next action, so a single "give me a tour" turn stacks those waits (the timeouts reported
-    against #89620).
-    """
-    session = _sessions.get(sid)
-    if session is None:  # detached caller: throwaway record, plain bridge, unprobed ({} is falsy but a REAL record)
-        session = {}
-    state = session.get("tour_bridge")
-    if state == "unanswered":
-        return _TOUR_BRIDGE_UNAVAILABLE
-    answer = _ask("tour", sid, dict(payload),
-                  timeout=_TOUR_TIMEOUT_S if state == "answered" else _TOUR_PROBE_TIMEOUT_S)
-    if answer:
-        session["tour_bridge"] = "answered"
-    elif state != "answered":
-        session["tour_bridge"] = "unanswered"
-    return answer or _TOUR_BRIDGE_UNAVAILABLE
-
-
-_PREVIEW_ACTION_TIMEOUT_S = 45
-# Until a session's client has proven it answers preview.act at all, hold it to a
-# deadline a working renderer cannot miss (same ladder as the tour probe).
-_PREVIEW_ACTION_PROBE_TIMEOUT_S = 10
-# An unanswered probe condemns the bridge only until the cooldown expires: the
-# renderer may attach late (app launched after the turn started). One caller at
-# a time re-probes; concurrent siblings fail fast instead of stacking waits.
-_PREVIEW_ACTION_REPROBE_COOLDOWN_S = 30
-
-_PREVIEW_ACTION_BRIDGE_UNAVAILABLE = json.dumps({
-    "success": False,
-    "error": ("No Hermes Desktop window answered the preview action request. The drive_preview / "
-              "annotate_preview bridge is served by the desktop app's renderer, which updates "
-              "separately from this backend, so an app build older than the tool has nothing "
-              "listening. Update the Hermes Desktop app, open a page with open_preview, and try "
-              "again in this session after a short cooldown.")})
-
-# One in-flight cooldown-expiry reprobe per session: concurrent callers fail fast.
-_preview_action_reprobe: dict[str, object] = {}
-_preview_action_reprobe_lock = threading.Lock()
-
-
-def _preview_action_request(sid: str, payload: dict) -> str:
-    """Bridge the drive_preview / annotate_preview callback onto a ``preview.act`` server request
-    without paying for a client that cannot answer: against an older app (or a session no window
-    hosts, #94272 / #119333) nobody answers ``preview.act`` and each action would block the full
-    deadline, stacking per turn exactly like the tour timeouts (#89620). First action per session
-    gets the short probe deadline; unanswered → bridge marked unavailable for that session with a
-    cooldown-gated reprobe; once answered, the full deadline. The verdict lives on the session
-    record, so a new session re-probes. Interrupt ≠ timeout: a cancelled wait (Stop, session close)
-    returns without poisoning the state, because ``send()``'s None conflates the two and only the
-    cooldown-reprobe token distinguishes an in-flight probe — so state flips only through it.
-    """
-    with _sessions_lock:
-        session = _sessions.get(sid)
-        if session is None:
-            # detached caller: throwaway record, plain bridge, unprobed ({} is falsy but a REAL record)
-            session = {}
-        state = session.get("preview_action_bridge")
-        now = time.monotonic()
-        if state == "unanswered" and now < session.get("preview_action_bridge_retry_at", 0):
-            return _PREVIEW_ACTION_BRIDGE_UNAVAILABLE
-        if state == "unanswered":
-            with _preview_action_reprobe_lock:
-                if _preview_action_reprobe.get(sid) is not None:
-                    return _PREVIEW_ACTION_BRIDGE_UNAVAILABLE
-                _preview_action_reprobe[sid] = object()
-                session["preview_action_bridge_retry_at"] = now + _PREVIEW_ACTION_REPROBE_COOLDOWN_S
-    try:
-        answer = _ask("preview.act", sid, dict(payload),
-                      timeout=_PREVIEW_ACTION_TIMEOUT_S if state == "answered" else _PREVIEW_ACTION_PROBE_TIMEOUT_S)
-    finally:
-        if state == "unanswered":
-            with _preview_action_reprobe_lock:
-                _preview_action_reprobe.pop(sid, None)
-    with _sessions_lock:
-        if answer:
-            session["preview_action_bridge"] = "answered"
-        elif session.get("preview_action_bridge") != "answered":
-            session["preview_action_bridge"] = "unanswered"
-            session["preview_action_bridge_retry_at"] = time.monotonic() + _PREVIEW_ACTION_REPROBE_COOLDOWN_S
-    return answer or _PREVIEW_ACTION_BRIDGE_UNAVAILABLE
 
 
 def _clear_pending(sid: str | None = None) -> None:
@@ -2022,7 +1917,7 @@ from . import (
     methods_vault as _methods_vault, methods_free_tier as _methods_free_tier,
     methods_connectors as _methods_connectors, methods_connectors_account as _methods_connectors_account,
     methods_display as _methods_display, methods_display_watch as _methods_display_watch,
-    methods_onboarding as _methods_onboarding, methods_i18n as _methods_i18n, methods_machine as _methods_machine,
+    methods_i18n as _methods_i18n, methods_machine as _methods_machine,
     methods_shared_metrics as _methods_shared_metrics, methods_plugin_catalog as _methods_plugin_catalog)
 
 for _m in (
@@ -2035,7 +1930,7 @@ for _m in (
     _methods_config_set, _methods_complete, _methods_tools, _methods_tools_plugin_servers, _methods_profiles, _methods_images,
     _methods_bot_relay, _prompt_turn, _billing_view, _methods_projects, _methods_session_foreign,
     _methods_session_control, _methods_subagents, _methods_vault, _methods_free_tier, _methods_connectors,
-    _methods_connectors_account, _methods_display, _methods_display_watch, _methods_onboarding,
+    _methods_connectors_account, _methods_display, _methods_display_watch,
     _methods_i18n, _methods_machine, _methods_shared_metrics, _methods_plugin_catalog):
     _m.register(sys.modules[__name__])
 del _m
