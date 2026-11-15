@@ -13,7 +13,7 @@ async def test_reset_lineage_counts_as_one_conversation(reset_lineage):
     listed = db.list_sessions_rich(limit=50)
     assert [r['id'] for r in listed] == [reset_lineage.s1]
     assert db.session_count(exclude_children=True) == len(listed) == 1
-    assert db.session_count_by_source(exclude_children=True) == {'gui': 1}
+    assert db.session_count_by_source(exclude_children=True) == {'tui': 1}
     # The raw row count (exclude_children=False) still sees both physical rows.
     assert db.session_count() == 2
 

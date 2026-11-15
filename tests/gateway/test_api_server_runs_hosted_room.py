@@ -118,7 +118,7 @@ class TestHostedRoomRuns:
         assert resolve_all_body["error"]["code"] == "invalid_approval_scope"
 
     @pytest.mark.asyncio
-    async def test_invitation_uses_validated_app_managed_local_catalog(
+    async def test_invitation_uses_validated_local_catalog(
         self, auth_adapter, monkeypatch
     ):
         monkeypatch.setenv("HERMES_DESKTOP", "1")
@@ -140,7 +140,8 @@ class TestHostedRoomRuns:
             )
             body = await invitation.json()
         assert invitation.status == 201
-        assert body["catalog"]["persistent_process"] is False
+        # The Desktop env marker no longer downgrades the advertised catalog.
+        assert body["catalog"]["persistent_process"] is True
         assert body["catalog"]["link_modes"] == ["direct"]
         assert body["catalog"]["endpoint"] == {
             "available": True,

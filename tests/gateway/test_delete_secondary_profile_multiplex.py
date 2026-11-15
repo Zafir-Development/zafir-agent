@@ -31,7 +31,7 @@ async def test_delete_of_secondary_profile_session_does_not_409(tmp_path, monkey
         actor = SessionActor('owner', authority.profile_id,
                           frozenset({'session:create', 'session:read', 'session:control'}), 'socket')
         with _profile_runtime_scope(home, {}):
-            ref = create_local_session(authority, actor, {'request_id': 'r', 'source': 'gui',
+            ref = create_local_session(authority, actor, {'request_id': 'r', 'source': 'tui',
                                                           'cwd': str(tmp_path), 'model': 'frozen', 'toolsets': []})
             # A messaging key routed at this session, published to the launch store's durable
             # index — the shape that survives deletes a user actually observes (#138862).
@@ -91,7 +91,7 @@ async def test_a_stale_routing_save_cannot_restore_a_deleted_secondary_route(tmp
         store = runner.session_store
         key = 'agent:main:telegram:222'
         with _profile_runtime_scope(home, {}):
-            ref = create_local_session(authority, actor, {'request_id': 'r', 'source': 'gui',
+            ref = create_local_session(authority, actor, {'request_id': 'r', 'source': 'tui',
                                                           'cwd': str(tmp_path), 'model': 'frozen', 'toolsets': []})
             now = datetime.now(UTC)
             store._entries[key] = SessionEntry(session_key=key, session_id=ref.session_id,

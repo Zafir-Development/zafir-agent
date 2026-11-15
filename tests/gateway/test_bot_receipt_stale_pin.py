@@ -175,7 +175,7 @@ async def test_a_committed_pin_on_a_deleted_bot_chat_is_kept_and_the_resend_does
     await recover_bot_deliveries(bot.authority)
     assert path.exists()
     chat = create_local_session(bot.authority, bot.connection.actor, {
-        'request_id': 'bot2', 'source': 'gui', 'cwd': str(bot.home), 'model': 'fixture', 'toolsets': []})
+        'request_id': 'bot2', 'source': 'tui', 'cwd': str(bot.home), 'model': 'fixture', 'toolsets': []})
     title_new_session(bot.authority, chat, 'Bot Chat')
     with pytest.raises(RuntimeStoreError, match='unknown_execution'):
         await deliver(bot.connection, dict(id=KEY, profile='default', message='run once'))

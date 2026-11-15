@@ -37,7 +37,7 @@ it('launches as tui with main\'s params and wording when no identity is given', 
 })
 
 it('launches with another advertised source and refuses an unadvertised one in neutral words', () => {
-  expect(canonicalRequest('session.create', { request_id: 'r', source: 'gui' }, owner, undefined, { source: 'cli' }).params)
+  expect(canonicalRequest('session.create', { request_id: 'r', source: 'acp' }, owner, undefined, { source: 'cli' }).params)
     .toEqual({ request_id: 'r', source: 'cli' })
   expect(refusal(() => canonicalRequest('session.create', {}, owner, undefined, { source: 'tool' })))
     .toBe('gateway does not support tool session policy; update/restart the gateway')

@@ -1,8 +1,8 @@
-"""The core-tool-deferral worker's host sandbox (evals/core_tool_deferral/sandbox.py).
+"""The eval host sandbox (``evals/host_sandbox.py``).
 
 A past live run let agents install real nightly cron jobs and write scripts into the
 operator's real ~/.hermes. The contract: after isolate_host, a child shell's crontab and
-HOME both resolve inside the run dir.
+HOME both resolve inside the run dir. Shared by the prefix_rediet worker.
 """
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from evals.core_tool_deferral.sandbox import isolate_host
+from evals.host_sandbox import isolate_host
 
 
 @pytest.mark.platforms("posix")  # the crontab shim is a POSIX sh script

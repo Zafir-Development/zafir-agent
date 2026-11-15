@@ -57,14 +57,14 @@ SURFACES = (
     ("cli.gemini", "cli", "gemini", False),
     ("cli.hermes", "cli", "hermes", False),
     ("cli-code.claude", "cli", "claude", True),
-    ("desktop.claude", "desktop", "claude", False),
+    ("tui.claude", "tui", "claude", False),
     ("telegram.claude", "telegram", "claude", False),
     ("discord.claude", "discord", "claude", False),
     ("cron.claude", "cron", "claude", False),
 )
-# Desktop resolves toolsets in tui_gateway (client-surface toolsets folded in); the gateway, cron
+# The TUI resolves toolsets in tui_gateway (client-surface toolsets folded in); the gateway, cron
 # and classic CLI read the platform toolsets directly.
-TUI_GATEWAY_PLATFORMS = ("desktop",)
+TUI_GATEWAY_PLATFORMS = ("tui",)
 FIXED_NOW = datetime(2026, 1, 15, 12, 0, 0, tzinfo=UTC)
 # ``Conversation started:`` reads the stamp embedded in the session id.
 SESSION_ID = FIXED_NOW.strftime("%Y%m%d_%H%M%S") + "_prompt_surface"
@@ -79,6 +79,12 @@ def _pin_environment() -> None:
     socket.socket.connect = refuse  # type: ignore[method-assign]
     socket.create_connection = refuse  # type: ignore[assignment]
     socket.getaddrinfo = refuse  # type: ignore[assignment]
+    # Freeze the host config vars BEFORE the OS pin: ``zoneinfo`` (imported by ``hermes_time``)
+    # reads ``TZPATH`` through ``sysconfig`` lazily, and a first read after ``sys.platform`` moved
+    # would ask for ``_sysconfigdata__linux_<host>``, which does not exist off a Linux host.
+    import sysconfig
+    sysconfig.get_config_vars()
+    import psutil  # side effect only: its native backend is chosen at import; import before the OS pin
     sys.platform = "linux"  # skills index ``platforms:`` gate
 
     import hermes_time
@@ -107,11 +113,19 @@ class _ImportFailures(logging.Handler):
 
 def _scrub(text: str, home: Path) -> str:
     import platform as _platform
-    for raw, token in sorted({
-        str(home / ".hermes"): "<HERMES_HOME>",
-        str(home): "<HOME>",
-        f"{_platform.system()} ({_platform.release()})": "<HOST_OS>",
-    }.items(), key=lambda kv: -len(kv[0])):
+    home_forms = {str(home)}
+    # macOS hands the child ``/var/...`` through $HOME while ``resolve()`` yields ``/private/var/...``;
+    # scrub both spellings so a laptop render carries the same tokens as the Linux runner.
+    env_home = os.environ.get("HOME", "")
+    if env_home:
+        home_forms.add(env_home.rstrip("/"))
+        home_forms.add(str(Path(env_home).absolute()))
+    pairs = {}
+    for form in home_forms:
+        pairs[f"{form}/.hermes"] = "<HERMES_HOME>"
+        pairs[form] = "<HOME>"
+    pairs[f"{_platform.system()} ({_platform.release()})"] = "<HOST_OS>"
+    for raw, token in sorted(pairs.items(), key=lambda kv: -len(kv[0])):
         text = text.replace(raw, token)
     return text
 

@@ -54,7 +54,7 @@ async def test_edit_policy_is_a_durable_session_setting_every_viewer_reads(tmp_p
             'editor': {'mcp_servers': [], 'edit_approval_policy': 'ask'}}})
         sid = created['result']['session_id']
         gui = (await editor.dispatch({'id': 2, 'method': 'session.create', 'params': {
-            'request_id': 'gui', 'source': 'gui', 'cwd': str(tmp_path), 'model': 'frozen'}}))['result']['session_id']
+            'request_id': 'gui', 'source': 'tui', 'cwd': str(tmp_path), 'model': 'frozen'}}))['result']['session_id']
         # A client that never sets it keeps main's default: every edit asks.
         assert (await _info(editor, sid))['edit_approval_policy'] == 'ask'
         live = first.sessions[sid]

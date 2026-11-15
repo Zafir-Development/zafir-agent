@@ -55,7 +55,7 @@ def _legacy(monkeypatch, db):
     turns, emitted = [], []
     monkeypatch.setattr(server, "_run_after_agent_ready", lambda *a: turns.append(a[1]))
     monkeypatch.setattr(server, "_emit", lambda event, sid, payload=None: emitted.append((event, sid, payload)) or True)
-    created = server.handle_request({"id": "c", "method": "session.create", "params": {"source": "desktop"}})
+    created = server.handle_request({"id": "c", "method": "session.create", "params": {"source": 'tui'}})
     return created["result"]["session_id"], created["result"]["stored_session_id"], turns, emitted
 
 

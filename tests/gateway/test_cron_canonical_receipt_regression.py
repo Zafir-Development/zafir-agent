@@ -58,7 +58,7 @@ def canonical_bot(tmp_path, monkeypatch):
 
     async def prepare(desc):
         async with websocket(home, desc) as ws:
-            created = await rpc(ws, 'session.create', request_id='cron-target', source='gui',
+            created = await rpc(ws, 'session.create', request_id='cron-target', source='tui',
                                 cwd=str(home), toolsets=[])
             assert 'result' in created, created
             sid = created['result']['session_id']

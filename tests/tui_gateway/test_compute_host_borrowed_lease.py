@@ -58,7 +58,7 @@ def _stub_agent(deltas: list[str]) -> types.SimpleNamespace:
 
 def _make_frame(sid: str, **overrides) -> dict:
     frame = {"type": "turn.start", "sid": sid, "request_id": "turn", "text": "hello",
-             "session_key": "s1-key", "source": "desktop", "cols": 80, "history": []}
+             "session_key": "s1-key", "source": 'tui', "cols": 80, "history": []}
     frame.update(overrides)
     return frame
 

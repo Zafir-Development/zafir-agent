@@ -197,7 +197,7 @@ def test_compute_host_child_turn_reopens_a_finalized_row(tmp_path, monkeypatch):
     host = ComputeHost(stdout=out, heartbeat_secs=0)
     try:
         host.handle_frame({"type": "turn.start", "sid": "child-sid", "request_id": "t",
-                           "text": "hello", "session_key": "finalized", "source": "desktop"})
+                           "text": "hello", "session_key": "finalized", "source": 'tui'})
         _wait_for(out, lambda f: f["type"] == "turn.end", timeout=10.0)
         row = db.get_session("finalized")
         assert row["ended_at"] is None, (

@@ -99,7 +99,7 @@ async def probe():
     session_stored_reads._window = counted
     try:
         async with socket('owner') as ws, socket('peer_operator') as peer:
-            created = await rpc(ws, 'session.create', request_id='transcript-owner', source='gui', toolsets=[])
+            created = await rpc(ws, 'session.create', request_id='transcript-owner', source='tui', toolsets=[])
             sid = created['result']['session_id']
             live = authority.sessions[sid]
             target = physical_target(authority, SessionRef(str(home), sid))

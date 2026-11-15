@@ -414,6 +414,7 @@ async def test_runtime_describe_lists_client_env(tmp_path, monkeypatch):
         owner.db.close()
 
 
+@pytest.mark.platforms("not macos")  # macOS spawns the daemon as a launchd job (env in the plist)
 def test_auto_started_gateway_does_not_inherit_client_behaviour_env(tmp_path, monkeypatch):
     from hermes_cli import gateway_runtime_start
     home = tmp_path / 'home'

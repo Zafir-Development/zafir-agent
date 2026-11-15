@@ -42,7 +42,7 @@ def _refusal(params, cfg=None, **kwargs):
     ({'source': 'cli', 'reasoning': 'galaxy'}, 'reasoning'),
     ({'source': 'cli', 'toolsets': 'terminal'}, 'toolsets'),                   # not a list
     ({'source': 'cli', 'toolsets': ['terminal', 'gone_plugin']}, 'toolsets'),  # unknown name
-    ({'source': 'cli', 'toolsets': ['desktop_ui']}, 'toolsets'),               # Desktop-only
+    ({'source': 'cli', 'toolsets': ['no-such-toolset']}, 'toolsets'),
     ({'source': 'cli', 'skills': []}, 'skills'),                               # empty list
     ({'source': 'cli', 'skills': ['porting'], 'safe_mode': True}, 'skills'),   # bypass launch
     ({'source': 'cli', 'editor': {}}, 'editor'),                               # ACP-only launch key

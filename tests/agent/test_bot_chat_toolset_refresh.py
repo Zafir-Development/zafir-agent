@@ -37,7 +37,7 @@ def _stale_bot_chat_agent(platform: str):
 
 
 def _run_stale_refresh(agent):
-    builder = MagicMock(return_value=["terminal", "file", "desktop_ui"])
+    builder = MagicMock(return_value=["terminal", "file", "project"])
     with (
         patch("tools.bot_mode_probe.stored_prompt_capability_stale", return_value=True),
         patch("tui_gateway.server._load_enabled_toolsets", builder),
@@ -59,7 +59,7 @@ def test_stale_epoch_rebuilds_tools_through_the_surface_builder():
 
     builder.assert_called_once_with("desktop")
     kwargs = refresh.call_args.kwargs
-    assert kwargs["enabled_override"] == ["terminal", "file", "desktop_ui"]
+    assert kwargs["enabled_override"] == ["terminal", "file", "project"]
     assert kwargs["disabled_override"] == ["computer_use"]
     assert not kwargs.get("preserve_prefix")
     assert db.update_session_tool_names.called

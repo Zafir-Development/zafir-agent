@@ -56,7 +56,7 @@ def _create_desktop_session(transport, tmp_path) -> tuple[dict, str, str]:
     try:
         resp = server.handle_request({
             "id": "1", "method": "session.create",
-            "params": {"cols": 80, "source": "desktop", "cwd": str(tmp_path)},
+            "params": {"cols": 80, "source": 'tui', "cwd": str(tmp_path)},
         })
         sid = resp["result"]["session_id"]
         return dict(server._sessions[sid]), sid, resp["result"]["stored_session_id"]

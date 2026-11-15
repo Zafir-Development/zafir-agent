@@ -14,6 +14,7 @@ import threading
 import time
 import types
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from tools.delegate_tool import (
@@ -292,7 +293,6 @@ class TestDelegateTask(unittest.TestCase):
         ``parent_session_id`` lineage and ``session_search``.
         """
         import tempfile
-        from pathlib import Path
 
         with tempfile.TemporaryDirectory() as tmp:
             profile_db_path = Path(tmp) / "profile-work" / "state.db"
@@ -321,9 +321,7 @@ class TestDelegateTask(unittest.TestCase):
                 child_db = kwargs["session_db"]
                 self.assertIsInstance(child_db, SessionDB)
                 self.assertIsNot(child_db, parent_db)
-                self.assertEqual(
-                    str(child_db.db_path), str(parent_db.db_path)
-                )
+                self.assertEqual(Path(child_db.db_path).resolve(), Path(parent_db.db_path).resolve())
             finally:
                 if child_db is not None:
                     child_db.close()

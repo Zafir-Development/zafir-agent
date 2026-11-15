@@ -39,7 +39,7 @@ async def test_only_the_local_cli_owner_may_submit_an_unattended_turn(monkeypatc
     operator = AuthorityConnection(authority, object(), {'user_id': 'verified'}, operator=True)
     try:
         sessions = {}
-        for name, connection, source in (('cli', cli_owner, 'oneshot'), ('gui', cli_owner, 'gui'),
+        for name, connection, source in (('cli', cli_owner, 'oneshot'), ('tui', cli_owner, 'tui'),
                                          ('dashboard', dashboard, 'cli')):
             created = await _rpc(connection, 'session.create', request_id=name, source=source, cwd=str(home),
                                  toolsets=[])
@@ -52,7 +52,7 @@ async def test_only_the_local_cli_owner_may_submit_an_unattended_turn(monkeypatc
                         text='rm -rf', finite=True, unattended=True)
         accepted = await submit(cli_owner, 'cli', 'own-oneshot')
         assert accepted['result']['status'] == 'queued', accepted
-        for connection, name, request_id in ((cli_owner, 'gui', 'desktop-window'),
+        for connection, name, request_id in ((cli_owner, 'tui', 'tui-window'),
                                              (dashboard, 'dashboard', 'dashboard-identity'),
                                              (operator, 'cli', 'operator-attach')):
             refused = await submit(connection, name, request_id)

@@ -30,7 +30,7 @@ async def probe(mode):
 
     try:
         async with socket() as ws, socket('peer_operator') as peer_operator:
-            created = await rpc(ws, 'session.create', request_id='read-owner', source='gui', toolsets=[])
+            created = await rpc(ws, 'session.create', request_id='read-owner', source='tui', toolsets=[])
             assert 'result' in created, created
             sid = created['result']['session_id']
             ref = SessionRef(str(home), sid)

@@ -113,7 +113,7 @@ class _Fleet:
                                       source='cli', cwd=str(self.homes['beta']))
         # gamma: an ordinary chat first, then the Desktop's own mint on a bot's first click
         # (canonical-chat.ts), born hidden and newer.
-        visible = await self.call(desktop, 'session.create', profile='gamma', request_id='side', source='gui')
+        visible = await self.call(desktop, 'session.create', profile='gamma', request_id='side', source='tui')
         minted = await self.call(desktop, 'session.create', profile='gamma', title='Bot Chat',
                                  hidden=True, follow_profile_config=True)
         self.gamma_chat = visible['stored_session_id']

@@ -29,7 +29,7 @@ async def test_scalar_model_config_creates_sessions(tmp_path, monkeypatch):
 
     async def create(request_id, **params):
         reply = await connection.dispatch({'id': 1, 'method': 'session.create', 'params': {
-            'request_id': request_id, 'source': 'gui', 'cwd': str(tmp_path), **params}})
+            'request_id': request_id, 'source': 'tui', 'cwd': str(tmp_path), **params}})
         assert 'result' in reply, reply
         return restore_policy(local_receipt(authority.db, reply['result']['session_id'])['policy'])
 

@@ -237,22 +237,6 @@ describe('JsonRpcRequestChannel', () => {
     expect(sent).toHaveLength(1)
   })
 
-  it('says it is the local Desktop first on the socket, in a call of its own', () => {
-    let local = true
-    const channel = new JsonRpcRequestChannel({ desktopLocal: () => local, requestIdPrefix: 'c' })
-    const { sent, transport } = spyTransport()
-    const params = () => sent.map(frame => JSON.parse(frame).params)
-
-    channel.attach(transport)
-    void channel.request('onboarding.state', { assume_fresh: true }).catch(() => undefined)
-    channel.handleFrame(JSON.stringify({ jsonrpc: '2.0', method: 'event', params: { type: 'gateway.ready', payload: {} } }))
-    expect(params()).toEqual([{ desktop_local: true }, { assume_fresh: true }, { server_requests: true }])
-
-    local = false
-    channel.attach(spyTransport().transport)
-    expect(params()).toHaveLength(3)
-  })
-
   it('sends a not-shown decline only to a backend that advertised counting it', async () => {
     // An older backend settles a request on the first error frame, so a bystander window's decline
     // would beat the owner's answer (#113348): there `decline` must stay silent.
@@ -263,13 +247,13 @@ describe('JsonRpcRequestChannel', () => {
       channel.handleFrame(JSON.stringify({ jsonrpc: '2.0', method: 'event', params: { type: 'gateway.ready', payload: {} } }))
 
     const ask = (id: string) =>
-      channel.handleFrame(JSON.stringify({ id, jsonrpc: '2.0', method: 'preview.read', params: { session_id: 's1' } }))
+      channel.handleFrame(JSON.stringify({ id, jsonrpc: '2.0', method: 'clarify', params: { session_id: 's1' } }))
 
     channel.attach(transport)
     channel.onRequest(req => void req.decline?.('not here'))
 
     ready()
-    channel.handleFrame(JSON.stringify({ id: last().id, jsonrpc: '2.0', result: { server_requests: ['preview.read'] } }))
+    channel.handleFrame(JSON.stringify({ id: last().id, jsonrpc: '2.0', result: { server_requests: ['clarify'] } }))
     await Promise.resolve()
     ask('srq-old')
     expect(sent).toHaveLength(1)
@@ -294,14 +278,14 @@ describe('JsonRpcRequestChannel', () => {
     channel.onRequest(req => (req.method === 'clarify' ? void req.respond({ answer: 'yes' }) : false))
 
     channel.handleFrame(JSON.stringify({ id: 'srq-1', jsonrpc: '2.0', method: 'clarify', params: { session_id: 's1' } }))
-    channel.handleFrame(JSON.stringify({ id: 'srq-2', jsonrpc: '2.0', method: 'tour', params: { session_id: 's1' } }))
+    channel.handleFrame(JSON.stringify({ id: 'srq-2', jsonrpc: '2.0', method: 'approval', params: { session_id: 's1' } }))
 
     const frames = sent.map(f => JSON.parse(f) as { id: string; result?: unknown; error?: { code: number } })
 
     expect(frames[0]).toEqual({ id: 'srq-1', jsonrpc: '2.0', result: { answer: 'yes' } })
     expect(frames[1].id).toBe('srq-2')
     expect(frames[1].error?.code).toBe(-32601)
-    expect(unhandled).toEqual(['tour'])
+    expect(unhandled).toEqual(['approval'])
   })
 
   it('reports an error frame with no request id (the parse-error reply) instead of dropping it', () => {

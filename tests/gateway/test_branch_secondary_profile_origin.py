@@ -30,7 +30,7 @@ async def test_branch_restart_resume_keeps_source_and_route_for_default_and_seco
             actor = SessionActor('owner', authority.profile_id,
                               frozenset({'session:create', 'session:read', 'session:control'}), 'socket')
             with _profile_runtime_scope(home, {}):
-                ref = create_local_session(authority, actor, {'request_id': 'r', 'source': 'gui', 'cwd': str(tmp_path),
+                ref = create_local_session(authority, actor, {'request_id': 'r', 'source': 'tui', 'cwd': str(tmp_path),
                                                               'model': 'frozen', 'toolsets': []})
                 result = await mutate_session(authority, actor, ref, dict(
                     session_id=ref.session_id, request_id='branch', expected_revision=0,

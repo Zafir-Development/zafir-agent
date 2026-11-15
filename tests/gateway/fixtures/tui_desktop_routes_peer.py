@@ -46,7 +46,7 @@ async def probe(mode):
             # The session's own folder, distinct from the gateway process's cwd.
             work = home / 'session-work'
             work.mkdir(exist_ok=True)
-            created = await rpc(ws, 'session.create', request_id='routes-owner', source='gui', toolsets=[],
+            created = await rpc(ws, 'session.create', request_id='routes-owner', source='tui', toolsets=[],
                                 cwd=str(work))
             assert 'result' in created, created
             sid = created['result']['session_id']
@@ -222,7 +222,7 @@ async def _connection_card(authority, ws, reader, sid, marker, receipt):
     from tools.connectors.gateway.errors import GatewayAuthError
     from tools.connectors.operation import ConnectionOperation, Target
 
-    created = await rpc(ws, 'session.create', request_id='routes-card', source='gui', toolsets=['connections'],
+    created = await rpc(ws, 'session.create', request_id='routes-card', source='tui', toolsets=['connections'],
                         cwd=str(Path(authority.profile_id) / 'session-work'))
     sid = created['result']['session_id']
     owner = {'type': 'session', 'session_id': sid}
@@ -269,7 +269,7 @@ async def _connection_card(authority, ws, reader, sid, marker, receipt):
     assert gated['error']['code'] == 4031 and gated['error']['data']['reason'] == 'CONNECTORS_UNAVAILABLE', gated
     connectors.connectors_available = lambda *a, **k: True
     # A session whose tools leave out manage_connections cannot re-run a target, even with connectors on.
-    toolless = (await rpc(ws, 'session.create', request_id='routes-toolless', source='gui', toolsets=[],
+    toolless = (await rpc(ws, 'session.create', request_id='routes-toolless', source='tui', toolsets=[],
                           cwd=str(Path(authority.profile_id) / 'session-work')))['result']['session_id']
     with _profile_runtime_scope(Path(authority.profile_id)):
         foreign = ConnectionOperation([Target('linear', 'mcp', 'install')], session_key=authority.sessions[toolless].route)

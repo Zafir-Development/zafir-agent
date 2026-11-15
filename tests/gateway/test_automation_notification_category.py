@@ -45,7 +45,7 @@ async def test_bot_category_is_committed_restored_and_part_of_retry_identity(tmp
     _runner, authority = await _authority(tmp_path, monkeypatch)
     actor = SessionActor('test-owner', 'default', frozenset({'session:create', 'session:submit', 'session:read'}), 'fixture')
     try:
-        ref = create_local_session(authority, actor, dict(request_id='bot', source='gui', model='fixture', toolsets=[]))
+        ref = create_local_session(authority, actor, dict(request_id='bot', source='tui', model='fixture', toolsets=[]))
         title_new_session(authority, ref, 'Bot Chat')
         connection = SimpleNamespace(authority=authority, actor=actor)
         params = dict(id='a' * 32, profile='default', message='notice', notification_category=category)

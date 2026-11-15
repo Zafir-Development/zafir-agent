@@ -15,7 +15,7 @@ def test_canonical_desktop_metadata_survives_create_info_and_reattach(tmp_path):
         async def probe():
             async with websocket(home, desc) as creator:
                 created = await rpc(creator, 'session.create', request_id='desktop-metadata',
-                                    source='gui', toolsets=[])
+                                    source='tui', toolsets=[])
                 assert 'result' in created, created
                 sid = created['result']['session_id']
                 created_info = created['result']['info']

@@ -209,7 +209,8 @@ async def test_upgraded_desktop_history_resumes_by_id(tmp_path, monkeypatch):
     assert resumed.get('result', {}).get('session_id') == 'old-desktop', resumed
     assert [m['content'] for m in resumed['result']['messages']] == ['OLD-DESKTOP']
     from gateway.config import Platform
-    assert runner.adapters[Platform.LOCAL].policies['old-desktop'].platform == 'desktop'
+    # The stored row keeps its historical label; the resumed policy runs on the surviving TUI surface.
+    assert runner.adapters[Platform.LOCAL].policies['old-desktop'].platform == 'tui'
     stamped = await native.dispatch({'id': 2, 'method': 'session.resume', 'params': {'session_id': 'old-desktop-account'}})
     assert stamped.get('result', {}).get('session_id') == 'old-desktop-account', stamped
     assert [m['content'] for m in stamped['result']['messages']] == ['OLD-DESKTOP-ACCOUNT']

@@ -56,7 +56,7 @@ def _gateway_prompt(source, cwd):
         return build_system_prompt(agent)
 
 
-@pytest.mark.parametrize("source", ["cli", "tui", "gui", "acp"])
+@pytest.mark.parametrize("source", ["cli", "tui", "acp"])
 def test_gateway_session_in_linked_worktree_carries_isolation_guidance(worktree, source):
     primary, linked = worktree
     prompt = _gateway_prompt(source, linked)

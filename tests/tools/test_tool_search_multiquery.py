@@ -449,8 +449,8 @@ class TestBatchedDescribe:
     def test_registered_direct_surface_name_keeps_exact_error(self):
         from tools.tool_search import ToolSearchConfig, dispatch_tool_describe
 
-        name = "mq_desktop_direct_action"
-        tool_def = _register(name, "desktop_ui")
+        name = "mq_project_direct_action"
+        tool_def = _register(name, "project")
         result = json.loads(dispatch_tool_describe(
             {"names": [name]},
             current_tool_defs=[tool_def],

@@ -49,21 +49,21 @@ async def test_resume_latest_matches_the_owners_local_rows_by_creating_surface(t
     store, authority, owner = _owner(tmp_path / 'home', monkeypatch)
     try:
         created = {}
-        # Desktop last, so it is the newest row: it must never be the CLI's or TUI's "latest".
-        for surface in ('cli', 'tui', 'gui'):
+        # TUI last, so it is the newest row: it must never be the CLI's "latest".
+        for surface in ('cli', 'tui'):
             result = await _call(owner, 'session.create', request_id=surface, source=surface,
                                  cwd=str(tmp_path), toolsets=[], model='m')
             created[surface] = sid = result['session_id']
             # The first turn's two writers: the agent's lazy create stamps ``created_source`` with
-            # the agent surface (run_agent; gui runs as ``desktop``), then the peer refresh relabels
-            # the row ``local`` (session_a2a.storage_source).
+            # the agent surface (run_agent), then the peer refresh relabels the row ``local``
+            # (session_a2a.storage_source).
             authority.db.create_session(sid, source=SURFACES[surface])
             live = authority.sessions[sid]
             store._record_gateway_session_peer(sid, live.route, live.source)
             authority.db.append_message(sid, 'user', 'hi')
         rows = {sid: authority.db.get_session(sid) for sid in created.values()}
         assert {(row['source'], row['created_source']) for row in rows.values()} == {
-            ('local', 'cli'), ('local', 'tui'), ('local', 'desktop')}
+            ('local', 'cli'), ('local', 'tui')}
         authority.sessions.clear()
 
         for family in ('cli', 'tui'):
@@ -188,11 +188,11 @@ def _listed(db, source, capsys):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(('surface', 'labels'), [('gui', ('gui', 'desktop')), ('acp', ('acp',))])
-async def test_gui_and_acp_list_under_the_policy_label_and_the_agent_surface(
+@pytest.mark.parametrize(('surface', 'labels'), [('acp', ('acp',))])
+async def test_acp_lists_under_the_policy_label_and_the_agent_surface(
         tmp_path, monkeypatch, capsys, surface, labels):
-    """session.create stamps the agent surface (gui is desktop). --source accepts
-    either name, before the peer refresh and after the row is stored as local."""
+    """session.create stamps the agent surface. --source accepts that label, before the peer
+    refresh and after the row is stored as local."""
     store, authority, owner = _owner(tmp_path / 'home', monkeypatch)
     try:
         created = await _call(owner, 'session.create', request_id=surface, source=surface,

@@ -39,7 +39,7 @@ async def test_api_created_sessions_are_local_and_the_connection_mode_marks_remo
         created = {}
         for name, connection in (('local', local), ('remote', remote)):
             reply = await connection.dispatch({'id': name, 'method': 'session.create', 'params': {
-                'request_id': name, 'source': 'gui', 'cwd': str(home), 'toolsets': [],
+                'request_id': name, 'source': 'tui', 'cwd': str(home), 'toolsets': [],
                 'client_env': {'PATH': '/usr/bin'}}})
             assert 'result' in reply, reply
             sid = reply['result']['session_id']

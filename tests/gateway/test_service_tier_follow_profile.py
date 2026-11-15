@@ -25,7 +25,7 @@ async def test_service_tier_choices_follow_profile_model_provider_and_endpoint_t
     try:
         assert authority.db.db_path.parent.resolve() == home.resolve()
         created = await owner.dispatch({'id': 'create', 'method': 'session.create', 'params': {
-            'request_id': 'follow-route', 'source': 'gui', 'cwd': str(tmp_path), 'toolsets': [],
+            'request_id': 'follow-route', 'source': 'tui', 'cwd': str(tmp_path), 'toolsets': [],
             'follow_profile_config': True,
         }})
         sid = created['result']['session_id']
@@ -67,7 +67,7 @@ async def test_followed_account_eligibility_does_not_use_the_retained_agents_key
     store, runner, _, owner = _owner(home, monkeypatch, {'model': before})
     try:
         created = await owner.dispatch({'id': 'create', 'method': 'session.create', 'params': {
-            'request_id': 'follow-account', 'source': 'gui', 'cwd': str(tmp_path), 'toolsets': [],
+            'request_id': 'follow-account', 'source': 'tui', 'cwd': str(tmp_path), 'toolsets': [],
             'follow_profile_config': True,
         }})
         sid = created['result']['session_id']

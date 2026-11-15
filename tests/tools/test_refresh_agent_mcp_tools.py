@@ -463,18 +463,18 @@ def test_resume_on_another_surface_restores_the_pinned_tool_bytes(monkeypatch, t
 def test_a_pin_never_re_adds_a_tool_this_sessions_config_excludes(monkeypatch):
     """A pin from a surface where ``terminal`` was allowed must not hand it back where config
     disables it, nor ``browser_exec`` (host Python) once ``terminal`` is gone. A client-surface
-    tool (``focus_pane``) is still carried: no config choice removed it here."""
+    tool (``desktop_project``) is still carried: no config choice removed it here."""
     import model_tools
 
     monkeypatch.setattr(_mcp_agent, "persist_agent_tool_names", lambda agent: None)
     pin = {"version": _mcp_agent.tool_pin_version(),
-           "tools": [_tool(n) for n in ("read_file", "terminal", "browser_exec", "focus_pane")]}
+           "tools": [_tool(n) for n in ("read_file", "terminal", "browser_exec", "desktop_project")]}
     agent = _agent(["read_file"], enabled=["hermes-cli"], disabled=["terminal"])
 
     _mcp_agent.restore_agent_tool_prefix(agent, pin)
 
-    assert [t["function"]["name"] for t in agent.tools] == ["read_file", "focus_pane"]
-    assert agent.valid_tool_names == {"read_file", "focus_pane"}
+    assert [t["function"]["name"] for t in agent.tools] == ["read_file", "desktop_project"]
+    assert agent.valid_tool_names == {"read_file", "desktop_project"}
 
 
 def test_reprobe_tool_availability_drops_cached_check_fn_verdicts(monkeypatch):

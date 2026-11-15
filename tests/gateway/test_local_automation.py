@@ -18,7 +18,7 @@ def _probe(tmp_path, source):
     print(result.stdout)
 
 
-@pytest.mark.parametrize('source', ['cli', 'tui', 'gui'])
+@pytest.mark.parametrize('source', ['cli', 'tui'])
 def test_local_completion_without_an_observer_is_a_note_the_next_turn_sees(tmp_path, source):
     _probe(tmp_path, source)  # #134889 LC-7: no unattended turn
 

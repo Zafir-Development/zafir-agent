@@ -428,18 +428,14 @@ async def test_a_served_profiles_bot_chat_takes_every_dm_with_no_client_attached
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('origin', ['created', 'legacy'])
-async def test_a_served_profiles_desktop_session_admits_its_own_process_notices(gateway, origin):
+async def test_a_served_profiles_adopted_legacy_session_admits_its_own_process_notices(gateway):
     secondary = gateway.secondary
-    if origin == 'created':
-        desktop = gateway.connect(secondary)
-        sid = gateway.create(secondary, desktop, 'desktop', 'gui', model='desk-model').session_id
-    else:
-        # A row written by a Desktop before the session authority existed; resuming it adopts it.
-        desktop = gateway.connect(secondary, provider='local', profile_id=secondary.profile_id,
-                                  instance_id=secondary.instance_id)
-        sid = secondary.db.create_session(LEGACY_DESKTOP_ID, source='desktop', model='desk-model',
-                                          cwd=str(gateway.tmp_path))
+    # A row written by the Desktop before the session authority existed; resuming it adopts it and
+    # its turns run on the surviving local client surface.
+    desktop = gateway.connect(secondary, provider='local', profile_id=secondary.profile_id,
+                              instance_id=secondary.instance_id)
+    sid = secondary.db.create_session(LEGACY_DESKTOP_ID, source='desktop', model='desk-model',
+                                      cwd=str(gateway.tmp_path))
     resumed = await desktop.dispatch({'id': 1, 'method': 'session.resume', 'params': {'session_id': sid}})
     assert 'result' in resumed, resumed
     submitted = await desktop.dispatch({'id': 2, 'method': 'prompt.submit', 'params': {

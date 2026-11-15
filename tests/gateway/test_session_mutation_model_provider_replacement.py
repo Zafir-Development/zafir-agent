@@ -200,7 +200,7 @@ def test_removed_provider_key_is_not_sent_to_retargeted_endpoint(tmp_path):
                         return row and row[0] == 'terminal'
                     await async_wait_until(terminal, timeout=30, what='real gateway turn terminal')
                     return await call('session.resume', session_id=sid)
-                sid = (await call('session.create', source='gui', request_id='review-create',toolsets=[]))['session_id']
+                sid = (await call('session.create', source='tui', request_id='review-create',toolsets=[]))['session_id']
                 before = await turn(sid, 'BEFORE')
                 (home / 'config.yaml').write_text(json.dumps({**cfg, 'providers':{'loop':{
                     'base_url':picked_url,'models':{'switched':{}}}}}))

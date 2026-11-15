@@ -105,7 +105,7 @@ def test_session_bound_oneshot_uses_the_chats_model_and_never_blocks_the_socket(
                         if any(m.get('content') == text for m in r['messages']))
 
         async with websocket(home, desc) as ws:
-            created = await rpc(ws, 'session.create', request_id='rt7', source='gui', toolsets=[], cwd=str(work),
+            created = await rpc(ws, 'session.create', request_id='rt7', source='tui', toolsets=[], cwd=str(work),
                                 model='session-model')
             sid = created['result']['session_id']
             # No turn yet: no resident agent, the session's own frozen route.
@@ -153,7 +153,7 @@ def test_a_borrowed_named_provider_route_keeps_its_extra_headers(tmp_path):
             return next(token for token, raw in reversed(peer.tokens) if json.dumps(text) in raw)
 
         async with websocket(home, desc) as ws:
-            created = await rpc(ws, 'session.create', request_id='hdr', source='gui', toolsets=[], cwd=str(work),
+            created = await rpc(ws, 'session.create', request_id='hdr', source='tui', toolsets=[], cwd=str(work),
                                 model='session-model')
             sid = created['result']['session_id']
             out['cold'] = await rpc(ws, 'llm.oneshot', session_id=sid, instructions='sys', input='ONESHOT_COLD')
@@ -182,7 +182,7 @@ def test_a_burst_of_slow_oneshots_never_starves_the_rest_of_the_gateway(tmp_path
 
     async def probe(home, work, peer, desc):
         async with websocket(home, desc) as ws:
-            created = await rpc(ws, 'session.create', request_id='burst', source='gui', toolsets=[], cwd=str(work))
+            created = await rpc(ws, 'session.create', request_id='burst', source='tui', toolsets=[], cwd=str(work))
             sid = created['result']['session_id']
             for n in range(burst):
                 await ws.send(json.dumps({'jsonrpc': '2.0', 'id': f'slow{n}', 'method': 'llm.oneshot',
@@ -192,7 +192,7 @@ def test_a_burst_of_slow_oneshots_never_starves_the_rest_of_the_gateway(tmp_path
                                                for r in list(peer.requests)) >= 4, timeout=20)
             try:
                 async with asyncio.timeout(10), websocket(home, desc) as other:
-                    mine = await rpc(other, 'session.create', request_id='other', source='gui', toolsets=[],
+                    mine = await rpc(other, 'session.create', request_id='other', source='tui', toolsets=[],
                                      cwd=str(work))
                     out['tools'] = await rpc(other, 'tools.show', session_id=mine['result']['session_id'])
                     out['ping'] = await rpc(other, 'ping')

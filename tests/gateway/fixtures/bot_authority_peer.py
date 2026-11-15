@@ -39,7 +39,7 @@ def probe(base):
 
     async def run(desc):
         async with websocket(home, desc) as ws:
-            created = await rpc(ws, 'session.create', request_id='bot', source='gui', toolsets=[], cwd=str(home))
+            created = await rpc(ws, 'session.create', request_id='bot', source='tui', toolsets=[], cwd=str(home))
             sid = created['result']['session_id']
             from tools.bot_relay import enqueue_envelope, relay_root
             roster = await rpc(ws, 'bot_relay.roster.sync', agents=[{'profile': 'remote', 'handle': 'remote', 'connection_id': 'peer'}])

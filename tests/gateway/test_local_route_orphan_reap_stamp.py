@@ -26,7 +26,7 @@ async def _local_session(tmp_path, monkeypatch):
     authority = await initialize_session_authority(runner, profile_id=str(tmp_path), instance_id='fixture')
     from gateway.session_controls import AuthorityConnection
     connection = AuthorityConnection(authority, object(), {'user_id': 'owner'})
-    ref = create_local_session(authority, connection.actor, {'request_id': 'r', 'source': 'gui',
+    ref = create_local_session(authority, connection.actor, {'request_id': 'r', 'source': 'tui',
                                                              'cwd': str(tmp_path), 'model': 'm', 'toolsets': []})
     authority.db.append_message(ref.session_id, 'user', 'earlier turn')
     return store, authority, connection, ref

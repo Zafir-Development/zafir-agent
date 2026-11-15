@@ -73,7 +73,7 @@ async def test_a_handed_off_bot_chat_opens_on_its_lane_after_a_restart(tmp_path,
     runner = _Runner(tmp_path)
     warm = await initialize_session_authority(runner, profile_id='fixture', instance_id='warm')
     owner = SessionActor('owner', 'fixture', frozenset({'session:create', 'session:read', 'session:control'}), 'socket')
-    ref = create_local_session(warm, owner, {'request_id': 'bot-chat', 'source': 'gui', 'cwd': str(tmp_path),
+    ref = create_local_session(warm, owner, {'request_id': 'bot-chat', 'source': 'tui', 'cwd': str(tmp_path),
                                              'model': 'frozen', 'toolsets': []})
     warm.db.set_session_title(ref.session_id, 'Bot Chat')
     if history == 'reset':
@@ -137,7 +137,7 @@ async def test_a_receipt_whose_current_segment_is_still_local_is_never_released(
     runner = _Runner(tmp_path)
     warm = await initialize_session_authority(runner, profile_id='fixture', instance_id='warm')
     owner = SessionActor('owner', 'fixture', frozenset({'session:create', 'session:read', 'session:control'}), 'socket')
-    ref = create_local_session(warm, owner, {'request_id': 'chat', 'source': 'gui', 'cwd': str(tmp_path),
+    ref = create_local_session(warm, owner, {'request_id': 'chat', 'source': 'tui', 'cwd': str(tmp_path),
                                              'model': 'frozen', 'toolsets': []})
     runner.session_store.reset_session(warm.sessions[ref.session_id].route)
     head = local_receipt(warm.db, ref.session_id)['entry']['session_id']
@@ -149,7 +149,7 @@ async def test_a_receipt_whose_current_segment_is_still_local_is_never_released(
 
     cold = await initialize_session_authority(_Runner(tmp_path), profile_id='fixture', instance_id='cold')
     assert local_receipt(cold.db, ref.session_id)['entry']['session_id'] == head
-    assert cold.db.get_session(head)['source'] == 'gui'
+    assert cold.db.get_session(head)['source'] == 'tui'
 
 
 async def _handed_off_bot_chat(tmp_path):
@@ -161,7 +161,7 @@ async def _handed_off_bot_chat(tmp_path):
     warm = await initialize_session_authority(runner, profile_id='fixture', instance_id='warm')
     owner = SessionActor('owner', 'fixture', frozenset({'session:create', 'session:read', 'session:control',
                                                      'session:submit'}), 'socket')
-    ref = create_local_session(warm, owner, {'request_id': 'bot-chat', 'source': 'gui', 'cwd': str(tmp_path),
+    ref = create_local_session(warm, owner, {'request_id': 'bot-chat', 'source': 'tui', 'cwd': str(tmp_path),
                                              'model': 'frozen', 'toolsets': []})
     warm.db.set_session_title(ref.session_id, 'Bot Chat')
     telegram = _source()
@@ -232,7 +232,7 @@ async def test_a_handed_off_bot_chat_whose_lane_moved_on_is_moved_aside(tmp_path
     assert await _bot_row(cold, owner) is None
     if door == 'Desktop create':  # the click: nothing found, so it mints
         opened = await AuthorityConnection(cold, object(), {'user_id': owner.subject}).create(
-            None, {'title': 'Bot Chat', 'request_id': 'bot-chat-2', 'source': 'gui', 'cwd': str(tmp_path),
+            None, {'title': 'Bot Chat', 'request_id': 'bot-chat-2', 'source': 'tui', 'cwd': str(tmp_path),
                    'model': 'frozen', 'toolsets': [], 'hidden': True})
         fresh = opened['session_id']
     else:  # the bot's own delivery, as the Desktop's principal (whose roster reads it)
@@ -253,7 +253,7 @@ async def test_a_second_chat_handed_off_to_the_same_home_chat_supersedes_the_fir
     from gateway.session_authority import initialize_session_authority
     from gateway.session_local import create_local_session
     runner, warm, owner, ref, telegram, route = await _handed_off_bot_chat(tmp_path)
-    other = create_local_session(warm, owner, {'request_id': 'other-chat', 'source': 'gui', 'cwd': str(tmp_path),
+    other = create_local_session(warm, owner, {'request_id': 'other-chat', 'source': 'tui', 'cwd': str(tmp_path),
                                                'model': 'frozen', 'toolsets': []})
     warm.authorize(owner, other, 'session:control')
     assert await _handoff(runner, warm, other.session_id, telegram) == route
@@ -359,7 +359,7 @@ async def test_a_platform_resume_of_a_local_conversation_continues_its_current_h
     runner = _Runner(tmp_path)
     warm = await initialize_session_authority(runner, profile_id='fixture', instance_id='warm')
     owner = SessionActor('owner', 'fixture', frozenset({'session:create', 'session:read', 'session:control'}), 'socket')
-    ref = create_local_session(warm, owner, {'request_id': 'bot-chat', 'source': 'gui', 'cwd': str(tmp_path),
+    ref = create_local_session(warm, owner, {'request_id': 'bot-chat', 'source': 'tui', 'cwd': str(tmp_path),
                                              'model': 'frozen', 'toolsets': []})
     warm.db.set_session_title(ref.session_id, 'Bot Chat')
     runner.session_store.reset_session(warm.sessions[ref.session_id].route)
@@ -398,7 +398,7 @@ async def test_a_moved_conversation_stays_writable_once_its_lane_is_taken_over(t
     warm = await initialize_session_authority(runner, profile_id='fixture', instance_id='warm')
     owner = SessionActor('owner', 'fixture', frozenset({'session:create', 'session:read', 'session:control',
                                                      'session:submit'}), 'socket')
-    ref = create_local_session(warm, owner, {'request_id': 'bot-chat', 'source': 'gui', 'cwd': str(tmp_path),
+    ref = create_local_session(warm, owner, {'request_id': 'bot-chat', 'source': 'tui', 'cwd': str(tmp_path),
                                              'model': 'frozen', 'toolsets': []})
     warm.db.set_session_title(ref.session_id, 'Bot Chat')
     if history == 'reset':
@@ -421,7 +421,7 @@ async def test_a_moved_conversation_stays_writable_once_its_lane_is_taken_over(t
     warm.authorize(owner, head, 'session:submit')  # the lane's conversation: writable there
 
     if takeover == 'another chat handed off':
-        other = create_local_session(warm, owner, {'request_id': 'other-chat', 'source': 'gui',
+        other = create_local_session(warm, owner, {'request_id': 'other-chat', 'source': 'tui',
                                                    'cwd': str(tmp_path), 'model': 'frozen', 'toolsets': []})
         await _handoff(runner, warm, other.session_id, telegram)
     else:
@@ -466,7 +466,7 @@ async def test_a_moved_conversation_mounted_by_startup_recovery_stays_writable_o
         return runner, adapter.build_source(chat_id='42', chat_type='dm', user_id='42')
 
     def chat(authority, title):
-        ref = create_local_session(authority, owner, {'request_id': title, 'source': 'gui', 'cwd': str(tmp_path),
+        ref = create_local_session(authority, owner, {'request_id': title, 'source': 'tui', 'cwd': str(tmp_path),
                                                       'model': 'frozen', 'toolsets': []})
         authority.db.set_session_title(ref.session_id, title)
         return ref
@@ -520,7 +520,7 @@ async def test_a_moved_conversation_resumed_on_another_chat_moves_there(tmp_path
                                                      'session:submit'}), 'socket')
 
     def chat(title):
-        ref = create_local_session(warm, owner, {'request_id': title, 'source': 'gui', 'cwd': str(tmp_path),
+        ref = create_local_session(warm, owner, {'request_id': title, 'source': 'tui', 'cwd': str(tmp_path),
                                                  'model': 'frozen', 'toolsets': []})
         warm.db.set_session_title(ref.session_id, title)
         return ref
@@ -556,7 +556,7 @@ async def test_a_moved_receipt_with_a_malformed_lineage_never_stops_the_boot(tmp
     runner = _Runner(tmp_path)
     warm = await initialize_session_authority(runner, profile_id='fixture', instance_id='warm')
     owner = SessionActor('owner', 'fixture', frozenset({'session:create', 'session:read', 'session:control'}), 'socket')
-    ref = create_local_session(warm, owner, {'request_id': 'chat', 'source': 'gui', 'cwd': str(tmp_path),
+    ref = create_local_session(warm, owner, {'request_id': 'chat', 'source': 'tui', 'cwd': str(tmp_path),
                                              'model': 'frozen', 'toolsets': []})
     with monkeypatch.context() as patch:
         _as_an_older_build(patch)
@@ -638,7 +638,7 @@ async def test_a_named_profiles_handed_off_bot_chat_opens_on_its_lane_after_a_re
             warm = active_authority(runner)
             caps = frozenset({'session:create', 'session:read', 'session:control'})
             owner = SessionActor('owner', warm.profile_id, caps, 'socket')
-            ref = create_local_session(warm, owner, {'request_id': 'bot-chat', 'source': 'gui', 'cwd': str(tmp_path),
+            ref = create_local_session(warm, owner, {'request_id': 'bot-chat', 'source': 'tui', 'cwd': str(tmp_path),
                                                      'model': 'frozen', 'toolsets': []})
             warm.db.set_session_title(ref.session_id, 'Bot Chat')
             keys = (POLICY_PREFIX + ref.session_id, LEGACY_PREFIX + ref.session_id)

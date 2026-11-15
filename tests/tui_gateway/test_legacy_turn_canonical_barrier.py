@@ -30,7 +30,7 @@ def test_legacy_submit_refuses_while_canonical_ledger_holds_work(monkeypatch, tm
     turns = []
     monkeypatch.setattr(server, "_run_after_agent_ready", lambda *a: turns.append(a[1]))
     monkeypatch.setattr(server.threading, "Thread", _InlineThread)
-    created = server.handle_request({"id": "c", "method": "session.create", "params": {"source": "desktop"}})
+    created = server.handle_request({"id": "c", "method": "session.create", "params": {"source": 'tui'}})
     sid, key = created["result"]["session_id"], created["result"]["stored_session_id"]
     db.create_session(key, "cli")
     first = begin_runtime_epoch(db, instance_id="gateway-1")

@@ -52,7 +52,7 @@ async def test_a_named_client_reaches_session_info_and_launch_request(tmp_path, 
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('source', ['tui', 'gui', 'cli', 'acp', 'tool'])
+@pytest.mark.parametrize('source', ['tui', 'cli', 'acp', 'tool'])
 async def test_a_create_without_client_keeps_its_request_and_info_shape(tmp_path, monkeypatch, source):
     """Ink, Desktop, the CLI, ACP and tools send no ``client``: no ``client`` key anywhere."""
     home = _home(tmp_path)
@@ -87,7 +87,7 @@ async def test_a_malformed_client_is_refused_as_invalid_params(tmp_path, monkeyp
         owner.db.close()
 
 
-@pytest.mark.parametrize('source', ['cli', 'tui', 'gui', 'acp', 'tool', 'oneshot'])
+@pytest.mark.parametrize('source', ['cli', 'tui', 'acp', 'tool', 'oneshot'])
 def test_the_client_label_changes_no_policy_decision(tmp_path, monkeypatch, source):
     from gateway.local_viewer_events import launch_shows_reasoning
     from gateway.session_policy import DAYBREAK_LABELS, build_policy

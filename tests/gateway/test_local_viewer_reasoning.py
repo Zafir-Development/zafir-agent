@@ -1,4 +1,4 @@
-"""Reasoning a local viewer's turn sends Ink and Desktop: the live stream by default, the final reasoning on
+"""Reasoning a local viewer's turn sends the TUI: the live stream by default, the final reasoning on
 ``message.complete``, and never the messaging platforms' reasoning block in the reply text."""
 from __future__ import annotations
 
@@ -12,9 +12,6 @@ from tests.gateway.test_local_viewer_events_turn import _turn
 
 @pytest.mark.parametrize(('source', 'config', 'flag', 'streams'), [
     ('tui', {}, None, True),  # unset: the launch's display.show_reasoning, on by default
-    ('gui', {}, None, True),
-    ('gui', {'display': {'show_reasoning': False}}, None, False),
-    ('gui', {}, False, False),  # /reasoning hide or config.set from a viewer wins
     ('tui', {'display': {'show_reasoning': False}}, True, True),
 ])
 def test_a_local_turn_streams_reasoning_unless_the_session_or_its_config_hides_it(tmp_path, source, config, flag,
@@ -63,8 +60,8 @@ def _wired(tmp_path, source, config, flag):
     return live, agent, published, scope
 
 
-def test_reasoning_show_and_hide_apply_mid_turn_on_ink_and_desktop(tmp_path):
-    live, agent, published, scope = _wired(tmp_path, 'gui', {}, None)
+def test_reasoning_show_and_hide_apply_mid_turn_on_ink(tmp_path):
+    live, agent, published, scope = _wired(tmp_path, 'tui', {}, None)
     try:
         agent.reasoning_callback('one')
         live.show_reasoning = False
@@ -155,13 +152,13 @@ async def test_config_get_reports_the_reasoning_display_the_session_streams(tmp_
         return reply['result']
 
     try:
-        sid = (await call('session.create', request_id='r', source='gui', cwd=str(tmp_path)))['session_id']
+        sid = (await call('session.create', request_id='r', source='tui', cwd=str(tmp_path)))['session_id']
         assert (await call('config.get', session_id=sid, key='show_reasoning'))['value'] == value
     finally:
         await connection.close()
 
 
-@pytest.mark.parametrize(('source', 'projected'), [('acp', True), ('gui', False)])
+@pytest.mark.parametrize(('source', 'projected'), [('acp', True), ('tui', False)])
 def test_only_acp_keeps_the_reasoning_block_in_its_reply_text(monkeypatch, source, projected):
     import gateway.run as gateway_run
     from gateway import session_setting_commands

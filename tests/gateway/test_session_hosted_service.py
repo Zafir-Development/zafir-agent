@@ -47,7 +47,7 @@ async def test_room_owner_survives_service_restart_and_foreign_actor_cannot_clai
 def test_private_hosted_policy_restores_without_public_source_admission(tmp_path):
     from dataclasses import asdict, replace
     from gateway.session_policy import build_policy, restore_policy
-    policy = replace(build_policy({'source': 'gui', 'cwd': str(tmp_path), 'model': 'fixture'}, {}),
+    policy = replace(build_policy({'source': 'tui', 'cwd': str(tmp_path), 'model': 'fixture'}, {}),
                      source='bot_room', platform='bot_room')
     assert restore_policy(asdict(policy)).source == 'bot_room'
     with pytest.raises(RuntimeStoreError):

@@ -41,7 +41,7 @@ async def test_secondary_receipt_restores_without_losing_its_owner(tmp_path, mon
         actor = SessionActor('owner', authority.profile_id,
                           frozenset({'session:create', 'session:read', 'session:control'}), 'socket')
         with _profile_runtime_scope(home, {}):
-            ref = create_local_session(authority, actor, {'request_id': 'old-desktop', 'source': 'gui',
+            ref = create_local_session(authority, actor, {'request_id': 'old-desktop', 'source': 'tui',
                 'cwd': str(tmp_path), 'model': 'frozen', 'toolsets': []})
         receipt = local_receipt(authority.db, ref.session_id)
         original = json.loads(json.dumps(receipt))

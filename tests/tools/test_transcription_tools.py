@@ -490,6 +490,7 @@ class TestTranscribeLocalExtended:
         # WhisperModel should be created only once
         assert mock_whisper_cls.call_count == 1
 
+    @pytest.mark.platforms("not macos")  # Apple Silicon forces CPU/int8 before any config is read
     def test_config_device_and_compute_type_passed_to_whisper(self, tmp_path):
         """User-configured device and compute_type should be forwarded to WhisperModel.
 

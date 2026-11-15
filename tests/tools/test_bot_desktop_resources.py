@@ -8,6 +8,7 @@ import pytest
 from tools.bot_desktop import resources, runtime
 
 
+@pytest.mark.platforms("linux")  # is_supported_host() gates the memory fields on the Bot Desktop host
 def test_start_refuses_and_status_explains_when_memory_is_short(tmp_path, monkeypatch):
     monkeypatch.setattr(runtime, "state_dir", lambda: tmp_path / "bd")
     monkeypatch.setattr(runtime, "missing_binaries", list)

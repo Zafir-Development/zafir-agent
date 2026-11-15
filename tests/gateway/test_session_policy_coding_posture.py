@@ -21,7 +21,7 @@ def project(tmp_path):
     return root
 
 
-@pytest.mark.parametrize('source', ['cli', 'tui', 'gui', 'acp', 'oneshot'])
+@pytest.mark.parametrize('source', ['cli', 'tui', 'acp', 'oneshot'])
 def test_focus_in_a_code_workspace_selects_the_coding_posture(project, source):
     policy = create({'source': source, 'cwd': str(project)}, FOCUS)
     assert 'coding' in policy.toolsets and 'terminal' not in policy.toolsets
@@ -29,8 +29,6 @@ def test_focus_in_a_code_workspace_selects_the_coding_posture(project, source):
 
 def test_surface_toolsets_still_fold_in_over_the_posture(project):
     assert 'project' in create({'source': 'tui', 'cwd': str(project)}, FOCUS).toolsets
-    gui = create({'source': 'gui', 'cwd': str(project)}, FOCUS).toolsets
-    assert {'coding', 'desktop_ui', 'catalog'} <= set(gui)
 
 
 def test_profile_default_outside_a_workspace_or_without_focus(project, tmp_path):
@@ -61,10 +59,10 @@ def test_a_project_file_written_mid_session_does_not_switch_toolsets(tmp_path):
 
 def test_plugin_mcp_servers_stay_in_the_posture(project, monkeypatch):
     monkeypatch.setattr('hermes_cli.plugins.get_portable_mcp_server_names_nowait', lambda: {'plug'})
-    assert {'coding', 'plug'} <= set(create({'source': 'gui', 'cwd': str(project)}, FOCUS).toolsets)
+    assert {'coding', 'plug'} <= set(create({'source': 'tui', 'cwd': str(project)}, FOCUS).toolsets)
 
 
-@pytest.mark.parametrize('source', ['tool', 'gui'])
+@pytest.mark.parametrize('source', ['tool', 'oneshot'])
 def test_the_daemons_own_directory_is_not_a_workspace(project, monkeypatch, source):
     monkeypatch.chdir(project)
     monkeypatch.setattr('agent.runtime_cwd.resolve_agent_cwd', lambda: project)

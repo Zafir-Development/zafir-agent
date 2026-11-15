@@ -50,7 +50,7 @@ def _make_agent(session_db=None, prebuilt_prompt: str = "BUILT_PROMPT"):
 
 
 class TestSurfaceSwitch:
-    """A desktop <-> TUI switch must not rebuild the system prompt.
+    """A CLI <-> TUI switch must not rebuild the system prompt.
 
     The rebuild it used to trigger changed the first blocks of a 200K+ token request, so
     the whole conversation re-prefilled at a ~1% cache hit. The stored bytes are now reused
@@ -97,16 +97,16 @@ class TestSurfaceSwitch:
         return agent
 
     def test_switch_reuses_the_stored_prompt(self):
-        agent = self._restore(stored="desktop", current="tui")
-        assert agent._cached_system_prompt == self._stored("desktop")
+        agent = self._restore(stored="cli", current="tui")
+        assert agent._cached_system_prompt == self._stored("cli")
         agent._build_system_prompt.assert_not_called()
 
     def test_switch_stages_the_new_surface_guidance(self):
-        agent = self._restore(stored="desktop", current="tui")
+        agent = self._restore(stored="cli", current="tui")
         note = agent._surface_switch_note
         assert note.startswith(f"{_SURFACE_SWITCH_NOTE_PREFIX}tui{_SURFACE_NAME_END}")
         # The correction carries the CURRENT surface's hint, so the model is not left
-        # following the desktop guidance still sitting in the reused prompt.
+        # following the CLI guidance still sitting in the reused prompt.
         assert "terminal UI (TUI)" in note
 
     def test_same_surface_stages_nothing(self):
@@ -118,10 +118,10 @@ class TestSurfaceSwitch:
         decoy = "Host: Example\nPlatform: tui\n"
         stored = (
             "SYSTEM PROMPT BODY\n\nConversation started: Monday, January 05, 2026\n"
-            "Model: test-model\nProvider: openrouter\nPlatform: desktop\n\n"
+            "Model: test-model\nProvider: openrouter\nPlatform: cli\n\n"
             f"{RUNTIME_ENVIRONMENT_HEADING}\n\n{decoy}\n\n{RUNTIME_ENVIRONMENT_END}"
         )
-        assert identity_line_value(stored, "Platform") == "desktop"
+        assert identity_line_value(stored, "Platform") == "cli"
 
         db = MagicMock()
         db.get_session.return_value = {"system_prompt": stored}
@@ -136,17 +136,17 @@ class TestSurfaceSwitch:
     def test_not_restaged_once_the_transcript_carries_it(self):
         # The note is stamped into the byte-stable api_content sidecar, and the gateway
         # builds a fresh AIAgent per turn — without the dedup every turn would add a copy.
-        agent = self._restore(stored="desktop", current="tui", history=self._announced("tui"))
+        agent = self._restore(stored="cli", current="tui", history=self._announced("tui"))
         assert agent._surface_switch_note == ""
 
     def test_returning_to_the_prompts_own_surface_is_announced(self):
-        """desktop -> tui -> desktop.
+        """cli -> tui -> cli.
 
         The trailer now agrees with the runtime, so comparing against the prompt alone would
         stage nothing and leave the model acting on the stale "you are on tui" note.
         """
-        agent = self._restore(stored="desktop", current="desktop", history=self._announced("tui"))
-        assert agent._surface_switch_note.startswith(f"{_SURFACE_SWITCH_NOTE_PREFIX}desktop{_SURFACE_NAME_END}")
+        agent = self._restore(stored="cli", current="cli", history=self._announced("tui"))
+        assert agent._surface_switch_note.startswith(f"{_SURFACE_SWITCH_NOTE_PREFIX}cli{_SURFACE_NAME_END}")
         # The prompt already describes this surface, so the note retires the stale one and
         # points at the prompt instead of duplicating the whole hint.
         assert "the interface section in the system prompt above" in agent._surface_switch_note
@@ -155,17 +155,17 @@ class TestSurfaceSwitch:
         # A rebuild for an unrelated reason (a model switch) refreshes the prompt but not the
         # note already sitting in the transcript.
         db = MagicMock()
-        db.get_session.return_value = {"system_prompt": self._stored("desktop")}
-        agent = _make_agent(session_db=db, prebuilt_prompt=self._stored("desktop"))
+        db.get_session.return_value = {"system_prompt": self._stored("cli")}
+        agent = _make_agent(session_db=db, prebuilt_prompt=self._stored("cli"))
         agent.model = "other-model"
-        agent.platform = "desktop"
+        agent.platform = "cli"
         agent._platform_hint_overrides = None
         agent._surface_switch_note = ""
 
         _restore_or_build_system_prompt(agent, None, self._announced("tui"))
 
         agent._build_system_prompt.assert_called_once()
-        assert agent._surface_switch_note.startswith(f"{_SURFACE_SWITCH_NOTE_PREFIX}desktop{_SURFACE_NAME_END}")
+        assert agent._surface_switch_note.startswith(f"{_SURFACE_SWITCH_NOTE_PREFIX}cli{_SURFACE_NAME_END}")
 
     def test_tool_prefix_stays_pinned_on_the_turn_that_announces_a_switch(self):
         """tools[] is serialized ahead of the prompt this branch went out of its way to keep.
@@ -179,7 +179,7 @@ class TestSurfaceSwitch:
             patch("tools.mcp_tool_agent.restore_agent_tool_prefix") as pin,
             patch("tools.mcp_tool_agent.persist_agent_tool_names") as persist,
         ):
-            self._restore(stored="desktop", current="tui", tool_names='["desktop_ui_tool"]')
+            self._restore(stored="cli", current="tui", tool_names='["project_list"]')
         pin.assert_called_once()
         persist.assert_not_called()
 
@@ -187,18 +187,18 @@ class TestSurfaceSwitch:
         """A pinned tool this surface did not build is inert here — say so.
 
         Keeping it on the wire is what preserves the prefix, so the model has to learn from the
-        note that calling it only returns ``tool_error("desktop only")``.
+        note that calling it only returns ``tool_error("not loaded here")``.
         """
         from unittest.mock import patch
 
-        def _carry_desktop_tool(agent, saved_names):
-            agent.tools = [self._tool("read_file"), self._tool("focus_pane")]
+        def _carry_pinned_tool(agent, saved_names):
+            agent.tools = [self._tool("read_file"), self._tool("project_list")]
             return True
 
-        with patch("tools.mcp_tool_agent.restore_agent_tool_prefix", _carry_desktop_tool):
-            agent = self._restore(stored="desktop", current="tui", tool_names='["focus_pane"]',
+        with patch("tools.mcp_tool_agent.restore_agent_tool_prefix", _carry_pinned_tool):
+            agent = self._restore(stored="cli", current="tui", tool_names='["project_list"]',
                                   tools=[self._tool("read_file")])
-        assert "focus_pane" in agent._surface_switch_note
+        assert "project_list" in agent._surface_switch_note
         assert "were not loaded for this interface" in agent._surface_switch_note
         # Only the carried-over name: a tool this surface built is not inert.
         assert "read_file" not in agent._surface_switch_note.split("were not loaded for this interface")[1]
@@ -206,7 +206,7 @@ class TestSurfaceSwitch:
     def test_note_rides_the_user_message_channel_once(self):
         from agent.turn_context import _merge_gateway_notes, consume_surface_switch_note
 
-        agent = self._restore(stored="desktop", current="tui")
+        agent = self._restore(stored="cli", current="tui")
         staged = agent._surface_switch_note
         assert _merge_gateway_notes(agent, [{"role": "user", "content": "hi"}], 0, "") == staged
         assert consume_surface_switch_note(agent) == ""

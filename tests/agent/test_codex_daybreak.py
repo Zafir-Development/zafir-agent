@@ -116,8 +116,8 @@ def _owner_policies(home, monkeypatch):
     monkeypatch.setenv("HERMES_HOME", str(home))
     monkeypatch.setattr(gateway_run, "_hermes_home", home)  # frozen at import by an earlier test
     policies = {label: session_policy.build_policy({"source": label}, {}, private_secrets={})
-                for label in ("gui", "cli", "tui", "oneshot", "tool", "acp")}
-    policies["bot_room"] = replace(policies["gui"], source="bot_room", platform="bot_room")
+                for label in ("tui", "cli", "oneshot", "tool", "acp")}
+    policies["bot_room"] = replace(policies["tui"], source="bot_room", platform="bot_room")
     policies["a2a"] = replace(policies["cli"], source="a2a", platform="a2a")
 
     def policy_for_source(runner, source):
@@ -128,7 +128,7 @@ def _owner_policies(home, monkeypatch):
     return policies
 
 
-def _load(platform, chat_id="gui", check="_load_daybreak"):
+def _load(platform, chat_id="tui", check="_load_daybreak"):
     from gateway.run_config_loaders import GatewayConfigLoadersMixin
     runner = type("Runner", (GatewayConfigLoadersMixin,), {})()
     return getattr(runner, check)(SimpleNamespace(platform=platform, chat_id=chat_id))
@@ -162,7 +162,7 @@ def test_only_the_owners_own_chats_carry_daybreak(tmp_path, monkeypatch):
     platforms = {platform: _load(platform) for platform in (Platform.TELEGRAM, Platform.DISCORD, Platform.API_SERVER)}
     assert platforms == {Platform.TELEGRAM: False, Platform.DISCORD: False, Platform.API_SERVER: False}
     local = {label: _load(Platform.LOCAL, label) for label in [*policies, "unreadable"]}
-    assert local == {"gui": True, "cli": True, "tui": True, "oneshot": True, "tool": False, "acp": False,
+    assert local == {"tui": True, "cli": True, "oneshot": True, "tool": False, "acp": False,
                      "bot_room": False, "a2a": False, "unreadable": False}
 
 
@@ -178,9 +178,9 @@ def test_delegation_sees_the_owners_gateway_chat_with_the_switch_off(tmp_path, m
     (home / "config.yaml").write_text("agent:\n  daybreak: false\n", encoding="utf-8")
 
     surface = {label: _load(Platform.LOCAL, label, "_daybreak_surface") for label in [*policies, "unreadable"]}
-    assert surface == {"gui": True, "cli": True, "tui": True, "oneshot": True, "tool": False, "acp": False,
+    assert surface == {"tui": True, "cli": True, "oneshot": True, "tool": False, "acp": False,
                        "bot_room": False, "a2a": False, "unreadable": False}
-    assert _load(Platform.TELEGRAM, "gui", "_daybreak_surface") is False
+    assert _load(Platform.TELEGRAM, "tui", "_daybreak_surface") is False
 
     def seen(**agent):
         with bind_subagent_parent(SimpleNamespace(**agent)):

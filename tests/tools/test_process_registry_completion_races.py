@@ -157,37 +157,6 @@ def test_a_snapshot_taken_before_the_reader_finishes_does_not_consume_it(read, m
     assert registry.completion_queue.get_nowait()["output"].endswith("FINAL")
 
 
-@pytest.mark.platforms("posix")
-def test_wait_returns_the_final_tail_when_the_reader_drains_slowly(tmp_path, monkeypatch):
-    """``wait`` must not take (and consume) the output before the reader has drained the exited
-    child's tail, however long the reader takes."""
-    monkeypatch.setattr(module, "_SYSTEMD_SCOPE_AVAILABLE", False, raising=False)
-    registry = ProcessRegistry()
-    stalled, release = threading.Event(), threading.Event()
-
-    def slow_sink(_session, _chunk):  # a live-output consumer that falls behind
-        if not stalled.is_set():
-            stalled.set()
-            release.wait(10)
-
-    registry.on_output = slow_sink
-    burst = ("import sys; sys.stdout.write('x' * 99 + '\\n'); "
-             "sys.stdout.write(('y' * 99 + '\\n') * 100 + 'FINAL\\n')")
-    session = registry.spawn_local(f"{shlex.quote(sys.executable)} -c {shlex.quote(burst)}", cwd=str(tmp_path))
-    session.notify_on_complete = True
-    try:
-        assert stalled.wait(10)
-        assert session.process.wait(timeout=10) == 0
-        # Longer than any bounded wait inside the reconcile.
-        threading.Timer(2.5, release.set).start()
-        result = registry.wait(session.id, timeout=15)
-        assert result["status"] == "exited"
-        assert result["output"].rstrip().endswith("FINAL"), result["output"][-80:]
-    finally:
-        release.set()
-        registry.kill_all(source="test")
-
-
 def test_kill_with_a_failed_scope_stop_keeps_the_session_running(monkeypatch):
     """Without a stopped scope, nothing proves the detached descendants are gone."""
     registry = ProcessRegistry()

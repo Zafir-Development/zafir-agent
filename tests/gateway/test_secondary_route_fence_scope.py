@@ -128,7 +128,7 @@ async def test_a_secondary_retirement_leaves_the_id_free_in_the_launch_profile(t
         own, launch_keyed = 'agent:alpha:telegram:333', 'agent:main:telegram:333'
         with _profile_runtime_scope(served.home, {}):
             ref = create_local_session(served.alpha, served.actor, {
-                'request_id': 'r', 'source': 'gui', 'cwd': str(tmp_path), 'model': 'frozen', 'toolsets': []})
+                'request_id': 'r', 'source': 'tui', 'cwd': str(tmp_path), 'model': 'frozen', 'toolsets': []})
             sid = ref.session_id
             store._entries[own] = _entry(own, sid)
             store._entries[launch_keyed] = _entry(launch_keyed, sid)  # a route keyed in the launch namespace
@@ -226,7 +226,7 @@ async def _pruned_alpha_route(served, tmp_path):
     store, key = served.store, 'agent:alpha:telegram:333'
     with _profile_runtime_scope(served.home, {}):
         ref = create_local_session(served.alpha, served.actor, {
-            'request_id': 'r', 'source': 'gui', 'cwd': str(tmp_path), 'model': 'frozen', 'toolsets': []})
+            'request_id': 'r', 'source': 'tui', 'cwd': str(tmp_path), 'model': 'frozen', 'toolsets': []})
         store._entries[key] = _entry(key, ref.session_id)
         with store._lock:
             stale = store._snapshot_routing_locked()
@@ -292,12 +292,12 @@ async def test_the_owners_next_prune_reclaims_its_expired_shared_fences(tmp_path
         _key, sid, _stale = await _pruned_alpha_route(served, tmp_path)
         with _profile_runtime_scope(served.home, {}):
             kept = create_local_session(served.alpha, served.actor, {
-                'request_id': 'k', 'source': 'gui', 'cwd': str(tmp_path), 'model': 'frozen', 'toolsets': []})
+                'request_id': 'k', 'source': 'tui', 'cwd': str(tmp_path), 'model': 'frozen', 'toolsets': []})
             await _delete(served, kept)
         _age_retirements(served.alpha.db, served.launch.db)
         with _profile_runtime_scope(served.home, {}):
             later = create_local_session(served.alpha, served.actor, {
-                'request_id': 'l', 'source': 'gui', 'cwd': str(tmp_path), 'model': 'frozen', 'toolsets': []})
+                'request_id': 'l', 'source': 'tui', 'cwd': str(tmp_path), 'model': 'frozen', 'toolsets': []})
             await _prune(served, later)
         fence = 'gateway.retired_route.v1.{}:{}'.format
         assert served.launch.db.get_meta(fence('alpha', sid)) is None, 'an expired shared fence was never reclaimed'
@@ -319,7 +319,7 @@ async def test_a_secondary_delete_fence_outlives_the_horizon_while_a_prune_fence
         keys = ('agent:alpha:telegram:44', 'agent:main:telegram:44')
         with _profile_runtime_scope(served.home, {}):
             ref = create_local_session(served.alpha, served.actor, {
-                'request_id': 'd', 'source': 'gui', 'cwd': str(tmp_path), 'model': 'frozen', 'toolsets': []})
+                'request_id': 'd', 'source': 'tui', 'cwd': str(tmp_path), 'model': 'frozen', 'toolsets': []})
             for key in keys:
                 store._entries[key] = _entry(key, ref.session_id)
             with store._lock:
@@ -383,7 +383,7 @@ async def test_a_pruned_route_stays_out_of_the_mirror_and_a_reused_id_keeps_one_
         store, key, launch_key = served.store, 'agent:alpha:telegram:333', 'agent:main:telegram:444'
         with _profile_runtime_scope(served.home, {}):
             ref = create_local_session(served.alpha, served.actor, {
-                'request_id': 'r', 'source': 'gui', 'cwd': str(tmp_path), 'model': 'frozen', 'toolsets': []})
+                'request_id': 'r', 'source': 'tui', 'cwd': str(tmp_path), 'model': 'frozen', 'toolsets': []})
             sid = ref.session_id
             store._entries[key] = _routed_entry(key, sid, '333')
             with store._lock:

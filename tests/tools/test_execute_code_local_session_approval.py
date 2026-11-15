@@ -107,7 +107,7 @@ def _rm_script(victim) -> tuple[str, str]:
                      f"print(json.dumps(terminal({command!r})))")
 
 
-LOCAL_SOURCES = pytest.mark.parametrize("source", ["cli", "tui", "gui", "acp"])
+LOCAL_SOURCES = pytest.mark.parametrize("source", ["cli", "tui", "acp"])
 
 
 @pytest.mark.platforms("posix")
@@ -190,7 +190,7 @@ def test_injected_turn_keeps_whole_script_gate(child_env, turn, source):
 
 
 @pytest.mark.platforms("posix")
-@pytest.mark.parametrize("source", ["cli", "gui"])
+@pytest.mark.parametrize("source", ["cli", "tui"])
 @pytest.mark.parametrize("attached", ["nobody", "read-only"])
 def test_viewer_turn_with_no_approver_attached_keeps_whole_script_gate(child_env, turn, source, attached):
     """The turn's notifier is registered for every session turn, viewer attached or not; the exemption also
