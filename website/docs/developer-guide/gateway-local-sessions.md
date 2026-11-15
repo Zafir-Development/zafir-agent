@@ -5,7 +5,7 @@ description: Local CLI/TUI sessions as canonical gateway admissions
 
 # Gateway-owned fresh local sessions
 
-The composed gateway listener can create fresh local **CLI, TUI, or GUI-policy** sessions without
+The composed gateway listener can create fresh local **CLI or TUI** sessions without
 starting `tui_gateway`'s separate agent runtime. The existing `GatewayRunner` / `TurnRunner`
 own execution, approval waiters, tool calls, session storage, and canonical event delivery.
 
@@ -102,14 +102,15 @@ listener keeps working.
 
 ## Deliberately limited compatibility
 
-- `source` accepts `cli` (default), `tui`, `gui`, `acp`, `tool` and `oneshot`
+- `source` accepts `cli` (default), `tui`, `acp`, `tool` and `oneshot`
   (`gateway.session_policy.SURFACES`). They select the agent platforms `cli`, `tui`,
-  `desktop`, `acp`, `cli` and `cli`; `tool` (third-party integrations) and `oneshot`
+  `acp`, `cli` and `cli`; `tool` (third-party integrations) and `oneshot`
   (finite `chat -q` / `-z` runs) keep their own stored label so human pickers hide them.
   The native local routing identity remains server-owned `Platform.LOCAL`; source never
-  grants messaging/native trust. Default TUI selection folds in `project`; GUI folds in
-  the client-surface toolsets (`project`, `desktop_ui`, `catalog`). GUI policy is
-  independent of `HERMES_DESKTOP` and of the attaching viewer's identity. Without explicit
+  grants messaging/native trust. Historical rows an earlier build created as `gui` /
+  `desktop` stay readable as stored data, but neither label is a creating surface any
+  more; a turn resumed on such a row runs as the surviving `tui` client surface. Default TUI selection folds in `project`, the one client-surface toolset
+  (`toolsets.CLIENT_SURFACE_TOOLSETS`). Without explicit
   `toolsets`, the gateway applies the coding posture (`agent.coding_context: focus` in a
   code workspace, `agent/coding_context.py`) from the `cwd` a `session.create` names,
   decided once at creation; clients never send it as a pick. Only `session.create` applies
@@ -119,7 +120,7 @@ listener keeps working.
   `model` (nonempty model identifier on the daemon's configured provider), and `toolsets`
   (explicit array of established toolset names, including an empty array). Unknown or
   policy-filtered toolsets reject instead of silently disappearing. Explicit toolsets
-  override the default surface additions; CLI/TUI cannot explicitly request `desktop_ui`.
+  override the default surface additions; an explicit `desktop_ui` is refused on every surface.
   `cwd`, model selection, source and effective toolsets are captured at creation; attach
   cannot change them. A conflicting repeat `request_id` returns `invalid_params`.
 - Further frozen launch fields (`CREATE_FIELDS`): `provider`, `base_url` (http(s), no
@@ -141,7 +142,9 @@ listener keeps working.
   The native TUI picker also requests `session.list({limit, scope: "stored"})` for pre-authority
   CLI/TUI/GUI history. This read-only feed uses the native legacy-resume ownership checks,
   excludes hidden/archived/internal and foreign-owned rows, and never adopts a session merely
-  by listing it. Explicit resume performs adoption; the default live feed is unchanged.
+  by listing it. Explicit resume performs adoption; a legacy `gui`/`desktop` row is adopted onto
+  the surviving `tui` surface (its stored label stays historical data); the default live feed is
+  unchanged.
   Both scopes take `workspace`: only conversations whose first row is in that folder, by
   `hermes -c`'s rule (`hermes_state_sessions.workspace_key`): the row's git repo root equals it, or
   (no root recorded) its cwd is the folder or under it. Pass the caller's repo root (else its cwd).
@@ -271,12 +274,11 @@ model request. No native messaging allow-all credential authorizes the execution
 separate negative control enables messaging allow-all only while proving reconstructed
 local source/profile objects still fail closed.
 
-`tests/gateway/test_session_policy.py` adds three simultaneous CLI/TUI/GUI turns against
-an owned loopback model. A barrier holds their first requests concurrently; real terminal
-calls write separate files in three owned working directories. The next requests expose
-the correct cwd results, distinct requested models and surface-specific tool schemas.
-Reconnect preserves each agent; launcher environment carriers and config bytes do not
-change. This is loopback integration evidence, not native launcher or vendor evidence.
+`tests/gateway/test_session_policy.py` covers the surface policy itself: each surviving
+source selects its own agent surface and cwd, launch options stay frozen and validated,
+and a new `gui`/`desktop` launch request is refused while stored `gui` rows stay readable.
+This is policy-unit evidence; the process-level loopback integration evidence lives in
+`test_local_session.py` and `test_local_session_recovery.py` below.
 `tests/gateway/test_local_session_recovery.py` proves rollback-before-publication and cold
 receipt reuse, then starts separate ordinary daemons on the same temporary database using
 real control-socket tickets and authenticated WebSockets. A fixture-only scheduler barrier

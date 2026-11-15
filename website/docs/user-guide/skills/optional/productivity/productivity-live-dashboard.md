@@ -16,7 +16,7 @@ Build self-updating dashboards from live sources.
 |---|---|
 | Source | Optional — install with `hermes skills install official/productivity/live-dashboard` |
 | Path | `optional-skills/productivity/live-dashboard` |
-| Version | `0.2.0` |
+| Version | `0.3.0` |
 | Author | Teknium (teknium1), Hermes Agent |
 | License | MIT |
 | Platforms | linux, macos, windows |
@@ -40,7 +40,7 @@ Setup runs once in the foreground; the recurring refresh runs as a `cronjob` tic
 - "Make a dashboard for &lt;project/process> and keep it updated."
 - "I want one place to see the status of &lt;deals / applications / bugs / shipments>."
 - "Track &lt;thing> across my email and &lt;website> and show me where it stands."
-- "Show me the &lt;slug> dashboard." (re-render/preview an existing one)
+- "Show me the &lt;slug> dashboard." (re-render and show an existing one)
 - A cron tick fires for an existing dashboard (steps 5-7).
 
 Don't use for: one-off status questions (answer directly), price/availability thresholds on a single item (use `product-price-monitor`), or company news tracking (use `competitor-news-monitor`).
@@ -49,7 +49,7 @@ Don't use for: one-off status questions (answer directly), price/availability th
 
 - At least one source connector the dashboard will read from: email/calendar via `himalaya` or `google-workspace`, websites via `web_extract` or `browser_exec`, local files via `read_file`. If none is configured, renegotiate the sources in step 1 before writing any artifact.
 - `cronjob` for the recurring tick.
-- Optional: the `desktop_preview` tool (Hermes desktop app sessions). When it is in the toolset, dashboards render in the in-app preview pane; otherwise the user is given the file path.
+- A browser the user can open: the dashboard is a plain local HTML file, so delivering it means reporting its absolute path (step 8) and, when the user asks, opening it with the platform's default browser (`open` on macOS, `xdg-open` on Linux, `start` on Windows) through the `terminal` tool.
 
 ## Procedure — Setup (foreground, once)
 
@@ -101,8 +101,7 @@ If the diff contains material changes or new needs-attention items, deliver a sh
 
 ### 8. Render where the user can see it
 
-- Desktop/GUI session (`desktop_preview` is in the toolset): `desktop_preview(action="open", url=<absolute path to index.html>, label=<dashboard purpose>)` so the page renders live in the preview pane beside the chat; re-open after each re-render so the pane shows the new state.
-- Any other session (CLI, messenger, cron tick without a GUI): report the absolute path of `index.html` and offer to open it where the platform allows.
+- Report the absolute path of `index.html` and offer to open it in the user's browser (`terminal` with `open <path>` on macOS, `xdg-open <path>` on Linux, `start <path>` on Windows) whenever the user wants to look at it; after a re-render, point them at the same path again.
 
 Done when the user has either seen the rendered page or been told exactly where it lives.
 
@@ -114,7 +113,7 @@ Done when the user has either seen the rendered page or been told exactly where 
 - Alerting on every refresh instead of on material change.
 - Tracking the wrong grain (per-thread when the user thinks per-application).
 - Hardcoding the Hermes home path — resolve it from the running install (the directory holding `config.yaml`) and write absolute paths into cron prompts.
-- Calling `desktop_preview` outside a desktop session — it is only in the toolset for GUI sessions; fall back to the path.
+- Rendering the page nowhere: a dashboard the user never opens is not delivered. Always report the absolute path after a build or re-render.
 
 ## Verification
 
@@ -123,4 +122,4 @@ Done when the user has either seen the rendered page or been told exactly where 
 - [ ] Failed reads marked fields stale without destroying last-known-good state.
 - [ ] Ticks deliver only on material change; no-change runs were `[SILENT]`.
 - [ ] The change log replays the dashboard's history from the state file alone.
-- [ ] The dashboard was shown in the preview pane (desktop) or its path reported (elsewhere).
+- [ ] The dashboard's absolute path was reported after every build or re-render, and the page was opened in the user's browser when they asked.

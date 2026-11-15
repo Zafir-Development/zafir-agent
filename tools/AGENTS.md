@@ -58,7 +58,7 @@ Rules for tool code:
   `agent.secret_scope.get_secret`, never bare `os.getenv` (that answers with the launch profile's
   `.env` for everyone). The registry classifies an `UnscopedSecretError` from
   `current_secret_scope()` at the catch site — a boot-time probe with no scope is DEBUG, not a
-  traceback. GUI-only tools go in a named toolset (`desktop_ui`, `project`) folded in by
+  traceback. Client-surface tools go in a named toolset (`project`) folded in by
   `_load_enabled_toolsets(platform)` (root: capability is a property of the SESSION).
 - **Agent-level tools** (`todo`, `memory`) are intercepted before `handle_function_call()` via the
   `INLINE_TOOL_EXECUTORS` table (`agent/inline_tool_executors.py`; `agent/AGENTS.md`).
@@ -189,23 +189,18 @@ imports against a temp `HERMES_HOME` (see `tests/tools/test_approval_config_read
 
 ## Surface capability is a property of the SESSION, never of the process env
 
-A tool that works only because of *who is on the other end* (desktop panes, in-app browser,
-message reactions, Projects) must resolve availability from the **session's own source**, not
-from an env var on the backend. Client and backend are separate machines: the desktop app may
-drive a locally spawned backend, one over SSH, one behind URL + token, or Hermes Cloud, and
-only the first two carry `HERMES_DESKTOP=1`. An env-keyed gate is a silent no-op on the other
-topologies — the tool is stripped from the schema while the platform hint tells the model it
-is "inside the Hermes desktop app". The pattern:
+A tool that works only because of *who is on the other end* (the TUI client's Projects)
+must resolve availability from the **session's own source**, not from an env var on the
+backend. One backend serves many sessions across stdio, WebSocket and the gateway listener;
+an env-keyed gate would strip the tool from the schema everywhere or hand it to sessions that
+cannot answer it. The pattern:
 
 - **The toolset is the surface gate.** Keep such tools off `_HERMES_CORE_TOOLS` and in a named
-  toolset (`desktop_ui`, `project`); the GUI gateway's `_load_enabled_toolsets(platform)`
-  folds it in when the session's platform says GUI. One resolver, every topology.
+  toolset (`project`); `_load_enabled_toolsets(platform)` folds it in when the session's
+  platform says TUI. One resolver, every transport.
 - **`check_fn` answers reachability or opt-in, not surface.** "Is the bridge wired?" — fine.
-  "Was I spawned by Electron?" — not. `check_fn` results are TTL-cached process-wide
+  "Which client is attached?" — not. `check_fn` results are TTL-cached process-wide
   (`tools/registry.py`); a per-session answer does not belong there.
-- **Ask which identity you mean.** `HERMES_DESKTOP=1` legitimately means "this backend was
-  spawned by the app" (cron ticker, web-dist handling). It does NOT mean "a GUI is watching";
-  the embedded terminal pane (`hermes --tui` against that backend) is the counterexample.
 
 Test: if the capability still makes sense with the client on another machine, it is
-session-scoped. Assert the GUI session gets the tool **with the env var absent**.
+session-scoped. Assert a TUI session gets the tool with no surface env var set.

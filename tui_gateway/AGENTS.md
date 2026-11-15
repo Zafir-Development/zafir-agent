@@ -30,7 +30,7 @@ Newline-delimited JSON-RPC frames over a WebSocket (`/api/ws`, `tui_gateway/ws.p
 `hermes-gateway-v1` `CANONICAL_METHODS` below) go to the session authority; other methods reach these
 handlers only with a full interactive grant (`ws_legacy_fallback.py`). Client→server method calls, server→client
 **requests** (the agent asking the user something: `approval`, `clarify`, `sudo`, `secret`, `vault.*`,
-`connection`, the desktop read/act bridges) and server→client `event` notifications. `tui_gateway/server.py`
+`connection`) and server→client `event` notifications. `tui_gateway/server.py`
 is the facade with the method/event catalog; methods live in `methods_*.py` siblings (`methods_config`,
 `methods_complete`, `methods_browser`, `methods_bot_relay`, ...), event publishing in
 `event_publisher.py` / `event_replay.py`, server→client requests in `server_requests.py` (`send()` blocks
@@ -39,8 +39,8 @@ the agent thread until the response frame with the same `srq-<n>` id arrives; `c
 reconnecting client re-renders the still-open questions). A client says once per connection that it
 answers them (`client.capabilities {server_requests: true}`, sent by the shared channel on `gateway.ready`);
 a WebSocket client that never did is an app build older than server→client requests, and `send()` fails
-fast for it instead of stalling the agent for the deadline. Desktop reaches the same server over WebSocket
-via `apps/shared` (`JsonRpcGatewayClient`, `onRequest`). New RPC = a new `methods_<topic>.py` or an entry
+fast for it instead of stalling the agent for the deadline. The Ink TUI reaches the same server over
+WebSocket via `apps/shared` (`JsonRpcGatewayClient`, `onRequest`). New RPC = a new `methods_<topic>.py` or an entry
 in an existing topical sibling, registered in the table — no `if method == ...` chain (root shape rules).
 
 **The wire is declared in Python and generated for TypeScript** (`tui_gateway/contracts/`). Every method
@@ -105,7 +105,7 @@ profile's does not, and that `os.environ` is unchanged afterwards.
 | Slash commands | local handler + fallthrough | `slash.exec` → `_SlashWorker` (`slash_worker_client.py`); `command.dispatch` |
 | Completions | `useCompletion` hook | `complete.slash`, `complete.path` (under a non-local `terminal.backend`, `complete.path` lists the directory through the session's terminal backend — never the gateway host, whose same-named tree would look right and be wrong) |
 | Theming | `theme.ts` + `branding.tsx` | `gateway.ready` carries skin data |
-| Connection operations (desktop card) | desktop `store/connection-request.ts` | `connection.request` → `connection.update`* → `connection.respond {op_id}`; `connectors.operation.status`. The op lives in `tools/connectors/live.py`; the card never parks the tool thread (`methods_connectors.py`). |
+| Connection operations | `connectionSetupOverlay.tsx` + `app/connectionOperationStore.ts` | `connection.request` → `connection.update`* → `connection.respond {op_id}`; `connectors.operation.status`. The op lives in `tools/connectors/live.py`; the card never parks the tool thread (`methods_connectors.py`). |
 
 ## Shared subagent snapshots
 
@@ -113,7 +113,7 @@ profile's does not, and that `os.environ` is unchanged afterwards.
 transport's live session. The roster is read-only and follows the CONVERSATION: exact-owner
 records plus children whose durable lineage (`owner_agent_session_id` → compression tip, the
 same spine as in-process `delegate_task(action="list")`) is the session's agent, because a
-Desktop reconnect / resume remints the UI session id and compression rotates the key while the
+reconnect / resume remints the UI session id and compression rotates the key while the
 children keep running (#114909). Control (`steer` / `interrupt` / `tail`) stays pinned to the
 exact session record and transport. Child authority is resolved at RPC time against the owning session's
 LIVE transport slot, so every authenticated reattach path (prompt.submit, queued drain,
@@ -157,8 +157,8 @@ The canonical gateway exposes the same two discovery RPCs through `gateway/sessi
 It requires authenticated `session:read` capability and the authority's exact profile before any
 discovery. An optional named `profile` must resolve to that same home; a foreign selector returns
 `profile_mismatch`. Discovery runs off-loop in the authority's profile scope, without creating a
-legacy session or execution runtime. Catalog warnings, categories, aliases, desktop metadata,
-skill usage/origin, and completion replacement offsets retain their legacy shapes. Discovery is
+legacy session or execution runtime. Catalog warnings, categories, aliases, skill
+usage/origin, and completion replacement offsets retain their legacy shapes. Discovery is
 not an assertion that every listed slash execution command is implemented by the canonical RPCs.
 
 ## Canonical local slash execution

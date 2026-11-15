@@ -7,7 +7,7 @@ ships in the delegate_task description and in the background dispatch result).
 
 Real in-process `AIAgent`s from two plain checkouts (base = main, pr = the branch), each cell in its
 own subprocess with a temp `HERMES_HOME`, host side effects sandboxed by
-`../core_tool_deferral/sandbox.py`.
+`../host_sandbox.py`.
 
 ## Tasks
 

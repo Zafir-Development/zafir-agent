@@ -8,7 +8,7 @@ description: "Authoritative reference for Hermes built-in tools, grouped by tool
 
 This page documents Hermes' built-in tools, grouped by toolset. Availability varies by platform, credentials, and enabled toolsets.
 
-**Quick counts (current registry):** ~85 tools — 4 browser tools (`browser_exec`, `browser_cdp`, `browser_dialog`, `browser_vault`), 4 file tools, 2 terminal tools (`terminal`, `process_manage`), 11 desktop-GUI tools (`read_terminal`, `close_terminal`, `desktop_preview`, `drive_preview`, `annotate_preview`, `read_window_below`, `focus_pane`, `react_to_message`, `gui_tour`, `show_tip`, `set_theme` — desktop-app sessions only), 2 web tools, 5 Feishu tools, 14 kanban tools (registered when the kanban dispatcher spawns the agent), 1 project tool (`desktop_project`; desktop/GUI sessions), 2 Discord tools, 3 video tools (`video_generate`, `xai_video_edit`, `xai_video_extend`), and a handful of standalone tools (`memory`, `clarify`, `delegate_task`, `execute_code`, `cronjob_manage`, `session_search`, `skill_view`/`skill_manage`/`skills_list`, `text_to_speech`, `image_generate`, `vision_analyze`, `video_analyze`, `todo_list`, `computer_use`, `x_search`).
+**Quick counts (current registry):** ~55 tools — 4 browser tools (`browser_exec`, `browser_cdp`, `browser_dialog`, `browser_vault`), 4 file tools, 2 terminal tools (`terminal`, `process_manage`), 2 web tools, 5 Feishu tools, 14 kanban tools (registered when the kanban dispatcher spawns the agent), 1 project tool (`desktop_project`; client/TUI sessions), 2 Discord tools, 3 video tools (`video_generate`, `xai_video_edit`, `xai_video_extend`), and a handful of standalone tools (`memory`, `clarify`, `delegate_task`, `execute_code`, `cronjob_manage`, `session_search`, `skill_view`/`skill_manage`/`skills_list`, `text_to_speech`, `image_generate`, `vision_analyze`, `video_analyze`, `todo_list`, `computer_use`, `x_search`).
 
 :::tip MCP Tools
 In addition to built-in tools, Hermes can load tools dynamically from MCP servers. MCP tools appear with the prefix `mcp__<server>__` (e.g., `mcp__github__create_issue` for the `github` MCP server). See [MCP Integration](../user-guide/features/mcp.md) for configuration.
@@ -152,25 +152,17 @@ Registered when the agent is either (a) spawned by the kanban dispatcher (`HERME
 
 ## `project` toolset
 
-Tools for driving desktop [Projects](../user-guide/cli.md) — named, multi-folder workspaces. Registered when the `project` toolset is enabled (primarily the desktop app / dashboard surfaces).
+Tools for driving [Projects](../user-guide/cli.md) — named, multi-folder workspaces. Registered when the `project` toolset is enabled (client sessions: the TUI).
 
 | Tool | Description | Requires environment |
 |------|-------------|----------------------|
-| `desktop_project` | One action enum for the three Project verbs: `create` makes a desktop Project (a named workspace) and switches this chat into it — pass `path` to anchor it to a repo/folder; `list` shows the desktop Projects and which one is active; `switch` moves this chat into an existing Project (by name, slug, or id), moving the session workspace to the project's primary folder. | — |
+| `desktop_project` | One action enum for the three Project verbs: `create` makes a Project (a named workspace) and switches this chat into it — pass `path` to anchor it to a repo/folder; `list` shows the Projects and which one is active; `switch` moves this chat into an existing Project (by name, slug, or id), moving the session workspace to the project's primary folder. | — |
 
 ## `memory` toolset
 
 | Tool | Description | Requires environment |
 |------|-------------|----------------------|
 | `memory` | Save important information to persistent memory that survives across sessions. Your memory appears in your system prompt at session start -- it's how you remember things about the user and your environment between conversations. WHEN TO SA… | — |
-
-## `catalog` toolset
-
-Enabled for sessions whose source is the desktop app, whichever backend it's connected to. CLI, TUI, `hermes -z`, cron, kanban and messaging sessions never get it, even when a config list names it. `all` does not include it. Remove it with `agent.disabled_toolsets: [catalog]`.
-
-| Tool | Description | Requires environment |
-|------|-------------|----------------------|
-| `manage_catalog` | Desktop sessions only, deferred behind `tool_search` by default. `search` lists catalog plugins and hub skills matching `query` (optionally one `kind`) with `id`, `kind`, `display`, `tier`, `platforms` and `installed` (present in this chat's profile); it changes nothing. `install` takes `items: [{kind, id}]` and shows one approval card with a row per item (Install, Advanced, Skip); an id the catalog does not know, or a plugin this OS cannot run, is drawn failed with the reason. An approved row installs into this chat's profile (or the profile chosen under Advanced) at the catalog's reviewed commit, with the same kill list, security scan and live activation as the Plugins tab, so the plugin's MCP tools and skills are usable in that profile's open chats at once. The result lists each row as `connected` (with `tools` and `skill`), `skipped`, `failed` (with `detail`) or `not_connected`; a failed row ends the wait like an installed or skipped one, and an install turns on a catalog plugin that is on disk but not enabled. The model cannot pass a source, commit, profile or setting. Anywhere else the call returns the `hermes plugins install` / `hermes skills install` command to run instead. | — |
 
 ## `session_search` toolset
 
@@ -192,102 +184,6 @@ Enabled for sessions whose source is the desktop app, whichever backend it's con
 |------|-------------|----------------------|
 | `process_manage` | Manage background processes started with terminal(background=true). Actions: 'list' (show all), 'poll' (check status + new output), 'log' (full output with pagination), 'wait' (block until done or timeout), 'kill' (terminate), 'write' (sen… | — |
 | `terminal` | Execute shell commands on a Linux environment. Filesystem persists between calls. Set `background=true` for long-running servers. Set `notify_on_complete=true` (with `background=true`) to get an automatic notification when the process finishes — no polling needed. Add `heartbeat=N` (seconds, min 60) to also receive a periodic notification carrying the output produced since the previous one — for long bounded jobs such as a merge train or a full test suite, so a failure is seen within N seconds instead of at exit; a tick with no new output is skipped, and the wake is hidden from the transcript on Desktop/TUI (only the agent's reply shows). Do NOT use cat/head/tail — use read_file. Do NOT use grep/rg/find — use search_files. | — |
-
-## `desktop_ui` toolset
-
-Enabled for sessions whose source is the Hermes desktop app, on any backend it
-is connected to (local, SSH, URL, or Hermes Cloud). Absent from CLI, TUI,
-messaging, and cron sessions.
-
-| Tool | Description | Requires environment |
-|------|-------------|----------------------|
-| `read_terminal` | Read what's currently shown in the in-app terminal pane of the Hermes desktop GUI (the embedded shell beside this chat). | — |
-| `close_terminal` | Close the read-only terminal tab for a background process in the Hermes desktop GUI. Does NOT kill the process — only drops the tab/view; use process_manage(action='kill') to stop it. | — |
-| `desktop_preview` | Drive the preview pane beside the chat in the Hermes desktop app: `open` a web URL, localhost dev-server URL, or file path (HTML renders live); `close` the whole pane (omit `url`) or one tab inside it (pass the URL or file path); `read` what the pane currently shows — the in-app Browser's page text (URL + title + rendered text, pageable with `start`/`count`) or a file/artifact tab's identity. | — |
-| `drive_preview` | Interact with the page open in the in-app browser: `elements` inventories what's clickable and typable (each with a ref that names it, like `btn-sign-in` or `inp-email`, plus role, label, and value), then `click`, `hover`, `type`, `scroll`, and `press` act on a ref, and `back`/`forward`/`reload` drive the pane's history. The pointer and keyboard are real input, so hover menus open. A ref lasts until the page navigates, including across a re-render that rebuilds the element, so after the first inventory every action answers with just a delta — what was added, removed, changed, or rebound — instead of the whole page again. | — |
-| `annotate_preview` | Outline an element in the in-app browser and leave the mark up until it's removed — the deliberate counterpart to the transient cues `drive_preview` draws as it works. `add` marks a ref with an optional short label, `remove` takes one down, `clear` takes them all. Marks follow their element and vanish with it, so a navigation clears them. | — |
-| `read_window_below` | Identify the OS window directly underneath the Hermes desktop window — app name, title, bounds (metadata only, never pixels). On macOS, other apps' titles appear only when Screen Recording is already granted; the tool never prompts for it. | — |
-| `focus_pane` | Reveal and focus a pane in the Hermes desktop app (chat, files, terminal, review, sessions). | — |
-| `react_to_message` | React to a message with a single emoji, iMessage-tapback style. Opt-in via Settings → Appearance (`display.message_reactions`). | — |
-| `gui_tour` | Give a live guided tour: dim the screen, highlight an element, and attach a narrated popover (driver.js). Works on the Hermes app's own UI and on any page open in the preview pane. `start` with no steps runs the app's built-in tour (`preset` `quick` or `full`, default `full`). For a custom tour, `targets` discovers what's on screen, `show` narrates step-by-step, and `start` with `steps` hands the user Next/Prev controls. | — |
-| `show_tip` | Point at one element with a small accent bubble and an arrow — the quiet sibling of `gui_tour`, with no dimming, no spotlight, and no Next/Prev. Same `data-tour` handles and the same `tour(action='targets')` discovery call. | — |
-| `set_theme` | Set the Hermes desktop app's accent colour (a swatch id, `theme`, or `#rrggbb`), light/dark/system mode, and layout preset (Simple: `sidebar-left`, `sidebar-right`; Advanced: `default`, `basic`, `focus`, `terminal-deck`, `quad`; or a saved layout's id). The result reports what was applied; an unknown value comes back with the available ids. `picker` (`accent` or `layout`) shows a picker card in the chat and waits up to 5 minutes for the pick. | — |
-
-### Tours
-
-For a general look around the app, `gui_tour(action='start')` with no steps runs the desktop app's built-in tour. `preset='quick'` shows four essentials (sessions, composer, new session, model); `preset='full'` (the default) adds the stops for the current interface mode. Stops whose element is not on screen are skipped. The built-in tour runs only on `surface='app'`, and `preset` cannot be combined with `steps`.
-
-For a custom tour, the `gui_tour` tool discovers its own targets — call `action='targets'` and it returns every addressable element on screen with a selector, a label, and a `stable` flag. Stable selectors key off identity (`data-tour`, `id`, `data-testid`, `aria-label`) and survive a re-render; positional `nth-child` paths don't, so stable ones sort first and should be preferred.
-
-To give an element a durable handle of your own, mark it up:
-
-```html
-<div data-tour="composer">…</div>
-```
-
-Handles are applied at the **primitive**, not the call site, so one edit names every instance. The ones that already exist:
-
-| Handle | What it names |
-|---|---|
-| `overlay-nav` | the left nav of any route overlay (settings, cron, profiles, agents) |
-| `nav-<id>` | one row in that nav — `nav-models`, `nav-appearance`, … |
-| `field-<schemaKey>` | one settings row, by its config key — `field-model`, `field-provider`, … |
-| `page-tabs` | the filter tabs on any `PageSearchShell` page (artifacts, skills, …) |
-| `artifact-card` | an artifact card in the grid |
-
-When adding a surface, tag its shared primitive the same way rather than tagging screens one by one — that keeps the tour vocabulary small and stops selectors from rotting.
-
-The same engine backs curated (non-agent) tours in the desktop app, so a feature can ship its own walkthrough:
-
-```ts
-import { startTour, showTourStep, stopTour } from '@/lib/tour'
-
-startTour([
-  { selector: '[data-tour="composer"]', title: 'Composer', text: 'Type here.' },
-  { selector: '[data-tour="files"]', title: 'Files', text: 'Browse your project.' }
-])
-```
-
-A step can also move the app to where its target lives, and the tour puts things back when it ends:
-
-```ts
-startTour([
-  { navigate: '/artifacts', selector: '[data-tour="page-tabs"]', title: 'Filters', text: '…' },
-  { pane: 'sessions', selector: '[data-slot="sidebar"]', title: 'Sessions', text: '…' }
-])
-```
-
-`navigate` takes a route path and `pane` a desktop pane name. Both run as the step is entered, targets that mount late are waited for, and closing the tour — by any route, including Esc — returns to wherever it started.
-
-Pass `'preview'` as the second argument to run against the page in the preview pane instead of the app.
-
-### Tips
-
-A tip is a tour step without the production: one bubble, one arrow, no scrim and
-nothing to page through. It's the right weight for a sentence that would be
-clearer with a finger on the thing it's about — "the model name is a button" —
-where dimming the whole app would not be.
-
-The `show_tip` tool takes the same selectors `gui_tour(action='targets')` reports, so
-discovery is one call for both, and the durable `data-tour` handles above name
-targets for either. One tip is on screen at a time; a new one replaces the last.
-
-The app can also show its own, walking a built-in catalog of app features in
-order, paced like a game's loading-screen tips rather than a notification: a few
-minutes into a launch at the earliest, then at most one every six hours, and
-only at a genuinely idle moment. A tip from Hermes shares that cooldown, so it
-also buys the user six hours of quiet from the rotation. The rotation is a single
-lap: each catalog tip shows once, whether it timed out or was closed with the ✕,
-and once every tip has had its turn the app goes quiet. The settings row starts
-the lap over.
-
-Both tips and tours are on by default and switched off in Settings → Appearance
-(`display.in_app_tips`, `display.in_app_tours`). Off covers Hermes as well as
-the app: the switch reaches the connected gateway's config and the tool leaves
-the model's schema, so the agent is never told about a surface it isn't allowed
-to use. Like every schema change, that lands on the next session — a running
-conversation keeps the toolset it started with, and the app declines the call in
-the meantime.
 
 ## `todo` toolset
 

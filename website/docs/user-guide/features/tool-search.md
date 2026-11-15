@@ -117,12 +117,13 @@ tools:
       - todo_list
       - process_manage
       - cronjob_manage
-      - manage_catalog
+      - browser_vault
+      - desktop_project
 ```
 
-The default `defer` list also includes the selected desktop GUI helpers listed
-in `hermes_cli/config_defaults.py`. It is the single source of truth for the
-shipped curated set; the runtime fallback uses the same value.
+The shipped default `defer` list lives in `hermes_cli/config_defaults.py`. It is
+the single source of truth for the curated set; the runtime fallback uses the
+same value.
 
 | Key | Default | Meaning |
 | --- | --- | --- |
