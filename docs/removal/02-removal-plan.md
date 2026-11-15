@@ -288,6 +288,11 @@ explicitly marked read-only.
 
 ## Step 6 — Desktop tools/toolsets and session-surface branches
 
+Detailed plan checked against the local Step 5 result:
+[step-6-removal-plan.md](step-6-removal-plan.md). It refines the shared-code
+boundaries below: retain generic server requests, TUI Projects, connectors and
+browser vault; remove only their renderer-specific paths.
+
 **Goal:** stop offering renderer-backed tools and delete the desktop session branches while keeping
 TUI behavior.
 
