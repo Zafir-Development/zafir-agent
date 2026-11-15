@@ -103,7 +103,7 @@ def wire(turn, agent) -> dict:
 
 
 # Launch sources whose viewer never sets the session flag; main's TUI gateway defaulted it from config.
-_CONFIG_DEFAULT_SOURCES = frozenset({"tui", "gui"})
+_CONFIG_DEFAULT_SOURCES = frozenset({"tui"})
 
 
 def show_reasoning(turn) -> bool:
@@ -124,7 +124,7 @@ def _config_default_launch() -> bool:
 
 
 def launch_shows_reasoning(policy, authority) -> bool:
-    """An unset session flag: ``display.show_reasoning`` for an Ink or Desktop launch, else off."""
+    """An unset session flag: ``display.show_reasoning`` for an Ink TUI launch, else off."""
     if getattr(policy, "source", None) not in _CONFIG_DEFAULT_SOURCES:
         return False
     from gateway.display_config import local_display_config

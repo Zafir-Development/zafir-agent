@@ -23,7 +23,7 @@ def _account_method(params_model=None, *, creates_guest, invalid="", invalid_rea
             from pydantic import ValidationError
             from tools.connectors.gateway.errors import GatewayAuthError
 
-            with _desktop_page_vars():
+            with _connector_page_vars():
                 if gate_error := _account_gate_closed(rid):
                     return gate_error
                 try:

@@ -29,7 +29,7 @@ from tools.managed_gateway_identity import CallRef, connector_headers, log_conne
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["ConnectorClient", "Transport", "return_to_args"]
+__all__ = ["ConnectorClient", "Transport"]
 
 DEFAULT_TIMEOUT_SECONDS = 30.0
 EXECUTE_TIMEOUT_SECONDS = 60.0
@@ -450,19 +450,6 @@ class ConnectorClient:
         if idempotency_key:
             headers["x-idempotency-key"] = idempotency_key
         return headers
-
-
-def return_to_args(*, op: Optional[str] = None) -> dict[str, Any]:
-    """The ``returnTo`` / ``op`` arguments a connect or execute call carries so the vendor's done page
-    can send the browser back to the app that asked for the connection.
-
-    Only the desktop registers a URL scheme for that return, so every other surface sends neither
-    field and keeps the vendor's own done page. The dev build registers ``hermes-dev://`` instead, and
-    announces itself to its backend with ``HERMES_DESKTOP_DEV_SERVER``."""
-    if session_platform() != "desktop":
-        return {}
-    target = "hermes-desktop-dev" if os.environ.get("HERMES_DESKTOP_DEV_SERVER") else "hermes-desktop"
-    return {"return_to": target, "op": op} if op else {"return_to": target}
 
 
 def _route_key(path: str) -> str:

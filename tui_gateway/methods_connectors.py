@@ -295,13 +295,15 @@ def _account_home(request):
 
 
 @contextlib.contextmanager
-def _desktop_page_vars():
-    """Bind the session vars of a sessionless request from the desktop Connectors page. Only that
-    page sends account-owned and account RPCs, so the surface comes from the request: the backend's
-    ``HERMES_DESKTOP`` is absent on a URL or cloud backend and would name the caller ``tui``."""
+def _connector_page_vars():
+    """Bind the session vars of a sessionless connector request from the TUI connector settings.
+
+    These account-owned/account RPCs are only sent by the local client page; the sessionless
+    request names no surface of its own, so bind the remaining client surface (tui) rather than
+    letting a backend env var decide."""
     from gateway.session_context import set_session_vars
 
-    tokens = set_session_vars(source="desktop", profile=_current_profile_name(), cron_session="")
+    tokens = set_session_vars(source="tui", profile=_current_profile_name(), cron_session="")
     try:
         yield
     finally:
@@ -310,7 +312,7 @@ def _desktop_page_vars():
 
 @contextlib.contextmanager
 def _account_scope(request):
-    with _session_profile_runtime_scope({"profile_home": _account_home(request)}), _desktop_page_vars():
+    with _session_profile_runtime_scope({"profile_home": _account_home(request)}), _connector_page_vars():
         yield
 
 
