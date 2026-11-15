@@ -284,11 +284,10 @@ method("shared_metrics.status", params=ProfileParams, result=SharedMetricsConsen
 
 
 class SharedMetricsSetParams(ProfileParams):
-    """``send`` is ignored unless ``enabled``; ``first_run`` marks the Desktop first-run answer."""
+    """``send`` is ignored unless ``enabled``."""
 
     enabled: bool
     send: bool = False
-    first_run: bool = False
 
 
 method("shared_metrics.set", params=SharedMetricsSetParams, result=SharedMetricsConsentResult,
@@ -313,15 +312,13 @@ method("shared_metrics.slash_command", params=SharedMetricsSlashCommandParams,
 
 
 class SharedMetricsStartupLatencyParams(ProfileParams):
-    """``elapsed_ms`` = the client's own launch (TUI process start / Desktop app start) to ready
-    (TUI gateway ready / Desktop backend attached), measured once per launch by the client. The
-    client names its surface because a Desktop may attach to a URL/cloud backend where
-    ``HERMES_DESKTOP`` is unset; without it the backend falls back to its own client detection.
-    ``launch_id`` is an opaque per-launch token the backend latches on (never recorded), so a
-    reconnect re-sending the same launch counts once while a new launch counts again."""
+    """``elapsed_ms`` = the client's own launch (TUI process start) to ready (TUI gateway ready),
+    measured once per launch by the client. ``launch_id`` is an opaque per-launch token the backend
+    latches on (never recorded), so a reconnect re-sending the same launch counts once while a new
+    launch counts again."""
 
     elapsed_ms: float
-    surface: Literal["desktop_attach", "tui"] | None = None
+    surface: Literal["tui"] | None = None
     launch_id: str | None = None
 
 
@@ -334,115 +331,6 @@ method("shared_metrics.startup_latency", params=SharedMetricsStartupLatencyParam
        doc="Record one client launch-to-ready latency (fire-and-forget; a no-op unless shared metrics are on).")
 
 
-# ---- v4 reliability ----
-class SharedMetricsUpdateRunParams(ProfileParams):
-    """One Desktop PACKAGED self-update (electron-updater / App Installer / Store). Source-checkout
-    hand-offs run ``hermes update`` and are counted from its receipt, never here. Raw words; the
-    backend buckets them: ``outcome`` success|failed|noop|refused, ``failed_stage``
-    download|verify|apply|restart, ``mechanism`` the updater strategy kind, ``duration_ms`` wall
-    time, ``from_commit_date`` the updated-from build's commit time (epoch seconds) when known."""
-
-    outcome: str
-    failed_stage: str | None = None
-    mechanism: str | None = None
-    duration_ms: float | None = None
-    from_commit_date: float | None = None
-
-
-class SharedMetricsUpdateRunResult(Result):
-    ok: bool
-
-
-method("shared_metrics.update_run", params=SharedMetricsUpdateRunParams, result=SharedMetricsUpdateRunResult,
-       doc="Count one Desktop packaged self-update outcome (fire-and-forget; a no-op unless shared metrics are on).")
-# ---- end v4 reliability ----
-
-
-# ---- v5 desktop ----
-class SharedMetricsDesktopFeatureUseParams(ProfileParams):
-    """``area`` is a Desktop surface id (``command_palette``, ``terminal_pane``, ``settings_<view>`` …);
-    the backend collapses anything outside its closed set to ``other``."""
-
-    area: str
-
-
-method("shared_metrics.desktop_feature_use", params=SharedMetricsDesktopFeatureUseParams,
-       result=OkResult,
-       doc="Count one Desktop area used today (fire-and-forget; once per area per UTC day; a no-op unless on).")
-
-
-class SharedMetricsDesktopFrictionParams(ProfileParams):
-    """``kind`` notice_dismissed|error_toast|renderer_crash|backend_disconnect|slow_frame; ``detail`` a
-    closed code-defined word for that kind (notice id, error category, crash reason, drop reason, frame
-    duration bucket), never message text."""
-
-    kind: str
-    detail: str
-
-
-method("shared_metrics.desktop_friction", params=SharedMetricsDesktopFrictionParams,
-       result=OkResult,
-       doc="Count one Desktop friction event (fire-and-forget; capped per day; a no-op unless on).")
-
-
-class SharedMetricsDesktopOnboardingParams(ProfileParams):
-    """``step`` a Desktop first-run step id; ``event`` reached|completed|abandoned."""
-
-    step: str
-    event: str
-
-
-method("shared_metrics.desktop_onboarding", params=SharedMetricsDesktopOnboardingParams,
-       result=OkResult,
-       doc="Count one Desktop first-run step transition (fire-and-forget; once per step+event; a no-op unless on).")
-
-
-class SharedMetricsDesktopDislikeParams(ProfileParams):
-    """``signal`` quick_close|cancelled|setting_off_default|rage_click|undo|feature_disabled; ``target`` a
-    closed code-defined id for that signal (area, flow, action, undo path, feature toggle); ``setting`` a
-    config key for setting_off_default only (the value is never sent — the backend compares it to the
-    default)."""
-
-    signal: str
-    target: str = ""
-    setting: str | None = None
-
-
-method("shared_metrics.desktop_dislike", params=SharedMetricsDesktopDislikeParams,
-       result=OkResult,
-       doc="Count one Desktop dislike signal (fire-and-forget; capped per signal per day; a no-op unless on).")
-
-
-class SharedMetricsDesktopModeDay(Params):
-    mode: Literal["bots", "sessions"]
-    active_ms: float = 0
-    messages_sent: int = 0
-
-
-class SharedMetricsDesktopActionDay(Params):
-    action: str
-    via: Literal["click", "menu", "palette", "shortcut"]
-    count: int
-
-
-class SharedMetricsDesktopDailyParams(ProfileParams):
-    """One finished UTC day of Desktop use, aggregated on the client. ``day`` (YYYY-MM-DD) only latches
-    a resend and is never recorded; the raw counts are bucketed by the backend."""
-
-    day: str
-    bot_count: int = 0
-    modes: list[SharedMetricsDesktopModeDay] = Field(default_factory=list)
-    actions: list[SharedMetricsDesktopActionDay] = Field(default_factory=list)
-
-
-class SharedMetricsDesktopDailyResult(Result):
-    recorded: bool
-
-
-method("shared_metrics.desktop_daily", params=SharedMetricsDesktopDailyParams,
-       result=SharedMetricsDesktopDailyResult,
-       doc="Record one finished Desktop day (mode use + button presses); recorded=false keeps it for a retry.")
-# ---- end v5 desktop ----
 
 
 # ── model.options ─────────────────────────────────────────────────────────────────────────────

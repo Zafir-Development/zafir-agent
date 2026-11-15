@@ -301,9 +301,6 @@ def _command_survives_generation_collection(tmp_path, monkeypatch, surface):
             if surface == "legacy":
                 command = [sys.executable, "-I", str(repo / "scripts/hermes-gateway"), "--help"]
                 args = ["gateway", "--help"]
-            elif surface == "ssh":
-                from hermes_cli.windows_ssh_runtime import _resolve_direct_command
-                command = [*_resolve_direct_command(str(launcher)), *args]
             elif surface == "published":
                 result = subprocess.run([str(launcher), "--print-runtime-command", "--", *args],
                                         capture_output=True, text=True, timeout=30, encoding="utf-8", check=False)
@@ -339,14 +336,14 @@ def _command_survives_generation_collection(tmp_path, monkeypatch, surface):
     assert json.loads(receipt)["argv"] == args
 
 
-@pytest.mark.parametrize("surface", ["published", "systemd", "launchd", "ssh", "legacy"])
+@pytest.mark.parametrize("surface", ["published", "systemd", "launchd", "legacy"])
 @pytest.mark.platforms("posix")
 @pytest.mark.spawns_gateway_lookalike
 def test_posix_commands_survive_generation_collection(tmp_path, monkeypatch, surface):
     _command_survives_generation_collection(tmp_path, monkeypatch, surface)
 
 
-@pytest.mark.parametrize("surface", ["published", "ssh"])
+@pytest.mark.parametrize("surface", ["published"])
 @pytest.mark.platforms("windows")
 def test_windows_commands_survive_generation_collection(tmp_path, monkeypatch, surface):
     _command_survives_generation_collection(tmp_path, monkeypatch, surface)
@@ -466,24 +463,6 @@ def test_windows_repair_upgrades_healthy_old_pm_external_launchers(tmp_path, mon
                             text=True, timeout=30, encoding="utf-8", check=False)
     assert result.returncode == 0, result.stderr
     assert Path(json.loads(result.stdout)[0]).samefile(interpreter)
-
-
-def test_dashboard_action_boots_selected_dependencies(tmp_path, monkeypatch):
-    from hermes_cli import web_server, web_server_gateway
-
-    repo, home, _ = fixture_tree(tmp_path, monkeypatch)
-    select_generation(repo, 'current', 'selected')
-    monkeypatch.setattr(web_server, "PROJECT_ROOT", repo)
-    monkeypatch.setattr(web_server_gateway, "_ACTION_LOG_DIR", home / "logs")
-    proc = web_server_gateway._spawn_hermes_action(["--version"], "gateway-restart")
-    try:
-        assert proc.wait(timeout=30) == 7
-        log = (home / "logs" / web_server_gateway._ACTION_LOG_FILES["gateway-restart"]).read_text(encoding="utf-8-sig")
-        assert json.loads(log.splitlines()[-1])["value"] == "selected"
-    finally:
-        if proc.poll() is None:
-            proc.kill()
-            proc.wait(timeout=30)
 
 
 def test_pre_pm_base_dependencies_activate_only_at_boot(tmp_path, monkeypatch):

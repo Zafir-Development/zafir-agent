@@ -65,7 +65,7 @@ Hermes 在 WSL1 上无法可靠运行 —— WSL1 会动态转译 Linux 系统�
 
 ### 发行版选择
 
-我们以 Ubuntu（LTS）为测试基准。Debian 同样可用。Arch 和 NixOS 也有人在用，但一键安装脚本假设使用基于 Debian 的 `apt` 系统 —— 如需其他路径，请参阅 [Nix 安装指南](../getting-started/nix-setup.md)。
+我们以 Ubuntu（LTS）为测试基准。Debian 同样可用。其他发行版可能也能运行，但一键安装脚本假设使用基于 Debian 的 `apt` 系统。
 
 ### 启用 systemd（推荐）
 

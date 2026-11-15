@@ -8,11 +8,6 @@ import sys
 from pathlib import Path
 
 
-def _sync_windows_cli_launchers(root: Path) -> list[Path]:
-    # Shim to stop the old updater doing work until relaunch. Copy no launchers.
-    return []
-
-
 def _is_windows() -> bool:
     return sys.platform == "win32"
 
@@ -78,7 +73,7 @@ def ensure_windows_bin_launchers(
     Earlier installer versions staged them at ``<checkout>\\bin`` instead —
     inside the git working tree — where ``hermes update``'s pre-update
     autostash (``git stash push --include-untracked``) swept them off disk;
-    once the desktop updater stopped re-applying stashes (``--keep-stash``)
+    once the updater stopped re-applying stashes (``--keep-stash``)
     nothing restored them and ``hermes`` stopped resolving in every new
     terminal. That legacy location is re-staged too, during the transition,
     for installs whose user PATH still resolves through it.
@@ -306,7 +301,7 @@ def migrate_windows_bin_path(
 
         if not owns_user_path(home):
             return False  # new consoles resolve another home; leave the User PATH to it
-    except (ImportError, OSError, ValueError):  # an old updater's _launchers, or a failed Win32 call
+    except (ImportError, OSError, ValueError):  # a failed import or Windows call
         return False
 
     if read_user_path is None:

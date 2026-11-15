@@ -1,51 +1,7 @@
-"""Live runtime HTTP lifecycle boundaries, with no provider inference."""
+"""Live runtime drain boundaries, with no provider inference."""
 import asyncio
-import json
 
 import pytest
-from websockets.asyncio.client import connect
-
-
-@pytest.mark.asyncio
-async def test_runtime_preserves_browser_ticket_gate(tmp_path):
-    from gateway.config import GatewayConfig
-    from gateway.run import GatewayRunner
-    from gateway.run_runtime import (initialize_gateway_runtime, start_gateway_runtime_api,
-                                     publish_gateway_runtime_ready)
-    from gateway.runtime_ownership import process_ownership
-    from hermes_constants import get_hermes_home
-    from hermes_cli.dashboard_auth import register_provider, clear_providers
-    from hermes_cli.dashboard_auth.ws_tickets import mint_ticket
-    from tests.hermes_cli.conftest_dashboard_auth import StubAuthProvider
-
-    home = get_hermes_home()
-    (home / 'config.yaml').write_text('dashboard:\n  public_url: https://gateway.example.test\n')
-    register_provider(StubAuthProvider())
-    process_ownership.reserve([home])
-    runner = GatewayRunner(GatewayConfig())
-    try:
-        await initialize_gateway_runtime(runner)
-        from gateway.control_socket import GatewayControlServer
-        runner.session_control_server = GatewayControlServer()
-        assert await runner.session_control_server.start()
-        await start_gateway_runtime_api(runner)
-        assert await runner.start()
-        publish_gateway_runtime_ready(runner)
-        ticket = mint_ticket(user_id='browser-owner', provider='stub')
-        url = runner.session_api.api_origin.replace('http:', 'ws:') + '/api/ws'
-        async with connect(url, origin='https://gateway.example.test', subprotocols=[
-                'hermes-gateway-v1', 'hermes-gateway-ticket.' + ticket]) as ws:
-            await ws.send(json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'gateway.ping'}))
-            while True:
-                reply = json.loads(await asyncio.wait_for(ws.recv(), 10))
-                if reply.get('id') == 1:
-                    break
-            assert reply['result']['ok'] is True
-    finally:
-        await runner.stop()
-        await runner.session_control_server.stop()
-        process_ownership.close()
-        clear_providers()
 
 
 @pytest.mark.asyncio

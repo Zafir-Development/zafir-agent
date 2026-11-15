@@ -12,7 +12,7 @@ from types import SimpleNamespace
 import pytest
 
 from gateway import host_attach, host_rendezvous as hr, status
-from hermes_cli import dashboard_procs, gateway as gw
+from hermes_cli import process_inventory, gateway as gw
 
 HOST_PID = 4242
 
@@ -121,10 +121,10 @@ def test_sticky_profile_force_gateway_stays_stoppable(homes, monkeypatch):
             'start_time': status._get_process_start_time(pid), 'hermes_home': str(secondary)}))
         monkeypatch.setenv('HERMES_HOME', str(secondary))
         monkeypatch.setattr(hr, 'read_record', lambda role, **kw: None)
-        monkeypatch.setattr(dashboard_procs, '_pid_environ',
+        monkeypatch.setattr(process_inventory, '_pid_environ',
                             lambda p: {'HERMES_HOME': str(root), 'HOME': str(root.parent)})
         monkeypatch.setattr(status, 'get_running_pid', lambda **kw: pid)
-        assert dashboard_procs._hermes_home_for_pid(pid, require_launch_identity=True) is None
+        assert process_inventory._hermes_home_for_pid(pid, require_launch_identity=True) is None
         assert gw._owned_gateway_pid() == pid
         assert gw.find_gateway_pids() == [pid]
         # A recycled pid (another start time) is not that launch.
@@ -142,7 +142,7 @@ def test_only_the_hosts_pid_dials_its_control_socket(homes, monkeypatch):
     dials = _live_host(monkeypatch, root, socket_answers=True)
     monkeypatch.setenv('HERMES_HOME', str(secondary))
     monkeypatch.setattr(status, 'get_running_pid', lambda **kw: 5151)
-    monkeypatch.setattr(dashboard_procs, '_hermes_home_for_pid', lambda pid, **kw: str(secondary))
+    monkeypatch.setattr(process_inventory, '_hermes_home_for_pid', lambda pid, **kw: str(secondary))
     assert gw.find_gateway_pids() == [5151]
     monkeypatch.setattr(status, 'get_running_pid', lambda **kw: HOST_PID)
     assert gw.find_gateway_pids() == []

@@ -52,7 +52,6 @@ SECTIONS: list[tuple[str, list[tuple[str, str, str | None]]]] = [
         ("getting-started/quickstart", "Quickstart", None),
         ("getting-started/learning-path", "Learning Path", None),
         ("getting-started/updating", "Updating", None),
-        ("getting-started/nix-setup", "Nix Setup", None),
     ]),
     ("Using Hermes", [
         ("user-guide/cli", "CLI", None),

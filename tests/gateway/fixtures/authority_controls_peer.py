@@ -54,8 +54,8 @@ async def probe(peer, target):
     from gateway.run import GatewayRunner
     from gateway.session import SessionSource
     from gateway.session_authority import initialize_session_authority
-    from hermes_cli import web_server
     from gateway.run_api import start_gateway_api, stop_gateway_api
+    from tests.gateway.fixtures.native_ws_auth import prepare_listener, subprotocols, ws_url
     from tools.approval import list_gateway_approvals, resolve_gateway_approval
     from hermes_state_runtime import list_session_admissions
     from run_agent import AIAgent
@@ -81,13 +81,13 @@ async def probe(peer, target):
             return SendResult(success=True, message_id='card')
 
     runner = GatewayRunner()
-    authority = await initialize_session_authority(runner, profile_id='fixture', instance_id='controls')
+    authority = await initialize_session_authority(runner, profile_id=os.environ['HERMES_HOME'], instance_id='controls')
+    prepare_listener(runner)
     adapter = NativeAdapter()
     runner.adapters[Platform.TELEGRAM] = adapter
     ref = authority.register(SessionSource(platform=Platform.TELEGRAM, chat_id='controls-chat',
                                            chat_type='dm', user_id='fixture-user'))
     api = await start_gateway_api(runner)
-    port = api.socket.getsockname()[1]
     frames = []
 
     async def rpc(ws, rid, method, **params):
@@ -101,7 +101,7 @@ async def probe(peer, target):
                     return frame
 
     async def connect():
-        return await websockets.connect(f'ws://127.0.0.1:{port}/api/ws?token={web_server._SESSION_TOKEN}')
+        return await websockets.connect(ws_url(api), subprotocols=subprotocols(runner, subject='owner'))
 
     a = b = None
     try:

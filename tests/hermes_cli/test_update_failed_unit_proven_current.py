@@ -51,19 +51,7 @@ def test_failed_unit_settles_only_on_its_own_fresh_current_gateway(
         assert cleared == []
 
 
-def test_settled_unit_keeps_the_receipt_incomplete_while_a_dashboard_is_down(monkeypatch, capsys):
-    """Crediting the last failed unit must not save a complete restart while verification still owes
-    a ``gateway_restart`` follow-up (a dashboard it stopped did not come back)."""
-    out, receipt, cleared = _update_with_failed_unit(
-        monkeypatch, capsys, NEW_PID, [{"profile": "default", "pid": NEW_PID}], dashboards_down={4242})
-    assert "Update incomplete — some units were not restarted" not in out
-    assert [f["step"] for f in receipt.get("followups", [])] == ["gateway_restart"]
-    assert receipt["gateway_restart"]["failed_units"] == []
-    assert receipt["gateway_restart"]["incomplete"] is True
-    assert cleared == []
-
-
-def _update_with_failed_unit(monkeypatch, capsys, main_pid, fleet_rows, dashboards_down=None):
+def _update_with_failed_unit(monkeypatch, capsys, main_pid, fleet_rows):
     from hermes_cli import gateway, update_cmd, update_cmd_fleet as fleet, update_cmd_fleet_verify as verify
     from hermes_cli import update_receipt
 
@@ -90,7 +78,6 @@ def _update_with_failed_unit(monkeypatch, capsys, main_pid, fleet_rows, dashboar
     monkeypatch.setattr(update_receipt, "collect_fleet_versions", lambda **kw: [dict(r) for r in rows])
     monkeypatch.setattr(verify, "_time", types.SimpleNamespace(monotonic=lambda: 0.0, sleep=lambda s: None))
     monkeypatch.setattr(verify, "_print_legacy_units_warning", lambda: None)
-    monkeypatch.setattr("hermes_cli.update_cmd_maint._refresh_dashboard_after_update", lambda **kw: dashboards_down)
     monkeypatch.setattr(update_cmd, "_surviving_pre_update_serve_runtimes", lambda plan: [])
     monkeypatch.setattr("hermes_cli.gateway_migrate.maybe_auto_migrate_after_update", lambda: None)
     cleared = []

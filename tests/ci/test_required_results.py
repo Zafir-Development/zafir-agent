@@ -20,16 +20,15 @@ import pytest
 
 
 @pytest.mark.parametrize("release", [False, True])
-@pytest.mark.parametrize("job", ["tests", "osv-scanner", "repo-guards", "e2e-desktop"])
-@pytest.mark.parametrize("result,ordinary,excluded", [
-    ("success", True, True), ("skipped", False, True), ("failure", False, False),
-    ("cancelled", False, False), ("with-status", False, False),
-    ("action_required", False, False), ("unknown", False, False), (None, False, False),
+@pytest.mark.parametrize("job", ["tests", "osv-scanner", "repo-guards"])
+@pytest.mark.parametrize("result,ordinary", [
+    ("success", True), ("skipped", False), ("failure", False),
+    ("cancelled", False), ("with-status", False),
+    ("action_required", False), ("unknown", False), (None, False),
 ])
-def test_status_policy(job, result, ordinary, excluded, release):
-    expected = excluded if job == "e2e-desktop" else ordinary
-    if result == "skipped" and not release:
-        expected = True
+def test_status_policy(job, result, ordinary, release):
+    # A plain skip is tolerated in regular mode and fails the strict release gate.
+    expected = ordinary or (result == "skipped" and not release)
     verdict = evaluate_gate({job: {} if result is None else {"result": result}}, release=release)
     assert verdict == {"ok": expected, "failed": [] if expected else [job],
                        "allowed_skips": [job] if expected and result == "skipped" else []}
@@ -39,8 +38,6 @@ def test_status_policy(job, result, ordinary, excluded, release):
     ("python", ("tests", "tests-os")),
     ("e2e", ("tests", "tests-os")),
     ("e2e_upgrade", ("tests", "tests-os")),
-    ("desktop_updater", ("tests-os",)),
-    ("e2e_desktop_update", ("e2e-desktop-update",)),
     ("remote_backends", ("remote-backends",)),
     ("catalog", ("catalog-tests",)),
 ])
@@ -58,10 +55,11 @@ def test_selected_update_consumers_must_succeed(lane, jobs, result):
     assert evaluate_gate(needs)["ok"]
 
 
-def test_release_exclusion_policy():
+def test_release_tolerates_no_skips():
     # The PR-only checks are steps of repo-guards, which runs on every event: a release run
-    # where it skipped never ran them at all, so only the deferred Desktop E2E may skip.
-    assert required_results.EXCLUDED_JOBS == {"e2e-desktop"}
+    # where it skipped never ran them at all. Nothing is deferred, so a skip is a failure.
+    verdict = evaluate_gate({"repo-guards": {"result": "skipped"}}, release=True)
+    assert verdict == {"ok": False, "failed": ["repo-guards"], "allowed_skips": []}
 
 
 @pytest.mark.parametrize("needs", [{}, None])
@@ -74,7 +72,7 @@ def test_empty_needs_fails_closed(needs, release):
 
 
 @pytest.mark.parametrize("release,results,code,report", [
-    (True, {"detect": "success", "e2e-desktop": "skipped"}, 0, "All checks passed"),
+    (True, {"detect": "success"}, 0, "All checks passed"),
     (True, {"tests": "skipped", "repo-guards": "skipped", "lint": "failure"},
      1, "::error::3 job(s) failed: lint, repo-guards, tests"),
     (False, {"tests": "failure"}, 1, "::error::1 job(s) failed: tests"),

@@ -16,7 +16,7 @@ _registry = HandlerRegistry()
 
 # Bytes sent inline in a data URL: the native Desktop reader's own attach cap (Electron reads at most
 # 256 MiB), which also bounds the base64 text and its decoded copy held in memory. A host file named
-# by path is copied in chunks and has no cap; a browser upload's copy has the tighter browser cap.
+# by path is copied in chunks and has no cap.
 _ATTACHMENT_MAX_BYTES = 256 * 1024 * 1024
 _ATTACH_BYTES_MAX_BYTES = 25 * 1024 * 1024
 _PDF_ATTACH_MAX_BYTES = 50 * 1024 * 1024
@@ -231,61 +231,19 @@ def _sanitize_attachment_name(name: str) -> str:
     return candidate.strip().strip(".") or "attachment"
 
 
-def _read_attachment_bytes(path: Path, max_bytes: int) -> bytes:
-    # Bound the actual read, not just stat(): the source can grow after inspection.
-    with path.open("rb") as source:
-        payload = source.read(max_bytes + 1)
-        if len(payload) > max_bytes:
-            raise ValueError(_too_large("attachment", os.fstat(source.fileno()).st_size, max_bytes))
-    return payload
-
-
-def _stage_browser_file_attachment(session: dict, staged_upload: object, name: str) -> tuple[Path, bool]:
-    """Copy a browser upload (the Webapp upload route's ``staged_upload`` receipt) into this session.
-
-    Source and destination may be different profiles on the same installation (an owner-routed
-    tile can receive a foreground browser pick); the caller decides which source homes this
-    connection may reach. The receipt is resolved back to exactly the staged layout under its
-    source home, which must still be a live profile (``hermes_cli/staged_uploads.py``). From there
-    the copy is the native Desktop's out-of-workspace file attach, capped at the browser limit.
-    """
-    from hermes_constants import WEBAPP_ATTACHMENT_MAX_BYTES
-    from hermes_cli.staged_uploads import parse_staged_upload, resolve_staged_upload
-
-    raw_home, raw_path = parse_staged_upload(staged_upload)
-    source = resolve_staged_upload(Path(raw_home), raw_path)
-    # Copied into attachments/ even inside the workspace: the upload route prunes its staging after
-    # 7 days. attachments/ is also visible to container/SSH terminal backends through cache mounts.
-    return _stage_session_file_attachment(
-        session, raw_path=str(source), data_url="", name=name, max_bytes=WEBAPP_ATTACHMENT_MAX_BYTES,
-        staged=True)
-
-
-def _referenced_in_place(session: dict, path: Path, workspace: Path, *, staged: bool) -> bool:
-    """Whether an attached host file is referenced where it is: inside the workspace, and not a
-    browser upload staged in the profile's ``uploads/`` (pruned after 7 days, so always copied)."""
-    if staged or not path.is_relative_to(workspace):
-        return False
-    try:
-        from hermes_cli.staged_uploads import is_staged_upload
-    except ImportError:
-        # An install without the web stack (fastapi) has no upload route that could stage one.
-        return True
-    profile_home = session.get("profile_home")
-    return not is_staged_upload(Path(profile_home) if profile_home else _hermes_home, path)
+def _referenced_in_place(path: Path, workspace: Path) -> bool:
+    """Whether an attached host file is referenced where it is: inside the session workspace."""
+    return path.is_relative_to(workspace)
 
 
 def _stage_session_file_attachment(
-    session: dict, *, raw_path: str, data_url: str, name: str, max_bytes: int | None = None,
-    staged: bool = False,
+    session: dict, *, raw_path: str, data_url: str, name: str,
 ) -> tuple[Path, bool]:
     """Make a desktop file attachment available to the gateway agent: ``(stored_path, uploaded)``.
     Inside the workspace -> as-is; gateway-visible but outside -> copied into ``attachments/``
     (bind-mounted into container backends so ``@file:`` resolves in the sandbox); not on the
-    gateway -> ``data_url`` bytes decoded into ``attachments/``. A browser upload (*staged*, or a
-    path in the profile's ``uploads/``) is always copied. ``max_bytes`` caps the copy of a
-    browser upload; a host file is copied whatever its size, inline bytes up to
-    ``_ATTACHMENT_MAX_BYTES``."""
+    gateway -> ``data_url`` bytes decoded into ``attachments/`` (host files stream, inline bytes up
+    to ``_ATTACHMENT_MAX_BYTES``)."""
     workspace = Path(_session_cwd(session)).resolve()
     resolved = None
     if raw_path:
@@ -302,10 +260,10 @@ def _stage_session_file_attachment(
                 found = _resolve_attachment_path(path_token)
                 resolved = Path(found).resolve() if found is not None else None
     if resolved is not None:
-        if _referenced_in_place(session, resolved, workspace, staged=staged):
+        if _referenced_in_place(resolved, workspace):
             return resolved, False
-        # Without a cap the copy below streams the file, so its size never reaches memory.
-        payload = None if max_bytes is None else _read_attachment_bytes(resolved, max_bytes)
+        # The copy below streams the file, so its size never reaches memory.
+        payload = None
         filename = resolved.name
     else:
         if not data_url:
@@ -313,11 +271,10 @@ def _stage_session_file_attachment(
         # Any media type (unlike the image-specific decoder); bare base64 also accepted.
         import binascii as _binascii
         import re as _re
-        inline_max = _ATTACHMENT_MAX_BYTES if max_bytes is None else min(max_bytes, _ATTACHMENT_MAX_BYTES)
         try:
             payload = _b64_payload(
                 data_url, r"^data:[^;,]*(?:;[^;,=]+=[^;,]+)*;base64,(.*)$", _re.DOTALL | _re.IGNORECASE,
-                max_bytes=inline_max)
+                max_bytes=_ATTACHMENT_MAX_BYTES)
         except (ValueError, _binascii.Error) as exc:
             raise ValueError("invalid data_url payload") from exc
         filename = _sanitize_attachment_name(name or Path(str(raw_path or "")).name)

@@ -117,34 +117,29 @@ def find_activation(summaries: Optional[list[dict[str, Any]]], name: str) -> Opt
 
 def activate_plugin_now(name: str, *, in_process: bool = True) -> dict[str, Any]:
     """After an install/enable/update: load the plugin in THIS process (so ``on_plugin_loaded``
-    subscribers here — the TUI/Desktop server — see it), connect its MCP servers and hand them plus
+    subscribers here — the TUI server — see it), connect its MCP servers and hand them plus
     its skills to the open chats of this profile (:func:`load_and_go_live`), and nudge the running
     gateway to load it too over its control socket so live adapters re-wire their handlers. A caller
-    in another process (``hermes plugins install``) passes ``in_process=False``; the running Desktop /
-    dashboard backend is then asked to do the in-process half (:func:`notify_serve_backend`). Never raises.
+    in another process (``hermes plugins install``) passes ``in_process=False`` and the running
+    gateway is then the only process asked to load it. Never raises.
 
     Returns ``{"gateway_reloaded": bool, "activation": summary | None, "restart_required": bool}``.
     ``activation.live_now`` lists what is usable in open chats now; ``activation.deferred`` what waits
     for the next session. ``restart_required`` is True when no gateway answered (old gateway, not
     running), or when this process or the gateway cannot import the plugin's Python dependencies
-    (``activation.missing_dependencies``; ``activation.missing_in`` names which: ``gateway`` and/or
-    ``backend``, the Desktop / dashboard process): a running process never switches to the dependency
-    generation an enable just installed, so only restarting that process loads them."""
-    from hermes_constants import get_hermes_home
+    (``activation.missing_dependencies``; ``activation.missing_in`` names the ``gateway`` process):
+    a running process never switches to the dependency generation an enable just installed, so only
+    restarting that process loads them."""
     activation: Optional[dict[str, Any]] = load_and_go_live(name) if in_process else None
-    if not in_process:
-        activation = (notify_serve_backend(name, Path(get_hermes_home())) or {}).get("activation")
     answer = reload_running_gateway()
     reloaded = bool(answer and answer.get("reloaded"))
     gateway_activation = find_activation((answer or {}).get("activations"), name) if reloaded else None
-    gaps = {"gateway": (gateway_activation or {}).get("missing_dependencies") or [],
-            "backend": (activation or {}).get("missing_dependencies") or []}
     if reloaded and activation is None:
         activation = gateway_activation
-    missing = sorted({*gaps["gateway"], *gaps["backend"]})
+    missing = sorted((gateway_activation or {}).get("missing_dependencies") or [])
     if missing:
         activation = {**(activation or {"name": name, "key": name}), "missing_dependencies": missing,
-                      "missing_in": [process for process, deps in gaps.items() if deps]}
+                      "missing_in": ["gateway"]}
     return {"gateway_reloaded": reloaded, "activation": activation,
             "restart_required": not reloaded or bool(missing)}
 
@@ -204,7 +199,7 @@ def _go_live(name: str) -> Optional[dict[str, Any]]:
         from hermes_cli.plugins import _join_background_discovery, get_plugin_manager
         _join_background_discovery()
         manager = get_plugin_manager()
-        # Other forced passes (a reload-plugins verb, the dashboard) do not take the go-live lock, so the
+        # Other forced passes (a reload-plugins verb) do not take the go-live lock, so the
         # reads share the discovery lock with the pass that produced them.
         with manager._discovery_lock:
             manager.discover_and_load(force=True)
@@ -232,40 +227,6 @@ def _go_live(name: str) -> Optional[dict[str, Any]]:
     return activation
 
 
-def _serve_backend_record():
-    """The host-owner record, else the Desktop child's (a Desktop-only box has no host owner)."""
-    from gateway import host_rendezvous as hr
-    for role in (hr.ROLE_SERVE, hr.ROLE_DESKTOP_SERVE):
-        record = hr.read_record(role)
-        if record is not None and record.port and hr.record_token_is_consistent(record):
-            return record
-    return None
-
-
-def notify_serve_backend(name: str, home: Path) -> Optional[dict[str, Any]]:
-    """Ask the running dashboard / Desktop backend (``hermes serve``, found through its host record) to
-    run :func:`load_and_go_live` for ``name`` in ``home``. None when no backend answers. Never raises."""
-    try:
-        import json
-        import urllib.request
-        from gateway import host_rendezvous as hr
-        from hermes_cli.url_utils import format_url_host
-        record = _serve_backend_record()
-        if record is None:
-            return None
-        token = hr.read_token(record.role)
-        request = urllib.request.Request(
-            f"http://{format_url_host(hr.dial_host(record))}:{record.port}"
-            "/api/dashboard/agent-plugins/activate",
-            data=json.dumps({"name": name, "home": str(home)}).encode("utf-8"), method="POST",
-            headers={"Content-Type": "application/json", "X-Hermes-Session-Token": token})
-        with urllib.request.urlopen(request, timeout=60) as response:
-            return json.loads(response.read().decode("utf-8"))
-    except Exception:
-        logger.debug("serve backend activation for %r failed", name, exc_info=True)
-        return None
-
-
 def _gateway_present() -> bool:
     """A gateway runs for this profile (its own, or the multiplexer serving it from the root), or a
     gateway service is installed for it."""
@@ -277,19 +238,18 @@ def _gateway_present() -> bool:
             or _installed_service_kind() is not None)
 
 
-_RESTART_LINES = {"gateway": "  hermes gateway restart",
-                  "backend": "  quit and reopen the Hermes desktop app (or restart hermes dashboard)"}
+_RESTART_LINES = {"gateway": "  hermes gateway restart"}
 
 
 def dependency_restart_hint(missing: list[str], processes: list[str]) -> str:
     """What to do when running processes cannot import a plugin's dependencies: one restart line per
-    process that reported the gap (``gateway`` / ``backend``), never one that can already import them."""
+    process that reported the gap (``gateway``), never one that can already import them."""
     from hermes_cli.plugins_loader import installed_in_selected_environment
     deps = ", ".join(missing)
     restart = "\n".join(_RESTART_LINES[p] for p in processes)
     if installed_in_selected_environment(missing):
-        return (f"Its Python dependencies ({deps}) were installed after the running gateway or dashboard "
-                "started, and a running process never switches dependency environments. Restart them to "
+        return (f"Its Python dependencies ({deps}) were installed after the running gateway started, "
+                "and a running process never switches dependency environments. Restart it to "
                 f"load the plugin:\n{restart}")
     return f"Its Python dependencies ({deps}) are not installed. Run hermes pm repair, then restart:\n{restart}"
 

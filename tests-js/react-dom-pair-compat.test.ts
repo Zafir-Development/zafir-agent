@@ -6,17 +6,17 @@
  * *before* the first paint — the Electron window just stays blank white, with
  * the only clue buried in the devtools console of a packaged build.
  *
- * npm never warned about this. ``apps/desktop`` pins both packages to one exact
+ * npm never warned about this. A workspace pins both packages to one exact
  * version, but a root dependency whose react peer is a loose range (e.g.
  * ``^18.0.0 || ^19.0.0``, and with no react-dom peer to keep the two in step)
- * made npm hoist the newest react to the monorepo root while react-dom stayed
- * at the pinned version. react-dom's own peer range is a caret, so the newer
- * react still "satisfies" it and the install reported success.
+ * can hoist the newest react to the monorepo root while react-dom stays at the
+ * pinned version. react-dom's own peer range is a caret, so the newer react
+ * still "satisfies" it and the install reports success.
  *
- * ``apps/desktop/vite.config.ts`` used to alias both packages to a hardcoded
- * ``../../node_modules/<pkg>`` — i.e. straight into the split — so the bundle
- * shipped the mismatched pair. It now resolves them from the workspace itself,
- * where the package manager guarantees the declared versions are reachable.
+ * A bundler that aliases both packages to a hardcoded
+ * ``../../node_modules/<pkg>`` lands straight in that split; resolving them
+ * from the workspace itself is where the package manager guarantees the
+ * declared versions are reachable.
  *
  * This is a *contract* test: it asserts no specific version, only that the two
  * halves of the pair can never drift apart again — neither through a loosened

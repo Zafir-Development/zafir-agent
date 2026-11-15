@@ -17,7 +17,6 @@ Choose the update method for the installation that is running:
 | Microsoft Store package | Microsoft Store updates. |
 | macOS bundled app | The desktop Update control, through `electron-updater`. |
 | Docker image | Pull the chosen image and recreate the container with the same data mount. |
-| Nix | Update the flake/profile and rebuild. |
 | Termux APT | `pkg update`, then `pkg upgrade hermes-agent`. |
 
 `hermes update` does not rewrite package-owned application files. PM manages
@@ -589,35 +588,13 @@ What this means outside `hermes update`:
   dependencies** and the package does not import. These install methods are
   [unsupported](./platform-support.md#unsupported); use the source installer or
   a packaged build.
-- A Nix build outside the repo flake sees the same marker-gated dependency set
-  and needs a 3.14 interpreter.
 - A `hermes` launcher that still points at a pre-migration venv should be
   repaired with `hermes update` (or `python -m pm.cli install` from the
   checkout), not by reinstalling into the old venv.
 
 ### Image-managed installs (Docker): the provenance marker
 
-Published Docker images bake a small read-only marker (`/etc/hermes/image-provenance.json`) that authoritatively identifies the filesystem as image-managed. `hermes update`, `hermes update --check`, and the dashboard's Update button all consult it before touching anything: on an image-managed install they refuse cleanly (exit code 2), print the actual update command (`docker pull nousresearch/hermes-agent:latest`), and write a `refused` receipt so fleet tooling can see the attempt happened. The marker wins even when a source checkout is bind-mounted into the container — the refusal is based on what the running filesystem *is*, not what it looks like. A damaged marker still refuses (fail-closed). Nix- and apt-managed installs refuse through the same gate using the existing detection.
-
-### Note for Nix users
-
-Nix is no longer an explicitly supported install path (best-effort only) — see [Nix Setup](./nix-setup.md). If you installed via Nix flake, updates are managed through the Nix package manager:
-
-```bash
-# Update the flake input
-nix flake update hermes-agent
-
-# Or rebuild with the latest
-nix profile upgrade hermes-agent
-```
-
-Nix installations are immutable — rollback is handled by Nix's generation system:
-
-```bash
-nix profile rollback
-```
-
-See [Nix Setup](./nix-setup.md) for more details.
+Published Docker images bake a small read-only marker (`/etc/hermes/image-provenance.json`) that authoritatively identifies the filesystem as image-managed. `hermes update`, `hermes update --check`, and the dashboard's Update button all consult it before touching anything: on an image-managed install they refuse cleanly (exit code 2), print the actual update command (`docker pull nousresearch/hermes-agent:latest`), and write a `refused` receipt so fleet tooling can see the attempt happened. The marker wins even when a source checkout is bind-mounted into the container — the refusal is based on what the running filesystem *is*, not what it looks like. A damaged marker still refuses (fail-closed). Apt-managed installs refuse through the same gate using the existing detection.
 
 ---
 
@@ -633,7 +610,7 @@ removes data. `--data` removes user data without deleting package-owned code.
 These modes are destructive; make a backup first.
 
 For MSIX/Store, use Windows Settings → Apps → Installed apps. For macOS,
-quit Hermes and move its app bundle to Trash. Docker, Nix, and Termux use the
+quit Hermes and move its app bundle to Trash. Docker and Termux use the
 same manager that installed them. Their package files are not removed by the
 source uninstaller. Data deletion is separate from package removal.
 

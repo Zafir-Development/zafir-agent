@@ -1,6 +1,6 @@
 """MCP server lifecycle on the long-lived host (issue class C15).
 
-Uses the tui_gateway stdio host (the Ink TUI's backend; the Desktop's WS backend
+Uses the tui_gateway stdio host (the Ink TUI's backend; the `hermes serve` WS backend
 runs the same MCP runtime) with the real stdio MCP fixture:
 
 * fast death: the MCP server crashes WHILE its call is in flight, leaving a helper
@@ -11,7 +11,7 @@ runs the same MCP runtime) with the real stdio MCP fixture:
   shutdown afterwards still reaps the pipe holder.
 * host crash: the host is SIGKILLed after a turn (no shutdown code runs at all).
   The MCP server AND its grandchild must still be reaped (death supervisor +
-  process-group kill), because a crashed Desktop/TUI backend otherwise leaves a
+  process-group kill), because a crashed serve/TUI backend otherwise leaves a
   pile of MCP processes behind on every restart.
 
 The parity matrix covers the normal-shutdown reap and the healthy call on every

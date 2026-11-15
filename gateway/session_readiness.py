@@ -16,12 +16,14 @@ async def readiness(authority, actor, params, *, runtime):
             or any(not isinstance(value, str) for value in params.values())):
         raise RuntimeStoreError('invalid_params')
     if params.get('profile'):
-        from fastapi import HTTPException
-        from hermes_cli.web_server_profiles import _resolve_profile_dir
+        from hermes_cli import profiles as profiles_mod
         try:
-            home = _resolve_profile_dir(params['profile']).resolve()
-        except HTTPException:
+            profiles_mod.validate_profile_name(params['profile'])
+        except ValueError:
             raise RuntimeStoreError('profile_mismatch') from None
+        if not profiles_mod.profile_exists(params['profile']):
+            raise RuntimeStoreError('profile_mismatch')
+        home = profiles_mod.get_profile_dir(params['profile']).resolve()
         if home != Path(authority.profile_id):
             raise RuntimeStoreError('profile_mismatch')
 

@@ -31,9 +31,6 @@ and the durable pause record ``update_pause_record`` keeps in the root hermes ho
     directory the user cannot write): the paused gateway is restarted on the OLD code, and the
     update's exit code and receipt outcome equal those of the same failing update run with no
     gateway at all.
-(h) the Desktop hand-off (``scripts/desktop-update/posix.sh``, what the Desktop app spawns before it
-    quits) runs the same ``hermes update --gateway``: the gateway is paused and restarted on the new
-    commit, and the hand-off's result file reports success.
 """
 
 from __future__ import annotations
@@ -503,46 +500,6 @@ def _deps_failure_cell(w: G.World, toggle: Path) -> None:
         assert len(gws) == 1, f"the next launch started a twin beside the running gateway:\n{diag}"
         assert not [r for r in _record(w) if (r.get("token") or {}).get("resume_needed")], \
             f"the record still owes a gateway that is serving:\n{diag}"
-
-
-def test_desktop_handoff_update_pauses_and_restarts_through_the_same_path(w):
-    w.reset_clean()
-    with _namespace(w) as host:
-        before = _start_gateway(host, w, "h")
-        old_pid = int(before["pid"])
-        target = _publish_release(w, "h")
-        result = w.sb.hermes_home / ".hermes-update-result.json"
-        result.unlink(missing_ok=True)
-        log = w.sb.hermes_home / "logs" / "desktop-update-handoff.log"
-        log0 = len(_read(log))
-        ulog = w.sb.hermes_home / "logs" / "update.log"
-        ulog0 = len(_read(ulog))
-        with _Timeline(host, w, old_pid) as tl:
-            cp = host.run(["bash", str(w.checkout / "scripts" / "desktop-update" / "posix.sh"),
-                           "--install-root", str(w.checkout), "--desktop-pid", "0", "--no-ui"],
-                          timeout=UPDATE_TIMEOUT, cwd=w.checkout)
-
-            def finished() -> dict | None:  # posix.sh re-execs itself detached (--daemonized)
-                with contextlib.suppress(OSError, ValueError):
-                    return json.loads(result.read_text(encoding="utf-8-sig"))
-                return None
-            res = {}
-            with contextlib.suppress(AssertionError):
-                res = H.wait_for(finished, timeout=UPDATE_TIMEOUT, interval=1.0, what="the hand-off result")
-        handoff = _read(log)[log0:] + "\n--- update.log (this run) ---\n" + _read(ulog)[ulog0:]
-        after = None
-        with contextlib.suppress(AssertionError):
-            after = H.wait_for(lambda: _serving(w, target), timeout=60, interval=1.0, what="a gateway on the release")
-        gws = _gateways(host)
-        diag = _diag(w, host, cp, timeline="\n" + tl.text(), result=res, after=after, gateways=gws,
-                     handoff_log=handoff[-6000:])
-        assert w.head() == target, f"premise: the hand-off did not land the release:\n{diag}"
-        assert res.get("ok") is True, f"the hand-off result is not a success:\n{diag}"
-        assert PAUSED in handoff and RESTARTED in handoff, f"the hand-off update did not pause/restart:\n{diag}"
-        assert tl.first(lambda alive, head: alive and head == target) is None, \
-            f"the OLD gateway process was alive while HEAD named the release:\n{diag}"
-        assert after and int(after["pid"]) != old_pid and len(gws) == 1, \
-            f"not exactly one NEW gateway on the release after the hand-off:\n{diag}"
 
 
 def test_failed_move_restarts_exactly_the_paused_set_on_the_old_code(w):

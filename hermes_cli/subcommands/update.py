@@ -28,7 +28,7 @@ def build_update_parser(subparsers, *, cmd_update: Callable) -> None:
         "--list-venv-holders", action="store_true", default=False,
         help="Print the processes the Windows venv-holder guard would refuse on as a JSON list "
             "[{pid, exe, argv, kind}] and exit: 0 when the venv is free, 3 when holders are present. "
-            "Read-only; kind is gateway / backend (Desktop serve) / hermes:<subcommand> / python, so a "
+            "Read-only; kind is gateway / hermes:<subcommand> / python, so a "
             "scheduled update can stop exactly those PIDs instead of looping. Always [] off Windows.")
     update_parser.add_argument(
         "--no-backup", action="store_true", default=False,
@@ -47,8 +47,7 @@ def build_update_parser(subparsers, *, cmd_update: Callable) -> None:
         help="Do NOT re-apply local changes after the update. Uncommitted "
             "changes are still stashed so the update can proceed, but they "
             "stay parked in git stash instead of being restored onto the "
-            "updated code. Used by the desktop updater so local source edits "
-            "never silently ride along across updates.")
+            "updated code.")
     update_parser.add_argument(
         "--branch", default=None, metavar="NAME",
         help="Update against this branch instead of the default (main). "
@@ -71,7 +70,7 @@ def build_update_parser(subparsers, *, cmd_update: Callable) -> None:
     )
     update_parser.add_argument(
         "--force-venv", action="store_true", default=False,
-        help="Windows: mutate the venv even while other processes are running from its interpreter (desktop backend, gateway, terminals). Those processes keep native .pyd files locked, so the dependency sync will likely fail partway and strand the install half-updated. Use only if you know the detected holders are false positives.",
+        help="Windows: mutate the venv even while other processes are running from its interpreter (gateway, terminals). Those processes keep native .pyd files locked, so the dependency sync will likely fail partway and strand the install half-updated. Use only if you know the detected holders are false positives.",
     )
     update_parser.add_argument(
         "--set-channel",

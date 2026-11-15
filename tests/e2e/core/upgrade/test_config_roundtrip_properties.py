@@ -7,8 +7,8 @@ A seeded property / matrix layer over every surface that writes ``config.yaml`` 
       explicit-default values, dotted provider names and nulls all survive);
 * P2  "set one key" changes exactly one key, on every writer: in-process ``set_config_value`` over
       EVERY documented scalar leaf of ``DEFAULT_CONFIG``, the real ``hermes config set`` CLI
-      subprocess, a real ``python -m tui_gateway.entry`` stdio JSON-RPC process (``config.set``),
-      and the dashboard/Desktop ``PUT /api/config`` (partial bodies, like Desktop sends);
+      subprocess, and a real ``python -m tui_gateway.entry`` stdio JSON-RPC process
+      (``config.set``);
 * P3  a failed read never results in a clobbering write: for every single config read an
       operation performs, a transient ``EMFILE`` on exactly that read, plus unreadable, truncated
       and non-mapping files, must leave every section the operation did not target intact;
@@ -17,7 +17,7 @@ A seeded property / matrix layer over every surface that writes ``config.yaml`` 
 * P5  every config migration is idempotent from every historical ``_config_version`` and never
       clobbers user-set values;
 * P6  every top-level section tolerates ``section: null`` through load, effective-config
-      resolution, save, set, TUI RPC, dashboard, migration and the gateway loaders.
+      resolution, save, set, TUI RPC, migration and the gateway loaders.
 
 Generators are ``random.Random(seed)`` over a fixed seed list (hypothesis is not a dependency);
 every assertion message carries the seed / case so a failure is reproducible with ``-k``.
@@ -756,76 +756,6 @@ def test_p2_real_tui_gateway_config_set_changes_exactly_one_key(key, values, pat
     _assert_one_key_write(f"rpc {key} seed={seed}", text, after, {path}, tl, allow_insert=not tl)
 
 
-# ── dashboard / Desktop PUT /api/config ──────────────────────────────────────
-
-@pytest.fixture(scope="module")
-def web_app():
-    try:
-        from starlette.testclient import TestClient
-    except ImportError:
-        pytest.skip("starlette not installed")
-    from hermes_cli.web_server import _SESSION_HEADER_NAME, _SESSION_TOKEN, app
-    client = TestClient(app)  # no lifespan: requests only; profile/home resolved per request
-    client.headers.update({_SESSION_HEADER_NAME: _SESSION_TOKEN})
-    return client
-
-
-def _client(web_app):
-    return web_app
-
-
-@pytest.mark.parametrize("seed", [601, 602, 603, 604])
-def test_p2_dashboard_get_put_roundtrip_and_partial_put(seed, web_app, home, monkeypatch):
-    """Settings page open→save with no edits leaves the file byte-identical; a Desktop-style
-    partial PUT (``setNested({}, key, value)``) changes exactly that key."""
-    _dashboard_roundtrip(gen_case(seed, null_leaves=False), web_app, monkeypatch)
-
-
-def test_p2_dashboard_partial_put_adds_no_phantom_section(web_app, home, monkeypatch):
-    case = gen_case(606, null_leaves=False, exclude_top={"agent", "display"})
-    cfg = _install(case, monkeypatch)
-    r = _client(web_app).put("/api/config", json={"config": {"display": {"skin": "ares"}}})
-    assert r.status_code == 200, r.text
-    got = yaml.safe_load(_read(cfg))
-    assert set(got) == set(case.tree) | {"display"}, (
-        f"PUT display.skin added sections {sorted(set(got) - set(case.tree) - {'display'})}:\n{_udiff(case.text, _read(cfg))}")
-
-
-@pytest.mark.parametrize("seed", [607])
-def test_p2_dashboard_noop_put_keeps_explicit_nulls(seed, web_app, home, monkeypatch):
-    case = gen_case(seed)
-    assert any(v is None for v in _leaves(case.tree).values())
-    _dashboard_roundtrip(case, web_app, monkeypatch)
-
-
-def _dashboard_roundtrip(case: Case, web_app, monkeypatch) -> None:
-    seed = case.seed
-    cfg = _install(case, monkeypatch)
-    client = _client(web_app)
-    body = client.get("/api/config").json()
-    r = client.put("/api/config", json={"config": body})
-    assert r.status_code == 200, r.text
-    touched, inserted = _line_diff(case.text, _read(cfg))  # modulo cosmetic `k: null` -> `k:`
-    assert not touched and not inserted, (
-        f"[seed={seed}] GET→PUT with no edits changed the file:\n{_udiff(case.text, _read(cfg))}")
-    rng = random.Random(seed)
-    for target in rng.sample([p for p in case.leaf_lines if p[0] not in ("_config_version", "providers", "c18_custom_root")], 2) + [("display", "resume_last_session")]:
-        _install(case, monkeypatch)
-        cur = _get(case.tree, target, _get(DEFAULT_CONFIG, target, None))
-        # a partial PUT of a key the user never set writes it only when it differs from the default
-        new = (not cur) if isinstance(cur, bool) else f"c18-dash-{rng.randrange(10**6)}"
-        partial: dict = {}
-        _set(partial, target, new)
-        r = client.put("/api/config", json={"config": partial})
-        assert r.status_code == 200, r.text
-        after = _read(cfg)
-        got = yaml.safe_load(after)
-        changed = _changed_paths(case.tree, got)
-        assert changed == {target}, f"[seed={seed} {target}] changed {sorted(changed, key=str)}:\n{_udiff(case.text, after)}"
-        _assert_one_key_write(f"dashboard seed={seed} {target}", case.text, after, {target}, case.lines_of(target),
-                              allow_insert=target not in case.leaf_lines)
-
-
 # ─────────────────────────────────────────────────────────────────────────────
 # P3 — a failed read never results in a clobbering write
 # ─────────────────────────────────────────────────────────────────────────────
@@ -850,11 +780,6 @@ def _op_tui(ctx: dict) -> None:
         raise RuntimeError(resp["error"])
 
 
-def _op_dashboard(ctx: dict) -> None:
-    r = ctx["client"].put("/api/config", json={"config": {"display": {"skin": ctx["new"]}}})
-    if r.status_code != 200:
-        raise RuntimeError(r.text)
-
 
 def _op_migrate(ctx: dict) -> None:
     C.migrate_config(interactive=False, quiet=True)
@@ -864,7 +789,6 @@ _P3_OPS: dict[str, tuple[Callable[[dict], None], set]] = {
     "cli_set": (_op_cli_set, {_P3_TARGET}),
     "save_config": (_op_save, {_P3_TARGET}),
     "tui_rpc": (_op_tui, {_P3_TARGET}),
-    "dashboard_put": (_op_dashboard, {_P3_TARGET}),
     # v35 → latest: delegation.max_iterations 50 is the old default the v36 step rewrites.
     "migrate": (_op_migrate, {("_config_version",), ("delegation", "max_iterations")}),
 }
@@ -908,14 +832,14 @@ def _p3_check(label: str, before_text: str, after_text: str, targets: set, outco
 
 
 @pytest.mark.parametrize("op_name", list(_P3_OPS))
-def test_p3_a_transient_error_on_any_single_read_never_clobbers(op_name, web_app, home, monkeypatch):
+def test_p3_a_transient_error_on_any_single_read_never_clobbers(op_name, home, monkeypatch):
     """Dry-run the operation to count its config reads R, then for k in 1..R fail exactly read k."""
     case = _p3_case(700)
     for k, v in case.env.items():
         monkeypatch.setenv(k, v)
     cfg = _cfg_path()
     version = 35 if op_name == "migrate" else None
-    ctx = {"new": "ares", "client": _client(web_app)}
+    ctx = {"new": "ares"}
     # A normal install has loaded its config before: prime the last-known-good backup.
     _write_file(cfg, case.text)
     _reset_config_caches()
@@ -951,12 +875,12 @@ _PERSISTENT_FAULTS = {
 
 @pytest.mark.parametrize("fault", sorted(_PERSISTENT_FAULTS))
 @pytest.mark.parametrize("op_name", list(_P3_OPS))
-def test_p3_unreadable_or_partial_file_is_never_rewritten(op_name, fault, web_app, home, monkeypatch):
+def test_p3_unreadable_or_partial_file_is_never_rewritten(op_name, fault, home, monkeypatch):
     if fault == "unreadable" and os.geteuid() == 0:
         pytest.skip("root reads mode-000 files")
     case = gen_case(710, null_leaves=False, exclude_top={"display"})
     cfg = _cfg_path()
-    ctx = {"new": "ares", "client": _client(web_app)}
+    ctx = {"new": "ares"}
     for k, v in case.env.items():
         monkeypatch.setenv(k, v)
     text = case.text if fault == "unreadable" else _PERSISTENT_FAULTS[fault](case.text)
@@ -1201,9 +1125,9 @@ def _p6_setup(section: str, monkeypatch) -> tuple[str, dict, Path, int]:
 
 
 @pytest.mark.parametrize("section", _TOP_LEVEL)
-def test_p6_null_section_survives_every_surface(section, web_app, home, monkeypatch):
+def test_p6_null_section_survives_every_surface(section, home, monkeypatch):
     """No crash and no clobber of any OTHER section on load, effective resolution, gateway display
-    resolvers, save, CLI set, TUI RPC and Desktop PUT (the #105674 `display: null` class)."""
+    resolvers, save, CLI set and TUI RPC (the #105674 `display: null` class)."""
     from gateway.display_config import resolve_display_setting, resolve_tool_progress
     from hermes_cli.config_effective import load_user_config_effective
     from tui_gateway import server
@@ -1235,8 +1159,6 @@ def test_p6_null_section_survives_every_surface(section, web_app, home, monkeypa
     writers = {
         "cli_set": (lambda: C.set_config_value("terminal.timeout", "4242"), ("terminal", "timeout")),
         "tui_rpc": (lambda: server._methods["config.set"](1, {"key": "skin", "value": "ares"}), ("display", "skin")),
-        "dashboard_put": (lambda: _client(web_app).put("/api/config", json={"config": {"display": {"skin": "ares"}}}),
-                          ("display", "skin")),
     }
     for name, (fn, target) in writers.items():
         reset()
@@ -1244,8 +1166,6 @@ def test_p6_null_section_survives_every_surface(section, web_app, home, monkeypa
             res = fn()
         if name == "tui_rpc":
             assert "result" in res, f"[{ctx}] tui config.set: {res}"
-        if name == "dashboard_put":
-            assert res.status_code == 200, f"[{ctx}] PUT /api/config: {res.text}"
         got = yaml.safe_load(_read(cfg))
         assert _get(got, target) not in (_MISSING, None), f"[{ctx}] {name} did not write {target}"
         # (section,) itself may change: a writer may normalise `section: null` to an empty mapping.

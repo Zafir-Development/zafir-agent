@@ -89,7 +89,7 @@ Contributors who run `hermes --tui --dev` from many worktrees can share one `nod
 
 ### External prebuild
 
-Distributions that ship a prebuilt bundle (Nix, system packages) can point Hermes at it:
+System packages that ship a prebuilt bundle can point Hermes at it:
 
 ```bash
 export HERMES_TUI_DIR=/path/to/prebuilt/ui-tui

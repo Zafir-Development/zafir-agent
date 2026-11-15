@@ -106,9 +106,9 @@ async def probe(peer, target):
     from gateway.platforms.base import BasePlatformAdapter, SendResult
     from gateway.run import GatewayRunner
     from gateway.run_api import start_gateway_api, stop_gateway_api
+    from tests.gateway.fixtures.native_ws_auth import prepare_listener, subprotocols, ws_url
     from gateway.session import SessionSource
     from gateway.session_authority import initialize_session_authority
-    from hermes_cli import web_server
     from hermes_state_runtime import list_session_admissions
     from run_agent import AIAgent
 
@@ -132,17 +132,19 @@ async def probe(peer, target):
             return {'id': chat_id}
 
     runner = GatewayRunner()
-    authority = await initialize_session_authority(runner, profile_id='fixture', instance_id='stream')
+    authority = await initialize_session_authority(runner, profile_id=os.environ['HERMES_HOME'], instance_id='stream')
+    prepare_listener(runner)
     adapter = NativeAdapter()
     runner.adapters[Platform.TELEGRAM] = adapter
     ref = authority.register(SessionSource(platform=Platform.TELEGRAM, chat_id='stream-chat',
                                            chat_type='dm', user_id='fixture-user'))
     api = await start_gateway_api(runner)
-    uri = api.api_origin.replace('http:', 'ws:') + '/api/ws'
+    uri = ws_url(api)
     observers = []
 
     async def connect():
-        ws = await websockets.connect(uri + '?token=' + web_server._SESSION_TOKEN, compression=None, max_size=8 * 1024 * 1024)
+        ws = await websockets.connect(uri, subprotocols=subprotocols(runner, subject='owner'),
+                                      compression=None, max_size=8 * 1024 * 1024)
         observer = Observer(ws, ref.session_id, peer)
         observers.append(observer)
         return observer

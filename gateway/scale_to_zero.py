@@ -36,11 +36,11 @@ _malformed_sleep_url_logged = False
 # Short is safe: real work always blocks the suspend, resume is sub-second; longer bills idle RAM.
 DEFAULT_IDLE_TIMEOUT_MINUTES = 2
 _TRUTHY = {"1", "true", "yes", "on"}
-# Dashboard-client liveness marker, touched by every /api/ws client socket on each
-# connect and inbound frame. Folded into the inbound clock so an open client holds the box awake —
+# Session-client liveness marker, touched by every /api/ws client socket on each
+# connect and inbound frame (the only clients after the dashboard removal). Folded into the inbound clock so an open client holds the box awake —
 # otherwise it suspends under the client, whose reconnect re-pokes the wake URL and the instance
 # flaps every ~60s. Deliberately NO staleness cutoff: is_idle decides whether the mtime is recent.
-DASHBOARD_CLIENT_HEARTBEAT_REL = os.path.join("state", "dashboard_clients.heartbeat")
+SESSION_CLIENT_HEARTBEAT_REL = os.path.join("state", "session_clients.heartbeat")
 
 
 def _env_str(env: Optional[dict], key: str) -> str:
@@ -89,7 +89,7 @@ def is_idle(*, active_work_count: int, seconds_since_last_inbound: float,
             and seconds_since_last_inbound >= idle_timeout_seconds)
 
 
-def dashboard_client_heartbeat_path(hermes_home: Optional[os.PathLike | str] = None):
+def session_client_heartbeat_path(hermes_home: Optional[os.PathLike | str] = None):
     """Path of the dashboard-client liveness marker under the process's own HERMES_HOME.
 
     One marker per process, never per profile scope: the gateway's idle watcher reads it with no
@@ -97,13 +97,13 @@ def dashboard_client_heartbeat_path(hermes_home: Optional[os.PathLike | str] = N
     if hermes_home is None:
         from hermes_constants import get_process_hermes_home
         hermes_home = get_process_hermes_home()
-    return Path(hermes_home) / DASHBOARD_CLIENT_HEARTBEAT_REL
+    return Path(hermes_home) / SESSION_CLIENT_HEARTBEAT_REL
 
 
-def touch_dashboard_client_heartbeat(path: Optional[os.PathLike | str] = None) -> bool:
+def touch_session_client_heartbeat(path: Optional[os.PathLike | str] = None) -> bool:
     """Mark "a dashboard client is attached right now". Best-effort, never raises."""
     try:
-        p = dashboard_client_heartbeat_path() if path is None else path
+        p = session_client_heartbeat_path() if path is None else path
         os.makedirs(os.path.dirname(p), exist_ok=True)
         open(p, "a", encoding="utf-8").close()
         os.utime(p, None)
@@ -113,14 +113,14 @@ def touch_dashboard_client_heartbeat(path: Optional[os.PathLike | str] = None) -
         return False
 
 
-def dashboard_client_last_seen(path: Optional[os.PathLike | str] = None, *,
+def session_client_last_seen(path: Optional[os.PathLike | str] = None, *,
                                now: Optional[float] = None) -> Optional[float]:
     """Epoch seconds a dashboard client last sent a WS frame, or None if never. Missing marker ->
     None (steady state when nobody has the dashboard open — NOT fail-awake, or no instance would
     ever sleep). Unreadable marker -> ``now`` (fail-awake, as in ``is_idle``). Clamped to now: an
     NTP step-back can leave the mtime in the future."""
     current = time.time() if now is None else now
-    p = dashboard_client_heartbeat_path() if path is None else path
+    p = session_client_heartbeat_path() if path is None else path
     try:
         return min(os.stat(p).st_mtime, current)
     except FileNotFoundError:

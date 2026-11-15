@@ -2,7 +2,7 @@
 
 The Desktop resolves the OS proxy (PAC included) and gives it to the update's
 git, urllib, npm and uv children as HTTPS_PROXY/HTTP_PROXY with an extended
-NO_PROXY (apps/desktop/electron/updater/system-proxy-env.ts). ``hermes update``
+NO_PROXY. ``hermes update``
 then restarts gateways and backends that inherit that env; for them it is not
 the user's setting, and every host the PAC sends direct (LAN model servers,
 internal names) would go through the proxy. ``HERMES_UPDATE_SYSTEM_PROXY`` names

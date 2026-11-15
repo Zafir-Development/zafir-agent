@@ -880,9 +880,9 @@ def _cmd_pin(db, args, pinning):
     """Durable "keep" flag (exempt from sessions.auto_archive, always listed); every surface shares the store."""
     failures = 0
     # Pinned sessions are exempt from the sessions.auto_archive stale sweep and always surface in listings;
-    # until now only the Desktop sidebar could write the flag. Inspired by Perplexity Computer's
+    # the flag used to have no cross-surface writer. Inspired by Perplexity Computer's
     # conversational session management (pin/archive from any surface): pin state is operational
-    # infrastructure, so every surface — GUI, TUI, CLI, scripts — needs read/write access to the same store.
+    # infrastructure, so every surface — TUI, CLI, scripts — needs read/write access to the same store.
     # See #52955.
     for raw_id in args.session_ids:
         resolved = db.resolve_session_id(raw_id)
@@ -1401,7 +1401,7 @@ def _print_empty_store(action: str, args) -> None:
         print("No sessions found.")
 
 
-# VACUUM, the FTS-layout rebuild and bulk deletes rewrite the store; underneath a live gateway/Desktop/cron
+# VACUUM, the FTS-layout rebuild and bulk deletes rewrite the store; underneath a live gateway/cron
 # writer that is the second-writer class behind the retired-WAL refusal (#110054). `--force` is the override.
 _HELD_STORE_ACTIONS = frozenset({"optimize", "optimize-storage", "prune"})
 

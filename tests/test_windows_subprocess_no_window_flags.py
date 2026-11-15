@@ -581,7 +581,7 @@ def test_cached_nvidia_gpu_query_hides_console_window_and_caches(monkeypatch):
     """One hidden nvidia-smi spawn serves the budget probe, the endpoint and
     the vendor detector within the TTL; the second caller must not spawn."""
     from hermes_cli.local_runtime import bootstrap, hardware
-    from hermes_cli.web_routers import local_models
+    from hermes_cli import local_models_service as local_models
 
     captured = []
 

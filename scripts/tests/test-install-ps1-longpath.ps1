@@ -9,12 +9,12 @@
 # expose %TEMP%, %LOCALAPPDATA% and friends as an 8.3 alias
 # (C:\Users\FIRST~1.LAS\...). PowerShell's FileSystem provider chokes on the
 # aliased component once it reaches a provider cmdlet (Tee-Object -FilePath),
-# aborting the Node/Electron stages and the desktop post-build probe.
+# aborting the Node/Electron stages and post-build probes.
 # install.ps1 expands those paths up front; this asserts that contract.
 #
 # HOW THIS RUNS THE CODE: by executing install.ps1 as a real subprocess with a
-# crafted environment and reading what it reports back. `-ProtocolVersion` is a
-# side-effect-free early exit that sits BELOW the normalization block, so the
+# crafted environment and reading what it reports back. `-ShowResolvedPaths` is
+# a side-effect-free early exit that sits BELOW the normalization block, so the
 # whole block -- including the script-level Add-Type the kernel32 resolver
 # needs -- executes exactly as it does during an install. Nothing here parses
 # install.ps1's source (AGENTS.md bans source-reading tests: they pass on

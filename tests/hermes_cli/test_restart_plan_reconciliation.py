@@ -296,19 +296,6 @@ def test_serve_reconciles_against_its_own_unit_vocabulary():
     assert outcomes[0]["outcome"] == "unaccounted"
 
 
-def test_failed_respawn_outranks_incarnation_probe():
-    """A dashboard the cleanup stopped and could not bring back is ``failed``: the probe sees its
-    pre-update pid gone, which is exactly what a failed respawn looks like. See #109290."""
-    plan = _plan(_serve("default", 900), _serve("default", 901, kind="dashboard"))
-    outcomes = match_runtime_outcomes(
-        plan, restarted_services=[], relaunched_profiles=[],
-        externally_supervised_profiles=[], killed_pids=set(), failed_units=[],
-        stale_serve_pids=set(), failed_respawn_pids={901},
-    )
-    by_pid = {o["pid"]: o["outcome"] for o in outcomes}
-    assert by_pid == {900: "restarted", 901: "failed"}
-
-
 def test_serve_outcome_follows_incarnation_probe_when_provided():
     """With the (pid, create_time) survivor probe result, liveness decides:
     a pre-update serve that is gone was replaced (restarted); one still
@@ -329,34 +316,6 @@ def test_serve_outcome_follows_incarnation_probe_when_provided():
     )
     by_pid = {o["pid"]: o["outcome"] for o in outcomes}
     assert by_pid == {900: "unaccounted", 901: "stopped"}
-
-
-def test_desktop_serve_deferral_requires_a_verified_alive_incarnation():
-    """Desktop may defer only a serve the survivor probe confirmed alive."""
-    desktop_serve = _serve("default", 900)
-    desktop_serve.supervisor = "desktop"
-    desktop_serve.restart_via = _restart_mechanism("desktop", "default")
-
-    unknown = match_runtime_outcomes(
-        _plan(desktop_serve), restarted_services=["hermes-serve.service"],
-        relaunched_profiles=[], externally_supervised_profiles=[], killed_pids=set(),
-        failed_units=[], stale_serve_pids=None,
-    )
-    assert unknown[0]["outcome"] == "unaccounted"
-
-    alive = match_runtime_outcomes(
-        _plan(desktop_serve), restarted_services=[], relaunched_profiles=[],
-        externally_supervised_profiles=[], killed_pids=set(), failed_units=[],
-        stale_serve_pids={900},
-    )
-    assert alive[0]["outcome"] == "deferred"
-
-    gone = match_runtime_outcomes(
-        _plan(desktop_serve), restarted_services=[], relaunched_profiles=[],
-        externally_supervised_profiles=[], killed_pids=set(), failed_units=[],
-        stale_serve_pids=set(),
-    )
-    assert gone[0]["outcome"] == "restarted"
 
 
 def test_unaccounted_serve_report_names_serve_remedy_not_gateway_restart(capsys):

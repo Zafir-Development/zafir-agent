@@ -1781,7 +1781,7 @@ TUI use for image paste: macOS `pngpaste`, then `osascript`; Windows PowerShell 
 PNG, except that a copied image *file* (Windows/WSL file drop) is copied as it is. The command
 reads only this machine's clipboard: it needs no running gateway and reads no session store or
 profile file, so a client whose gateway runs on another machine calls it where the user is.
-Under NixOS container mode the command runs inside the managed container, like every `hermes`
+Under managed container mode the command runs inside the container, like every `hermes`
 subcommand, so it cannot see the host's clipboard and `--out` is a path inside the container.
 
 | Option | Description |
@@ -2123,7 +2123,7 @@ hermes update [--gateway] [--check] [--plan] [--no-backup] [--backup] [--yes]
 
 Updates an admitted source checkout and prepares dependencies through PM.
 Use `--check` to compare with its configured source target without applying
-the update. Desktop bundles, Docker, Nix, and Termux packages retain their
+the update. Desktop bundles, Docker, and Termux packages retain their
 external update owner. See [Updating & Uninstalling](../getting-started/updating.md).
 
 `hermes update` follows this installation's update channel. A source checkout of the official repository defaults to `stable`, the latest published `vX.Y.Z` GitHub release at its exact commit; forks and mirrors default to `main`. To follow every commit on `main` instead, run `hermes update --set-channel main`; `hermes update --set-channel stable` switches back. On the `main` channel, a checkout on another branch may be switched to the update branch before pulling. Commit branch work before updating when you want to keep it outside the update autostash flow.
@@ -2136,7 +2136,7 @@ external update owner. See [Updating & Uninstalling](../getting-started/updating
 | `--branch NAME` | Select a source branch for this invocation; takes precedence over source channel selection. |
 | `--gateway` | Internal mode used by the messaging `/update` command. Uses file-based IPC for prompts and progress streaming instead of reading from terminal stdin. Not a gateway restart flag. |
 | `--check` | Check whether an update is available without pulling, installing dependencies, or restarting anything. |
-| `--plan` | Print the update plan and exit without changing anything: install kind (git/Docker/Nix/apt), every running Hermes service across all profiles with its supervisor and running code version, and how each will be restarted. On image- or package-managed installs, reports the correct external update command instead. Read-only. |
+| `--plan` | Print the update plan and exit without changing anything: install kind (git/Docker/apt), every running Hermes service across all profiles with its supervisor and running code version, and how each will be restarted. On image- or package-managed installs, reports the correct external update command instead. Read-only. |
 | `--no-backup` | Skip all pre-update backups for this run (both the quick state snapshot and the full zip), regardless of `updates.pre_update_backup`. |
 | `--backup` | Force a **full** pre-update backup for this run: the quick state snapshot plus a complete zip of `HERMES_HOME` (config, auth, sessions, skills, pairing data). The default mode is `quick` — a lightweight state snapshot only. Set the permanent mode via `updates.pre_update_backup: quick | full | off` in `config.yaml`. |
 | `--yes`, `-y` | Assume yes for interactive prompts such as config migration and stash restore. API-key entry is skipped; run `hermes config migrate` separately for those. |

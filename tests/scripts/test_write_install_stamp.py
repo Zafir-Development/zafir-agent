@@ -7,6 +7,21 @@ import sys
 
 import pytest
 
+SCRIPT = Path(__file__).resolve().parents[2] / "scripts/write_install_stamp.py"
+# Exactly what scripts/termux/build_deb.sh passes in commit mode.
+_TERMUX_COMMIT_BUILD_ARGS = [
+    "--source", "commit-build",
+    "--base-version", "0.19.0", "--display-version", "0.19.0", "--distance", "0",
+    "--distribution", "apt-termux", "--update-mechanism", "external",
+]
+
+
+def _termux_writer_env(**overrides):
+    env = {**os.environ, "HERMES_DESKTOP_VARIANT": "runtime", "HERMES_PAYLOAD_TAG": ""}
+    env.pop("HERMES_BUILD_COMMIT", None)
+    env.update(overrides)
+    return env
+
 
 @pytest.mark.parametrize("variant,distribution,mechanism,payload,tag", [
     ("", None, "self", "bootstrap", None),
@@ -21,7 +36,7 @@ import pytest
 def test_cli_stamp_roundtrip(tmp_path, monkeypatch, variant, distribution, mechanism, payload, tag):
     out = tmp_path / "install-stamp.json"
     script = Path(__file__).resolve().parents[2] / "scripts/write_install_stamp.py"
-    env = {**os.environ, "HERMES_DESKTOP_VARIANT": variant, "HERMES_PAYLOAD_TAG": "v0.18.0", "HERMES_BUILD_COMMIT": ""}
+    env = {**os.environ, "HERMES_DESKTOP_VARIANT": variant, "HERMES_PAYLOAD_TAG": "v0.18.0"}
     args = [sys.executable, str(script), "--output", str(out), "--commit", "d" * 40,
             "--source", "ci", "--base-version", "0.18.0", "--distance", "0",
             "--update-mechanism", mechanism]
@@ -75,9 +90,48 @@ def test_invalid_variant_cannot_emit_stamp(tmp_path, variant, tag, error):
         [sys.executable, str(Path(__file__).resolve().parents[2] / "scripts/write_install_stamp.py"),
          "--output", str(out), "--commit", "d" * 40, "--base-version", "0.18.0",
          "--update-mechanism", "self"],
-        env={**os.environ, "HERMES_DESKTOP_VARIANT": variant, "HERMES_PAYLOAD_TAG": tag, "HERMES_BUILD_COMMIT": ""},
+        env={**os.environ, "HERMES_DESKTOP_VARIANT": variant, "HERMES_PAYLOAD_TAG": tag},
         capture_output=True, text=True, timeout=30, check=False)
     assert result.returncode != 0 and error in result.stderr
+    assert not out.exists()
+
+
+def test_tagless_runtime_commit_build_emits_commit_identity(tmp_path, monkeypatch):
+    """build_deb.sh commit mode: runtime payload, empty tag, explicit full SHA."""
+    from hermes_cli.version_info import _stamp_version_info
+
+    commit = "c" * 40
+    out = tmp_path / "app" / "install-stamp.json"
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--output", str(out), "--commit", commit, *_TERMUX_COMMIT_BUILD_ARGS],
+        env=_termux_writer_env(), capture_output=True, text=True, timeout=30, check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    data = json.loads(out.read_text(encoding="utf-8-sig"))
+    assert {key: data[key] for key in ("payload", "tag", "source", "commit", "distribution", "updateMechanism")} == {
+        "payload": "runtime", "tag": None, "source": "commit-build", "commit": commit,
+        "distribution": "apt-termux", "updateMechanism": "external"}
+    assert data["baseVersion"] == data["displayVersion"] == "0.19.0"
+
+    # The updater refusal and the banner read this identity back out of the stamp.
+    monkeypatch.setenv("HERMES_INSTALL_ROOT", str(out.parent))
+    info = _stamp_version_info()
+    assert info is not None
+    assert (info.commit, info.source, info.base_version) == (commit, "commit-build", "0.19.0")
+
+
+@pytest.mark.parametrize("identity", [
+    [], ["--commit", "c" * 12], ["--commit", "g" * 40], ["--commit", "0" * 40],
+], ids=["no-commit", "short-commit", "non-hex-commit", "fallback-commit"])
+def test_tagless_runtime_refuses_without_explicit_full_commit(tmp_path, identity):
+    """Only an explicitly admitted full SHA makes a tagless runtime stamp valid."""
+    out = tmp_path / "install-stamp.json"
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--output", str(out), *_TERMUX_COMMIT_BUILD_ARGS, *identity],
+        env=_termux_writer_env(GITHUB_SHA="c" * 40),
+        capture_output=True, text=True, timeout=30, check=False,
+    )
+    assert result.returncode != 0 and "HERMES_PAYLOAD_TAG" in result.stderr
     assert not out.exists()
 
 

@@ -89,12 +89,6 @@ _ALLOWED: dict[tuple[str, str], str] = {
         "PM-composed build context: `which(node)` runs against the PATH pm's "
         "ensure('pnpm')/env_for('node') just composed, not the ambient one."
     ),
-    ("hermes_cli/source_build.py", "pnpm"): (
-        "Same PM-composed build context as the node lookup above."
-    ),
-    ("hermes_cli/main_desktop.py", "pnpm"): (
-        "Desktop build resolves pnpm inside the PM-prepared build_env PATH."
-    ),
     ("pm/workspace.py", "npm"): (
         "Plugin workspace installs resolve npm inside the PM runner env that "
         "pm.ensure('npm') just composed."
@@ -102,10 +96,6 @@ _ALLOWED: dict[tuple[str, str], str] = {
     ("tools/mcp_tool_config.py", "node"): (
         "Looks up node only inside the sealed payload's own node dirs (an explicit "
         "`path=`, never the ambient PATH), to run a package bin on the packaged node."
-    ),
-    ("apps/desktop/electron/fixtures/source-backend.py", "uv"): (
-        "Test fixture drives the real uv deliberately placed on the test "
-        "runner's PATH; it is not Hermes-owned subprocess resolution."
     ),
 }
 
@@ -329,7 +319,6 @@ def test_no_unreviewed_bare_managed_runtime_lookups():
         "arbitrary process's PATH, so this resolves a system copy — or nothing "
         "— on an install that has a managed one.\n"
         "Use instead:\n"
-        "  uv       -> managed_uv.resolve_uv() (lookup) or ensure_uv() (may install)\n"
         "  node/npm -> hermes_constants.find_node_executable()\n"
         "  PATH env -> hermes_constants.iter_hermes_node_dirs()\n"
         "If PATH really is the right question, add the site to _ALLOWED with a "
@@ -362,14 +351,3 @@ def test_managed_node_helpers_exist(helper):
     import hermes_constants
 
     assert callable(getattr(hermes_constants, helper))
-
-
-def test_managed_uv_helpers_exist():
-    """The old managed_uv module is a retirement shim on the PM branch: it
-    exists only so the frozen historical updater fixture can import it, and
-    its entry points route to relaunch instead of doing venv work. PM owns
-    real uv resolution now; the module itself must keep the names live."""
-    from hermes_cli import managed_uv
-
-    assert callable(managed_uv.resolve_uv)
-    assert callable(managed_uv.ensure_uv)

@@ -196,7 +196,7 @@ def get_session_env(name: str, default: str = "") -> str:
 
 # Surfaces that are not a human chat channel (gateway binds HERMES_SESSION_PLATFORM, CLI/TUI/
 # desktop bind HERMES_SESSION_SOURCE, so both are consulted).  Default-deny: an unrecognized
-# identity counts as messaging.  Mirrors LOCAL_SESSION_SOURCE_IDS in apps/desktop session-source.ts.
+# identity counts as messaging.
 NON_MESSAGING_SESSION_SURFACES = frozenset({
     "", "api_server", "cli", "codex", "desktop", "gateway", "kanban", "local",
     "msgraph_webhook", "tool", "tui", "webhook",

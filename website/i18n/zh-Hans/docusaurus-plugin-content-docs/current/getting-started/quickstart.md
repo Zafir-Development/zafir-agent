@@ -64,7 +64,7 @@ description: "与 Hermes Agent 的第一次对话——从安装到开始聊天�
 curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash
 ```
 
-源码脚本通过 PM 准备运行时。桌面软件包、Docker、Nix 和 Termux APT 是独立的安装方式。
+源码脚本通过 PM 准备运行时。桌面软件包、Docker 和 Termux APT 是独立的安装方式。
 请勿使用 `pip install hermes-agent` 替代受管理的安装。
 
 Windows 原生安装可在 PowerShell 中运行 `iex (irm https://hermes-agent.nousresearch.com/install.ps1)`，无需 WSL。

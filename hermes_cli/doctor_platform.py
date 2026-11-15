@@ -1,4 +1,4 @@
-"""Host-platform checks for hermes doctor: interpreter, SQLite, certificates, macOS TCC, gateway supervision, command install.
+"""Host-platform checks for hermes doctor: interpreter, SQLite, certificates, macOS Full Disk Access, gateway supervision, command install.
 Split out of ``hermes_cli/doctor.py``, which re-exports every name so ``hermes_cli.doctor.<name>`` keeps resolving (and monkeypatching)."""
 
 from __future__ import annotations
@@ -6,7 +6,6 @@ from __future__ import annotations
 import os
 import shutil
 import ssl
-import subprocess
 import sys
 from pathlib import Path
 from hermes_cli.colors import Colors, color
@@ -281,81 +280,6 @@ def _check_gateway_service_linger(issues: list[str]) -> None:
         issues.append("Enable linger for the gateway user service: sudo loginctl enable-linger $USER")
 
 
-_TCC_CDHASH_DETAIL = (
-    "the desktop bundle's designated requirement is cdhash-pinned (pre-#73681 build) — rebuilds invalidate "
-    "all permission grants. Run `hermes update` to get the stable identifier-pinned signing identity, "
-    "then re-grant permissions once.")
-_TCC_STABLE_DETAIL = {
-    True: "(certificate-anchored DR; grants survive rebuilds)",
-    False: "(identifier-pinned DR; grants survive rebuilds — for the strongest anchor, see `hermes desktop --setup-tcc-identity`)",
-}
-
-
-def check_macos_tcc_grants() -> None:
-    """Check macOS TCC grant persistence for a locally-built desktop bundle; silent on non-macOS / no bundle.
-
-    TCC keys grants to the app's designated requirement (DR). A cdhash-pinned ad-hoc DR changes on every
-    rebuild, so grants silently stop matching while the Settings toggle stays ON; identifier-pinned builds
-    survive rebuilds, but grants made to older binaries stay stale until re-granted once. TCC.db needs Full
-    Disk Access, so the DR string is the only readable signal (a proxy for the signing class, not DR wording).
-
-    See #86385.
-    """
-    app = _desktop_app_bundle() if sys.platform == "darwin" else None
-    if app is None:
-        return
-    dr = _macos_desktop_dr(app)
-    if not dr:
-        return check_warn("macOS TCC grant check", "(could not read code-signing requirement of the desktop bundle)")
-    if "cdhash" in dr.lower():
-        return check_warn("macOS TCC grants will reset after every update", _TCC_CDHASH_DETAIL)
-    # --setup-tcc-identity or notarized build (certificate-anchored) is the strongest anchor.
-    check_ok("macOS TCC signing identity is stable", _TCC_STABLE_DETAIL["certificate" in dr.lower()])
-    check_info("If macOS still re-prompts for permissions (toggle shows ON): the stored grant is stale — run "
-               "`tccutil reset ScreenCapture com.nousresearch.hermes` (repeat per affected service), toggle it ON in "
-               "System Settings, then fully quit & relaunch Hermes once.")
-
-
-def _desktop_app_bundle() -> Path | None:
-    """Locate the locally-built desktop bundle (``apps/desktop/release/mac-<arch>/Hermes.app``), newest first.
-
-    The only layout whose ad-hoc re-signed bundle can invalidate TCC grants. ``/Applications/Hermes.app`` is
-    deliberately not probed: it is the separately-signed, certificate-anchored Hermes-Setup launcher.
-    """
-    release_dir = Path(__file__).resolve().parents[1] / "apps" / "desktop" / "release"
-    candidates = [p for p in release_dir.glob("mac*/Hermes.app") if p.is_dir()]
-    return max(candidates, key=lambda p: p.stat().st_mtime) if candidates else None
-
-
-def _macos_desktop_dr(app: Path) -> str | None:
-    """Return the bundle's designated requirement string, or None on failure (a hanging codesign must never abort doctor)."""
-    codesign = shutil.which("codesign")
-    try:
-        proc = subprocess.run([codesign, "-d", "--requirements", "-", str(app)], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=15, check=False) if codesign else None
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        return None
-    return None if proc is None or proc.returncode != 0 else (proc.stdout or "") + (proc.stderr or "")
-
-
-def check_macos_tcc_anchor(should_fix: bool = False) -> None:
-    """Report (and with --fix install) the dylib-complete TCC anchor; silent on non-macOS / non-uv interpreters.
-    Never raises. Install is gated by the module's pre-install boot probe, so ``--fix`` cannot brick the CLI.
-
-    See #95596.
-    """
-    with warn_on_error("macOS TCC anchor check failed"):
-        from hermes_cli import macos_tcc_anchor as tcc
-        status, detail = tcc.tcc_anchor_state()
-        if status == "skip":
-            return
-        if status == "active":
-            return check_ok("macOS TCC anchor active", f"({detail})")
-        anchored = tcc.ensure_tcc_anchor() if should_fix else None
-        if anchored is not None:
-            return check_ok("macOS TCC anchor installed", f"({anchored})")
-        check_warn("macOS TCC anchor missing" if status == "missing" else "macOS TCC anchor stale", f"({detail})")
-
-
 def check_macos_full_disk_access() -> None:
     """One-grant guidance: Full Disk Access silences every per-folder TCC prompt. Silent on non-macOS.
 
@@ -377,7 +301,7 @@ def check_macos_full_disk_access() -> None:
                    "will never trip per-folder dialogs (Desktop/Downloads/Documents/...) again. Open: System Settings → "
                    "Privacy & Security → Full Disk Access — or run:\n"
                    "      open \"x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles\"\n"
-                   "    then enable your terminal (and Hermes.app if you use Desktop), and restart them once. "
+                   "    then enable your terminal, and restart it once. "
                    "With Hermes' stable signing identities the grant survives every update.")
     except OSError:
         pass  # missing dir / other error: indeterminate, stay silent
@@ -430,7 +354,7 @@ def _staged_venv_dir() -> Path | None:
 
 @doctor_check()
 def _check_python_environment(should_fix: bool, f: Finding) -> None:
-    """Interpreter, linked SQLite, venv, macOS TCC anchors/FDA/grants, version-file drift."""
+    """Interpreter, linked SQLite, venv, macOS Full Disk Access, version-file drift."""
     v, label = sys.version_info, f"Python {'.'.join(map(str, sys.version_info[:3]))}"
     if v < (3, 8):
         _fail_and_issue(label, "(3.10+ required)", "Upgrade Python to 3.10+", f.issues)
@@ -461,17 +385,9 @@ def _check_python_environment(should_fix: bool, f: Finding) -> None:
     else:
         check_bool(sys.prefix != sys.base_prefix, "Virtual environment active",
                    ("Not in virtual environment", "(recommended)"))
-    # macOS TCC interpreter anchor (#95596): dylib-complete re-land of the mechanism reverted in #95563.
-    # Silent on non-macOS.
-    check_macos_tcc_anchor(should_fix=should_fix)
     # macOS Full Disk Access (issue #52010 follow-up): one grant silences every per-folder prompt
     # permanently. Silent on non-macOS.
     check_macos_full_disk_access()
-
-    # macOS TCC grant persistence (issue #86385): a locally-built desktop bundle whose DR is cdhash-pinned
-    # loses every permission grant on each rebuild; a post-#73681 identifier-pinned DR survives, but grants
-    # made to older binaries stay stale (toggle shows ON while macOS re-prompts).
-    check_macos_tcc_grants()
 
 
 @doctor_check()
@@ -524,58 +440,6 @@ def _check_windows_gateway_autostart(should_fix: bool, f: Finding) -> None:
         f.fixed += 1
     if warnings:
         f.manual_issues.extend(warnings)
-
-
-@doctor_check()
-def _check_web_dashboard_import(should_fix: bool, f: Finding) -> None:
-    """Import the dashboard web surface in a subprocess so an import-time crash lands in the report.
-
-    When starlette is updated past the fastapi pinned beside it (the CVE starlette pin ships in
-    several extras on its own), ``hermes dashboard`` dies constructing ``FastAPI(...)`` with a
-    TypeError — not an ImportError — so the module's own lazy-install fallback never fires and the
-    process exits before a single log line. Importing in a subprocess keeps a dead web surface
-    from taking the doctor down with it; lazy installs stay off so the probe never mutates the
-    environment it is diagnosing.
-    """
-    from hermes_cli.doctor import PROJECT_ROOT
-
-    env = dict(os.environ, HERMES_DISABLE_LAZY_INSTALLS="1")
-    try:
-        proc = subprocess.run(
-            [sys.executable, "-c", "import hermes_cli.web_server"],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=120,
-            cwd=str(PROJECT_ROOT),
-            env=env,
-            check=False,
-        )
-    except subprocess.TimeoutExpired:
-        _fail_and_issue(
-            "Dashboard web surface",
-            "(import probe timed out)",
-            "Repair the dashboard dependencies: `hermes pm repair`, then restart Hermes",
-            f.issues,
-        )
-        return
-    stderr = (proc.stderr or "").strip()
-    if proc.returncode == 0:
-        return check_ok("Dashboard web surface", "(imports cleanly)")
-    if "Web UI requires fastapi and uvicorn" in stderr:
-        # The optional web extra is simply absent; anyone who never opens the dashboard
-        # should not be told their install is broken.
-        return check_warn("Dashboard web surface", "(optional web extra not installed)")
-    detail = (
-        stderr.splitlines()[-1] if stderr else f"(exited with code {proc.returncode})"
-    )
-    _fail_and_issue(
-        "Dashboard web surface",
-        detail,
-        "Repair the dashboard dependencies: `hermes pm repair`, then restart Hermes",
-        f.issues,
-    )
 
 
 @doctor_check()

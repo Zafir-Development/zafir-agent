@@ -2,19 +2,13 @@
 
 Production Electron/preload/backend/tool execution; loopback scripted inference only.
 Scratch HOME, HERMES_HOME, Python facade and CLI shims; no user profiles or credentials.
-Run from the repository root after installing the pnpm workspace dependencies and building Desktop:
-
-```sh
-cp evals/botmode-dm-matrix/probe-dm-matrix.spec.ts apps/desktop/e2e/
-git apply --unidiff-zero evals/botmode-dm-matrix/mock-trigger.patch
-(cd apps/desktop && pnpm run build)
-# Set DISPLAY, current XAUTHORITY, XDG_RUNTIME_DIR and VIRTUAL_ENV first.
-(cd apps/desktop && HERMES_DESKTOP_CDP_PORT=off BOT_DM_SERVICE_PATH=1 \
-  BOT_DM_EVIDENCE=/tmp/botmode-dm-matrix-proof \
-  pnpm exec playwright test e2e/probe-dm-matrix.spec.ts --reporter=list)
-git apply --unidiff-zero -R evals/botmode-dm-matrix/mock-trigger.patch
-rm apps/desktop/e2e/probe-dm-matrix.spec.ts
-```
+These probes have no runnable host in this tree: they drove the Electron renderer, and that app is
+removed (its Bot Mode surfaces go in a later step). They stay as the reference fixtures for that
+step. When the renderer existed, run from the repository root after installing the pnpm workspace
+dependencies and building it: copy `probe-dm-matrix.spec.ts` and `mock-trigger.patch` into the app,
+apply the patch, build, then run Playwright with `DISPLAY`, `XAUTHORITY`, `XDG_RUNTIME_DIR` and
+`VIRTUAL_ENV` set, `HERMES_DESKTOP_CDP_PORT=off`, `BOT_DM_SERVICE_PATH=1` and
+`BOT_DM_EVIDENCE=/tmp/botmode-dm-matrix-proof`; then revert the patch and remove the spec.
 
 `BOT_DM_SERVICE_PATH=1` creates a disposable Python venv facade with an adjacent
 worktree-pinned `hermes`; PATH contains a different inert `hermes` that exits 2

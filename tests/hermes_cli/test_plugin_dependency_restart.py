@@ -111,7 +111,6 @@ def _gateway_answers(monkeypatch, activations):
     monkeypatch.setattr("gateway.control_socket.reload_gateway_plugins",
                         lambda target, *, profile_home=None, timeout=30.0:
                         {"reloaded": True, "plugins": ["depprobe"], "activations": activations})
-    monkeypatch.setattr(plugins_activation, "notify_serve_backend", lambda name, home: None)
 
 
 def test_enable_reports_restart_when_the_running_gateway_cannot_import_the_dependency(home, monkeypatch):
@@ -129,21 +128,6 @@ def test_enable_reports_restart_when_the_running_gateway_cannot_import_the_depen
     assert result["activation"]["missing_in"] == ["gateway"]
     assert "nothing of this plugin needs" not in hint
     assert "installed after the running gateway" in hint and "hermes gateway restart" in hint
-
-
-def test_restart_names_only_the_process_that_cannot_import(home, monkeypatch):
-    """A gateway restarted since the install imports the dependency; the Desktop backend booted
-    before it does not. The remedy is reopening the app, not restarting the gateway."""
-    _select_generation(home, with_dist=True)
-    _gateway_answers(monkeypatch, [{"name": "depprobe", "key": "depprobe", "activated_now": {}, "deferred": {}}])
-    monkeypatch.setattr(plugins_activation, "notify_serve_backend", lambda name, home: {"activation": {
-        "name": "depprobe", "key": "depprobe", "activated_now": {}, "deferred": {}, "missing_dependencies": [REQ]}})
-
-    result = plugins_activation.activate_plugin_now("depprobe", in_process=False)
-    hint = plugins_activation.activation_hint(result)
-
-    assert result["restart_required"] is True and result["activation"]["missing_in"] == ["backend"]
-    assert "desktop app" in hint and "hermes gateway restart" not in hint
 
 
 def test_enable_reports_repair_when_the_dependency_was_never_installed(home, monkeypatch):
@@ -201,7 +185,6 @@ def test_a_plugin_importing_its_new_dependency_at_load_still_asks_for_a_restart(
         plugins._reset_plugin_managers_for_tests()
     monkeypatch.setattr("gateway.control_socket.reload_gateway_plugins",
                         lambda target, *, profile_home=None, timeout=30.0: answer)
-    monkeypatch.setattr(plugins_activation, "notify_serve_backend", lambda name, home: None)
 
     result = plugins_activation.activate_plugin_now("depprobe", in_process=False)
 

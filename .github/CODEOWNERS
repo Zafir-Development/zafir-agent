@@ -42,7 +42,6 @@ package.json                    @NousResearch/hermes-agent-core
 uv.lock                         @NousResearch/hermes-agent-core
 *package-lock.json              @NousResearch/hermes-agent-core
 /pnpm-lock.yaml                 @NousResearch/hermes-agent-core
-/flake.lock                     @NousResearch/hermes-agent-core
 /pm/lock.json                   @NousResearch/hermes-agent-core
 *Dockerfile                     @NousResearch/hermes-agent-core
 

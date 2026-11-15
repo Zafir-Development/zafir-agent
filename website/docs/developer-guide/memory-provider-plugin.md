@@ -39,7 +39,7 @@ Entry-point discovery does not install packages. Do not inject a provider into
 Hermes's selected environment with pip. On PM-managed installations, ship a
 directory provider with declared Python dependencies; plugin admission and
 `hermes memory setup` prepare them through PM before use. Owner-managed builds
-(such as Nix) can include an entry-point distribution declaratively.
+can include an entry-point distribution declaratively.
 
 CLI and dashboard setup share candidate preparation. PM includes the provider's
 `pyproject.toml` or legacy `pip_dependencies` / `python_dependencies` alongside

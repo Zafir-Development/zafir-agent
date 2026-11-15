@@ -559,9 +559,9 @@ class TestStopProfileGateway:
         # These signal/reaping tests simulate an independently owned process.
         # Ambiguous/shared ownership is exercised by the lifecycle regressions.
         from gateway import host_attach
-        from hermes_cli import dashboard_procs
+        from hermes_cli import process_inventory
         monkeypatch.setattr(host_attach, '_probe_host_gateway', lambda wait: None)
-        monkeypatch.setattr(dashboard_procs, '_hermes_home_for_pid', lambda pid, **kw: str(gateway.get_hermes_home()))
+        monkeypatch.setattr(process_inventory, '_hermes_home_for_pid', lambda pid, **kw: str(gateway.get_hermes_home()))
     @pytest.mark.platforms("windows")
     def test_windows_stop_drains_marker_before_force_termination(self, monkeypatch):
         """Windows must let the marker watcher run before escalating (#112750)."""
@@ -912,7 +912,7 @@ class TestReaperStartupGrace:
             gateway, "find_gateway_pids",
             lambda exclude_pids=None: [p for p in (booting, unknown, stale) if p not in (exclude_pids or set())],
         )
-        monkeypatch.setattr("hermes_cli.dashboard_procs._process_age_seconds", _age)
+        monkeypatch.setattr("hermes_cli.process_inventory._process_age_seconds", _age)
         monkeypatch.setattr(gateway.os, "kill", lambda pid, sig: None)
         monkeypatch.setattr("gateway.status._pid_exists", lambda pid: False)
         monkeypatch.setattr("time.sleep", lambda _: None)

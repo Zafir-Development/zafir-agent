@@ -6,7 +6,7 @@
  *
  * Mixing is an sRGB lerp — deliberately, for byte parity with the desktop's
  * `color-mix(in srgb, ...)` ladder in styles.css. Perceptual (OKLCH) math is
- * desktop-only and lives in `apps/desktop/src/themes/color.ts`.
+ * a separate, heavier ladder the TUI does not need.
  *
  * Everything that measures returns `null` for unparseable input rather than 0:
  * a silent 0 makes `ansi256(245)` look like pure black and passes garbage

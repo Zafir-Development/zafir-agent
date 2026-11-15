@@ -24,8 +24,7 @@ async def probe():
     from gateway.run import GatewayRunner
     from gateway.session_authority import initialize_session_authority
     from gateway.run_api import start_gateway_api, stop_gateway_api
-    from hermes_cli import web_server
-    from hermes_cli.dashboard_auth.ws_tickets import mint_ticket
+    from tests.gateway.fixtures.native_ws_auth import prepare_listener, subprotocols, ws_url
     from tests.gateway.fixtures.local_recovery_probe import rpc
     import tools.browser_session_lifecycle as lifecycle
     from websockets.asyncio.client import connect
@@ -34,8 +33,8 @@ async def probe():
     (home / 'config.yaml').write_text('gateway:\n  multiplex_profiles: false\nmodel:\n  provider: custom\n  default: no-inference\n  base_url: http://127.0.0.1:1/v1\nauxiliary:\n  title_generation:\n    enabled: false\n')
     runner = GatewayRunner()
     await initialize_session_authority(runner, profile_id=str(home), instance_id='browser-scope')
+    prepare_listener(runner)
     api = await start_gateway_api(runner)
-    web_server.app.state.auth_required = True
     reaps = []
     lifecycle.cleanup_profile_browsers = reaps.append  # only this profile's browsers are closed here
     lifecycle.cleanup_all_browsers = lambda: reaps.append('ALL')  # every profile's would be
@@ -54,8 +53,7 @@ async def probe():
     cdp = ThreadingHTTPServer(('127.0.0.1', 0), _Cdp)
     threading.Thread(target=cdp.serve_forever, daemon=True).start()
     try:
-        ticket = mint_ticket(user_id='owner', provider='fixture')
-        async with connect(api.api_origin.replace('http:', 'ws:') + '/api/ws?ticket=' + ticket) as ws:
+        async with connect(ws_url(api), subprotocols=subprotocols(runner, subject='owner')) as ws:
             sid = (await rpc(ws, 'session.create', request_id='browser', source='tui', toolsets=[]))['result']['session_id']
             # CLI-9: phase 1 serves ONE profile, phase 2 TWO (bee already holds its own live connection).
             real = runner.session_authorities if hasattr(runner, 'session_authorities') else None

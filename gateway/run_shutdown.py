@@ -470,11 +470,11 @@ class GatewayShutdownMixin(GatewaySessionEndMixin):
 
         cron_count = _read_or_awake("cron work count", self._running_cron_job_count, 1)
         api_count = _read_or_awake("api work count", lambda: self._api_server_hook("active_agent_work_count"), 1)
-        # An attached dashboard/desktop/TUI client (heartbeat mtime) is inbound activity — folded into
+        # An attached native CLI/TUI client (heartbeat mtime) is inbound activity — folded into
         # the inbound clock, not a conjunct, so a lingering marker cannot pin the box.
         last_inbound = self._last_inbound_at
-        from gateway.scale_to_zero import dashboard_client_last_seen
-        seen = _read_or_awake("dashboard heartbeat", dashboard_client_last_seen, time.time())
+        from gateway.scale_to_zero import session_client_last_seen
+        seen = _read_or_awake("session client heartbeat", session_client_last_seen, time.time())
         if seen is not None and seen > last_inbound:
             last_inbound = seen
         return is_idle(

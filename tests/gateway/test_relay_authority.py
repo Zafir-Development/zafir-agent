@@ -33,8 +33,8 @@ async def probe(peer):
     from gateway.session_authority import initialize_session_authority
     from gateway.session_contract import SessionRef
     from gateway.session_envelope import prepare_native, restore_native
-    from hermes_cli import web_server
     from hermes_state_runtime import RuntimeStoreError, list_session_admissions
+    from native_ws_auth import prepare_listener, subprotocols, ws_url
     from tests.waiting import async_wait_until
 
     sockets, outgoing, frames = [], [], []
@@ -74,7 +74,9 @@ async def probe(peer):
             gateway_id='fixture-gateway', upgrade_secret=secret,
             reconnect=True, reconnect_backoff_s=.05)
         runner = GatewayRunner()
-        authority = await initialize_session_authority(runner, profile_id='default', instance_id='relay-test')
+        authority = await initialize_session_authority(
+            runner, profile_id=os.environ['HERMES_HOME'], instance_id='relay-test')
+        prepare_listener(runner)
         adapter = RelayAdapter(PlatformConfig(enabled=True),
             descriptor, transport)
         adapter.gateway_runner = runner
@@ -127,10 +129,9 @@ async def probe(peer):
             authority.db._execute_write(lambda conn: conn.execute('DROP TRIGGER fail_relay'))
             rows = await send(raw)
             sid = next(iter(authority.sessions))
-            warm_agent = authority.agent(SessionRef('default', sid))
+            warm_agent = authority.agent(SessionRef(authority.profile_id, sid))
             assert warm_agent is not None
-            port = api.socket.getsockname()[1]
-            async with websockets.connect(f'ws://127.0.0.1:{port}/api/ws?token={web_server._SESSION_TOKEN}') as ws:
+            async with websockets.connect(ws_url(api), subprotocols=subprotocols(runner, subject='owner')) as ws:
                 async def rpc(method, **params):
                     await ws.send(json.dumps({'jsonrpc': '2.0', 'id': method, 'method': method, 'params': params}))
                     async with asyncio.timeout(20):
@@ -159,7 +160,7 @@ async def probe(peer):
                 assert 'LOCAL_ACK_WS_SHARED' in json.dumps(snapshot), snapshot
                 assert [r['request_id'] for r in rows] == ['relay-1', 'relay-2'], rows
                 assert len(peer.requests) == 2, peer.requests
-                assert authority.agent(SessionRef('default', sid)) is warm_agent
+                assert authority.agent(SessionRef(authority.profile_id, sid)) is warm_agent
                 # Public authority transport cannot submit private/trusted source fields.
                 for extra in ({'internal': True}, {'source': raw['source']}, {'profile': 'foreign'},
                               {'native_text_v1': rows[0]['payload']['native_text_v1']}):

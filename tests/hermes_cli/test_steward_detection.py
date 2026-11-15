@@ -6,7 +6,7 @@ mutation). That is a fact about the INSTALL, so it comes from the two
 facts the tree itself carries: ``.git`` (a checkout we own) and the
 install stamp that ships with the code (``install-stamp.json``, written by
 ``scripts/write_install_stamp.py`` with a required ``updateMechanism`` of
-``self``/``electron-updater``/``external``).
+``self``/``external``).
 """
 
 import json
@@ -14,10 +14,8 @@ import json
 import pytest
 
 from hermes_cli.steward import (
-    STEWARD_DESKTOP,
     STEWARD_DOCKER,
     STEWARD_NIX,
-    classify_install,
     read_install_stamp,
     sealed_steward,
 )
@@ -37,21 +35,18 @@ class TestStampDrivenDetection:
         [
             (STEWARD_NIX, "external"),
             (STEWARD_DOCKER, "external"),
-            (STEWARD_DESKTOP, "electron-updater"),
         ],
     )
     def test_sealed_tree_names_its_steward(self, tmp_path, distribution, mechanism):
         root = tmp_path / "install"
         _stamp(root, mechanism=mechanism, distribution=distribution)
         assert sealed_steward(root) == distribution
-        assert classify_install(root) == (distribution, False)
 
     def test_git_checkout_is_not_steward_owned(self, tmp_path):
         root = tmp_path / "checkout"
         root.mkdir()
         (root / ".git").mkdir()
         assert sealed_steward(root) is None
-        assert classify_install(root) == ("git", True)
 
     def test_git_beats_stamp(self, tmp_path):
         """A checkout carrying a baked stamp (self-updating source install)
@@ -74,7 +69,6 @@ class TestStampDrivenDetection:
         root = tmp_path / "bare"
         root.mkdir()
         assert sealed_steward(root) == "unknown"
-        assert classify_install(root) == ("unknown", False)
 
     def test_executing_nix_tree_reads_the_stamp_the_wrapper_points_at(self, tmp_path, monkeypatch):
         """A Nix package bakes the stamp outside the store's package dir; its wrapper
@@ -113,16 +107,6 @@ class TestUpdateAdmission:
         import hermes_cli.image_provenance as ip
 
         monkeypatch.setattr(ip, "IMAGE_PROVENANCE_PATH", tmp_path / "absent.json")
-
-    def test_desktop_app_stamp_refuses_update(self, tmp_path, monkeypatch):
-        from hermes_cli.update_contract import evaluate_update_admission
-
-        root = tmp_path / "payload"
-        _stamp(root, mechanism="electron-updater", distribution=STEWARD_DESKTOP)
-        refusal = evaluate_update_admission(root)
-        assert refusal is not None
-        assert refusal.code == STEWARD_DESKTOP
-        assert "desktop app" in refusal.message
 
     def test_nix_stamp_refuses_update(self, tmp_path):
         from hermes_cli.update_contract import evaluate_update_admission

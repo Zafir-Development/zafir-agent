@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 from hermes_cli import main as hermes_main
-from hermes_cli import main_web_build
+from hermes_cli import update_bytecode
 
 
 def _make_repo(tmp_path: Path, sha: str = "a" * 40) -> Path:
@@ -41,7 +41,7 @@ def test_sweep_clears_pycache_when_checkout_changed(monkeypatch, tmp_path):
     cache = _make_pycache(repo)
     monkeypatch.setattr(hermes_main, "PROJECT_ROOT", repo)
     # Stamp records a different (older) fingerprint.
-    (repo / main_web_build._BYTECODE_FINGERPRINT_FILE).write_text(
+    (repo / update_bytecode._BYTECODE_FINGERPRINT_FILE).write_text(
         "git:refs/heads/main:" + "a" * 40, encoding="utf-8"
     )
 
@@ -49,7 +49,7 @@ def test_sweep_clears_pycache_when_checkout_changed(monkeypatch, tmp_path):
 
     assert not cache.exists()
     # Stamp updated to the current fingerprint.
-    recorded = (repo / main_web_build._BYTECODE_FINGERPRINT_FILE).read_text(encoding="utf-8")
+    recorded = (repo / update_bytecode._BYTECODE_FINGERPRINT_FILE).read_text(encoding="utf-8")
     assert recorded.strip().endswith("b" * 40)
 
 
@@ -129,7 +129,7 @@ def test_a_sweep_that_cannot_list_dropped_files_keeps_the_old_fingerprint(monkey
     old commit from every later sweep. The old fingerprint stays, so the next launch retries."""
     import subprocess
 
-    from hermes_cli import main_web_build as build
+    from hermes_cli import update_bytecode as build
 
     repo = tmp_path / "repo"
     repo.mkdir()

@@ -460,7 +460,7 @@ def test_disabled_discovery_clears_cache_and_rejects_new_scan(monkeypatch, tmp_p
         server,
         "_load_cfg",
         lambda: {
-            "desktop": {
+            "projects": {
                 "repo_scan_enabled": False,
                 "repo_scan_roots": [],
                 "repo_scan_exclude_paths": [],
@@ -496,7 +496,7 @@ def test_nondefault_policy_rejects_stale_or_legacy_results(monkeypatch, tmp_path
         server,
         "_load_cfg",
         lambda: {
-            "desktop": {
+            "projects": {
                 "repo_scan_enabled": True,
                 "repo_scan_roots": [str(root)],
                 "repo_scan_exclude_paths": [],

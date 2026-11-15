@@ -26,7 +26,7 @@ def _repo(tmp_path):
     _git(tmp_path, "init", "-q")
     (tmp_path / "package.json").write_text("{}\n", encoding="utf-8")
     (tmp_path / "pnpm-lock.yaml").write_text("lockfileVersion: '9.0'\n", encoding="utf-8")
-    for rel in ("apps/desktop", "scripts/whatsapp-bridge"):
+    for rel in ("web", "scripts/whatsapp-bridge"):
         (tmp_path / rel).mkdir(parents=True)
         (tmp_path / rel / "package.json").write_text("{}\n", encoding="utf-8")
     (tmp_path / "scripts/whatsapp-bridge/package-lock.json").write_text("lock v1\n", encoding="utf-8")
@@ -58,8 +58,8 @@ def test_dirty_sibling_manifest_preserves_its_lock(tmp_path):
 def test_another_manifest_does_not_protect_an_npm_project_lock(tmp_path):
     repo = _repo(tmp_path)
     assert _still_dirty_after_cleanup(
-        repo, "apps/desktop/package.json", "scripts/whatsapp-bridge/package-lock.json") == {
-        "apps/desktop/package.json",
+        repo, "web/package.json", "scripts/whatsapp-bridge/package-lock.json") == {
+        "web/package.json",
     }
 
 

@@ -85,7 +85,7 @@ def metrics_home(tmp_path, monkeypatch):
 
 
 def _finished_task_in_open_session(session_id: str = "open-session") -> None:
-    """One completed task in a session that stays open, as a messaging or Desktop chat does."""
+    """One completed task in a session that stays open, as a messaging or TUI chat does."""
     event = {"session_id": session_id, "task_id": "task-1", "platform": "cli"}
     lifecycle.invoke_hook("on_session_start", **event, turn_id="turn-1")
     relay_shared_metrics.start_task_run(**event)

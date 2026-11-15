@@ -1,21 +1,11 @@
-"""Capture real ``SessionEvents.publish`` frames for the Desktop execution-authority fence tests.
+"""Capture real ``SessionEvents.publish`` frames for the execution-authority stamp tests.
 
 Two successive owners (runtime epochs 1 and 2) each run one turn on the same
 session, then the second owner applies an idle ``rename`` mutation and cancels
-the head of a paused queue. The Desktop
-fixture ``apps/desktop/src/lib/execution-authority.frames.json`` is this
-module's output; regenerate it with::
-
-    PYTHONPATH=. .venv/bin/python tests/gateway/fixtures/execution_frames_capture.py \
-        apps/desktop/src/lib/execution-authority.frames.json
+the head of a paused queue. ``capture`` returns the real published frames; the
+stamp tests replay them to pin which events carry an execution stamp.
 """
-import asyncio
-import json
-import os
 import queue
-import sys
-import tempfile
-from pathlib import Path
 from types import SimpleNamespace
 
 
@@ -82,14 +72,4 @@ async def capture(tmp):
             await conn.close()
     finally:
         store.close_all_db_handles()
-    return {'_generated_by': 'tests/gateway/fixtures/execution_frames_capture.py', **owners}
-
-
-def main():
-    tmp = Path(tempfile.mkdtemp())
-    os.environ['HERMES_HOME'] = str(tmp)
-    Path(sys.argv[1]).write_text(json.dumps(asyncio.run(capture(tmp)), indent=1) + '\n', encoding='utf-8')
-
-
-if __name__ == '__main__':
-    main()
+    return owners

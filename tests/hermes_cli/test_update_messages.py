@@ -42,7 +42,7 @@ class TestCalledProcessErrorMessage:
         monkeypatch.setattr(update_cmd._m(), "_is_windows", lambda: False)
         exc = subprocess.CalledProcessError(1, ["uv", "pip", "install", "-e", ".[all]"], stderr="error: disk full")
         with pytest.raises(SystemExit) as info:
-            update_cmd._handle_update_called_process_error(exc, object(), False, False)
+            update_cmd._handle_update_called_process_error(exc, object(), False)
         assert info.value.code == 1
         out = capsys.readouterr().out
         assert "disk full" in out

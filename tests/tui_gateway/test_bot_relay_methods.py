@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 import tui_gateway.server as srv
-from hermes_cli.dashboard_auth.ws_tickets import INTERNAL_PROVIDER, INTERNAL_USER_ID
+INTERNAL_USER_ID = INTERNAL_PROVIDER = "server-internal"
 from tools import bot_relay
 
 

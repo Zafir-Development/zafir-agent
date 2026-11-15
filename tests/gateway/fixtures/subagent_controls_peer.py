@@ -12,8 +12,7 @@ async def probe():
     from gateway.run import GatewayRunner
     from gateway.session_authority import initialize_session_authority
     from gateway.run_api import start_gateway_api, stop_gateway_api
-    from hermes_cli import web_server
-    from hermes_cli.dashboard_auth.ws_tickets import mint_ticket
+    from tests.gateway.fixtures.native_ws_auth import prepare_listener, subprotocols, ws_url
     from tests.gateway.fixtures.local_recovery_probe import rpc
     from tools.delegate_tool_child_run import _register_child
     from tools.delegate_tool_registry import _close_subagent_steering, _unregister_subagent
@@ -23,8 +22,8 @@ async def probe():
     (home / 'config.yaml').write_text('gateway:\n  multiplex_profiles: false\nmodel:\n  provider: custom\n  default: no-inference\n  base_url: http://127.0.0.1:1/v1\nauxiliary:\n  title_generation:\n    enabled: false\n')
     runner = GatewayRunner()
     authority = await initialize_session_authority(runner, profile_id=str(home), instance_id='subagent-controls')
+    prepare_listener(runner)
     api = await start_gateway_api(runner)
-    web_server.app.state.auth_required = True
     receipt = {}
 
     class Agent:
@@ -39,8 +38,7 @@ async def probe():
             self.stopped.append(message)
             return True
 
-    ticket = mint_ticket(user_id='owner', provider='fixture')
-    async with connect(api.api_origin.replace('http:', 'ws:') + '/api/ws?ticket=' + ticket) as ws:
+    async with connect(ws_url(api), subprotocols=subprotocols(runner, subject='owner')) as ws:
         created = await rpc(ws, 'session.create', request_id='controls-owner', source='gui', toolsets=[])
         sid = created['result']['session_id']
         live = authority.sessions[sid]

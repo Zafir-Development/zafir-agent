@@ -16,7 +16,7 @@ from hermes_cli import plugins_cmd, plugins_cmd_catalog, plugins_cmd_inspect
 from hermes_cli.plugins_cmd import PluginOperationError
 from hermes_cli.plugins_cmd_inspect import detect_components, inspect_plugin_source
 
-# Shared with native Desktop's detector (apps/desktop/electron/desktop-plugin-install.test.ts).
+# Shared with the plugin installer's component detector.
 _DETECTION_CASES = json.loads((Path(__file__).resolve().parents[1] / "fixtures/plugin_component_detection.json")
                               .read_text(encoding="utf-8-sig"))["cases"]
 

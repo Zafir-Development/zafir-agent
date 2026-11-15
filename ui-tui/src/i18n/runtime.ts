@@ -1,4 +1,4 @@
-// Locale + merged catalog store for the TUI, mirroring apps/desktop/src/i18n/runtime.ts.
+// Locale + merged catalog store for the TUI.
 //
 // Resolution for `t(key)`: active catalog (en merged with the RPC-delivered pack
 // for the active language) → bundled en → the bare key. Packs are flat dotted

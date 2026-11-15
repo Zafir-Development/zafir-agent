@@ -440,8 +440,8 @@ def _audit_one(tool: str, cwd, label: str, audit_extra: list[str], manual_issues
 def _check_npm_audit(should_fix: bool, f: Finding) -> None:
     """pnpm audit per installed workspace (root, web, ui-tui); npm audit for the WhatsApp bridge.
 
-    The workspaces are audited one --filter each, so the desktop app's tree (Electron, node-pty, ...) is
-    never part of a routine check (#38772). The WhatsApp bridge may live under a writable HERMES_HOME
+    The workspaces are audited one --filter each, so unrelated dependency trees are never part of a
+    routine check (#38772). The WhatsApp bridge may live under a writable HERMES_HOME
     mirror rather than the (possibly read-only) Docker install tree, hence the shared resolver.
     """
     from hermes_cli.doctor import PROJECT_ROOT

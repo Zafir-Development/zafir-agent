@@ -95,7 +95,7 @@ def test_gateway_media_delivery_refuses_them(home, monkeypatch):
 
 
 def test_dashboard_files_api_hides_them(home):
-    from hermes_cli.web_routers.files import _is_sensitive_path
+    from hermes_cli.host_files import is_sensitive_host_path as _is_sensitive_path
 
     for rel in _stores(home):
         assert _is_sensitive_path(home / rel), rel

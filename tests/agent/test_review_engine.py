@@ -384,13 +384,12 @@ def test_review_registered_in_every_aux_surface():
     """The /review slot must appear in every aux-model picker registry.
 
     Same contract as curator's registry test in tests/agent/test_curator.py:
-    DEFAULT_CONFIG schema, CLI picker (_AUX_TASKS), and dashboard REST
-    allowlist (_AUX_TASK_SLOTS). The desktop and web AUX_TASKS tsx arrays
-    mirror _AUX_TASK_SLOTS by convention (shared "Must match" comments).
+    DEFAULT_CONFIG schema, CLI picker (_AUX_TASKS), and the model-assignment
+    allowlist (_AUX_TASK_SLOTS).
     """
     from hermes_cli.config import DEFAULT_CONFIG
     from hermes_cli.main_provider_setup import _AUX_TASKS
-    from hermes_cli.web_server_config import _AUX_TASK_SLOTS
+    from hermes_cli.profile_model_write import _AUX_TASK_SLOTS
 
     assert "review" in DEFAULT_CONFIG["auxiliary"], \
         "review missing from DEFAULT_CONFIG['auxiliary']"
@@ -399,7 +398,7 @@ def test_review_registered_in_every_aux_surface():
     assert "review" in aux_keys, "review missing from _AUX_TASKS (CLI picker)"
 
     assert "review" in _AUX_TASK_SLOTS, \
-        "review missing from _AUX_TASK_SLOTS (dashboard REST API)"
+        "review missing from _AUX_TASK_SLOTS (model assignment)"
 
 # ---------------------------------------------------------------------------
 # format_dispatch_note

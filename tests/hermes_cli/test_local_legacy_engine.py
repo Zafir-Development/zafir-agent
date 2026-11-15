@@ -188,7 +188,7 @@ def test_busy_store_leaves_the_engine_for_a_later_call(legacy_env):
 
 
 def test_status_route_reports_the_moved_engine(legacy_env, monkeypatch):
-    from hermes_cli.web_routers import local_models as lm
+    from hermes_cli import local_models_service as lm
 
     home, _, package, target, backend, pinned = legacy_env
     legacy = legacy_digests(package, target, pinned)

@@ -78,9 +78,9 @@ _DOTENV_PUBLISHED: dict[str, tuple[str | None, str, int]] = {}
 _DOTENV_PASSES = itertools.count()
 _DOTENV_LOCK = threading.RLock()
 
-# Per-process credentials a parent mints and injects into the child's environment (the Desktop shell /
-# a link-style launcher spawns `hermes dashboard` with a fresh HERMES_DASHBOARD_SESSION_TOKEN and keeps
-# the same token for its own /api probes). They are never .env configuration, so a persisted value in
+# Per-process credentials a parent mints and injects into the child's environment (a supervising
+# launcher spawns a child with a fresh HERMES_DASHBOARD_SESSION_TOKEN and keeps the same token for its
+# own control probes). They are never .env configuration, so a persisted value in
 # ~/.hermes/.env must not replace an injected one — the parent would then 401 against its own child
 # (#115955). A value an earlier dotenv pass published is still reloaded normally.
 _SPAWN_CREDENTIAL_KEYS: frozenset[str] = frozenset({"HERMES_DASHBOARD_SESSION_TOKEN"})

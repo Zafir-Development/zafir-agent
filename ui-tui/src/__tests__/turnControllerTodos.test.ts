@@ -4,7 +4,7 @@ import { turnController } from '../app/turnController.js'
 import { getTurnState, resetTurnState } from '../app/turnStore.js'
 
 // turnController.recordTodos() parses the raw `todo` tool payload into
-// TodoItem[]. Nested subtasks (apps/desktop's `parent` field) must survive
+// TodoItem[]. Nested subtasks (the `parent` field) must survive
 // this parse — the TUI todo panel renders hierarchy from it via todoTree().
 describe('turnController.recordTodos — preserves the parent field', () => {
   beforeEach(() => {

@@ -27,24 +27,3 @@ print('PM interpreter and application dependencies load as hermes')
         check=False,
     )
     assert result.returncode == 0, result.stdout + result.stderr
-
-
-def test_dashboard_ships_generated_icon_without_build_environment(built_image: str) -> None:
-    probe = """
-from pathlib import Path
-from PIL import Image
-
-with Image.open('/opt/hermes/hermes_cli/web_dist/favicon.ico') as image:
-    image.load()
-    assert image.width > 0 and image.height > 0
-assert not Path('/opt/hermes/node_modules/vite').exists()
-assert not Path('/opt/hermes/node_modules/esbuild').exists()
-assert Path('/opt/hermes/node_modules/typescript/bin/tsc').is_file()
-"""
-    result = subprocess.run(
-        ["docker", "run", "--rm", "--network", "none", "--user", "hermes",
-         "--entrypoint", "/opt/hermes/.venv/bin/python", built_image, "-c", probe],
-        capture_output=True, text=True, timeout=60,
-        check=False,
-    )
-    assert result.returncode == 0, result.stdout + result.stderr

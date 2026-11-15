@@ -1,9 +1,9 @@
 name: Label rerun
 
-# When the ``run-e2e`` label is added, rerun the head commit's CI, Docker and
-# Nix runs in full. Their ``detect`` job reads the PR's labels through the API
+# When the ``run-e2e`` label is added, rerun the head commit's CI and Docker
+# runs in full. Their ``detect`` job reads the PR's labels through the API
 # (a rerun replays the original event payload), so the rerun turns the Docker
-# and Nix slow lanes on (scripts/ci/classify_changes.py). The E2E suites stay
+# slow lane on (scripts/ci/classify_changes.py). The E2E suites stay
 # off on pull requests either way: they run only on release builds.
 #
 # The review comment updates without help. The poller in
@@ -29,7 +29,7 @@ jobs:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 15
     steps:
-      - name: Cancel and rerun the head commit's CI, Docker and Nix runs
+      - name: Cancel and rerun the head commit's CI and Docker runs
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
@@ -37,7 +37,7 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
         run: |
           set -uo pipefail
-          for workflow in ci.yaml docker.yml nix.yml; do
+          for workflow in ci.yaml docker.yml; do
             RUN_ID=$(gh run list --repo "$REPO" --commit "$HEAD_SHA" --workflow "$workflow" \
               --event pull_request --limit 1 --json databaseId --jq '.[0].databaseId // empty' || true)
             if [ -z "$RUN_ID" ]; then

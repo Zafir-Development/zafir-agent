@@ -726,12 +726,11 @@ export interface SharedMetricsConsentResult {
   decided: boolean
   reask?: boolean
 }
-/** ``send`` is ignored unless ``enabled``; ``first_run`` marks the Desktop first-run answer. */
+/** ``send`` is ignored unless ``enabled``. */
 export interface SharedMetricsSetParams {
   profile?: string | null
   enabled: boolean
   send?: boolean
-  first_run?: boolean
 }
 /** ``command`` is the raw typed name (no leading ``/``, no args); the backend canonicalizes it against the published registry. ``session_id`` scopes the count to that session's profile. */
 export interface SharedMetricsSlashCommandParams {
@@ -742,75 +741,15 @@ export interface SharedMetricsSlashCommandParams {
 export interface SharedMetricsSlashCommandResult {
   ok: boolean
 }
-/** ``elapsed_ms`` = the client's own launch (TUI process start / Desktop app start) to ready (TUI gateway ready / Desktop backend attached), measured once per launch by the client. The client names its surface because a Desktop may attach to a URL/cloud backend where ``HERMES_DESKTOP`` is unset; without it the backend falls back to its own client detection. ``launch_id`` is an opaque per-launch token the backend latches on (never recorded), so a reconnect re-sending the same launch counts once while a new launch counts again. */
+/** ``elapsed_ms`` = the client's own launch (TUI process start) to ready (TUI gateway ready), measured once per launch by the client. ``launch_id`` is an opaque per-launch token the backend latches on (never recorded), so a reconnect re-sending the same launch counts once while a new launch counts again. */
 export interface SharedMetricsStartupLatencyParams {
   profile?: string | null
   elapsed_ms: number
-  surface?: 'desktop_attach' | 'tui' | null
+  surface?: 'tui' | null
   launch_id?: string | null
 }
 export interface SharedMetricsStartupLatencyResult {
   ok: boolean
-}
-/** One Desktop PACKAGED self-update (electron-updater / App Installer / Store). Source-checkout hand-offs run ``hermes update`` and are counted from its receipt, never here. Raw words; the backend buckets them: ``outcome`` success|failed|noop|refused, ``failed_stage`` download|verify|apply|restart, ``mechanism`` the updater strategy kind, ``duration_ms`` wall time, ``from_commit_date`` the updated-from build's commit time (epoch seconds) when known. */
-export interface SharedMetricsUpdateRunParams {
-  profile?: string | null
-  outcome: string
-  failed_stage?: string | null
-  mechanism?: string | null
-  duration_ms?: number | null
-  from_commit_date?: number | null
-}
-export interface SharedMetricsUpdateRunResult {
-  ok: boolean
-}
-/** ``area`` is a Desktop surface id (``command_palette``, ``terminal_pane``, ``settings_<view>`` …); the backend collapses anything outside its closed set to ``other``. */
-export interface SharedMetricsDesktopFeatureUseParams {
-  profile?: string | null
-  area: string
-}
-export interface OkResult {
-  ok?: boolean
-}
-/** ``kind`` notice_dismissed|error_toast|renderer_crash|backend_disconnect|slow_frame; ``detail`` a closed code-defined word for that kind (notice id, error category, crash reason, drop reason, frame duration bucket), never message text. */
-export interface SharedMetricsDesktopFrictionParams {
-  profile?: string | null
-  kind: string
-  detail: string
-}
-/** ``step`` a Desktop first-run step id; ``event`` reached|completed|abandoned. */
-export interface SharedMetricsDesktopOnboardingParams {
-  profile?: string | null
-  step: string
-  event: string
-}
-/** ``signal`` quick_close|cancelled|setting_off_default|rage_click|undo|feature_disabled; ``target`` a closed code-defined id for that signal (area, flow, action, undo path, feature toggle); ``setting`` a config key for setting_off_default only (the value is never sent — the backend compares it to the default). */
-export interface SharedMetricsDesktopDislikeParams {
-  profile?: string | null
-  signal: string
-  target?: string
-  setting?: string | null
-}
-/** One finished UTC day of Desktop use, aggregated on the client. ``day`` (YYYY-MM-DD) only latches a resend and is never recorded; the raw counts are bucketed by the backend. */
-export interface SharedMetricsDesktopDailyParams {
-  profile?: string | null
-  day: string
-  bot_count?: number
-  modes?: SharedMetricsDesktopModeDay[]
-  actions?: SharedMetricsDesktopActionDay[]
-}
-export interface SharedMetricsDesktopModeDay {
-  mode: 'bots' | 'sessions'
-  active_ms?: number
-  messages_sent?: number
-}
-export interface SharedMetricsDesktopActionDay {
-  action: string
-  via: 'click' | 'menu' | 'palette' | 'shortcut'
-  count: number
-}
-export interface SharedMetricsDesktopDailyResult {
-  recorded: boolean
 }
 export interface ModelOptionsParams {
   profile?: string | null
@@ -1454,33 +1393,6 @@ export interface DisplayStopResult {
   profile_key: string
   stopped: boolean
 }
-export interface DisplayObserveParams {
-  profile?: string | null
-  viewer_id?: string | null
-}
-export interface DisplayObserveResult {
-  profile: string
-  supported: boolean
-  installed: boolean
-  missing: string[]
-  running: boolean
-  pid?: number | null
-  display?: string | null
-  socket?: string | null
-  geometry: string
-  install_command?: string | null
-  browser?: string | null
-  blocker?: string | null
-  memory_available_mb?: number | null
-  memory_limit_mb?: number | null
-  placement?: string
-  image_switch?: DisplayImageSwitch | null
-  lease: DisplayLease
-  profile_key: string
-  ticket: string
-  path: string
-  viewer_id: string
-}
 export interface DisplaySwitchSandboxImageParams {
   profile?: string | null
   approve?: boolean
@@ -1967,6 +1879,9 @@ export interface BotRelayReplyParams {
   reply?: string | null
   error?: string | null
   reason?: string | null
+}
+export interface OkResult {
+  ok?: boolean
 }
 export interface I18nLanguagesResult {
   languages: LanguageOption[]
@@ -2928,13 +2843,6 @@ export interface FileAttachParams {
   path?: string | null
   data_url?: string | null
   name?: string | null
-  staged_upload?: StagedFileUpload | null
-}
-/** Source identity returned by the browser upload route, checked against the live profile. */
-export interface StagedFileUpload {
-  install_id: string
-  path: string
-  profile_home: string
 }
 export interface FileAttachResult {
   attached: boolean
@@ -3903,8 +3811,6 @@ export interface CommandsCatalogResult {
 }
 export interface CommandCatalogMeta {
   argument_mode?: ArgumentMode | null
-  desktop?: string | null
-  desktop_subcommands?: string[] | null
 }
 export type ArgumentMode = 'options' | 'text' | 'mixed'
 export interface CommandCategory {
@@ -4492,7 +4398,7 @@ export interface PluginToolsetRow {
   label: string
   description: string
 }
-/** ``toggle``: ``key``/``name`` + ``enable``; ``install``: ``identifier``/``repo`` or ``catalog_name`` (+ ``force``, ``enable``, ``ref``, ``inspected_sha`` = the commit ``inspect`` read: a custom source with no ``ref`` whose branch moved since is refused); ``inspect``: ``identifier``/``repo`` or ``catalog_name``; ``install_desktop``: ``identifier``/``repo`` (any source ``install`` takes) or ``catalog_name``, always with ``ref`` (the commit ``inspect`` read and the dialog showed; another commit is refused) (+ ``force``) — the desktop half onto the host that serves this client; ``remove_desktop``: ``name`` (+ ``force`` for a package's own half); ``update``: ``name`` (+ ``accept_capabilities`` to apply a re-pin that widened the plugin after the user confirmed the ``delta``, + ``force`` to apply an update whose security scan returned caution after the user saw the findings); ``remove``: ``name`` (user installs only); ``settings``: ``key`` + ``values`` (``{setting_key: value}``, non-secret schema keys only); ``presence``: ``names`` (catalog names, answered in that order); ``update_all``: no fields; ``auto_update``: ``enable`` to set ``plugins.auto_apply`` (omit to read it). */
+/** ``toggle``: ``key``/``name`` + ``enable``; ``install``: ``identifier``/``repo`` or ``catalog_name`` (+ ``force``, ``enable``, ``ref``, ``inspected_sha`` = the commit ``inspect`` read: a custom source with no ``ref`` whose branch moved since is refused); ``inspect``: ``identifier``/``repo`` or ``catalog_name``; ``update``: ``name`` (+ ``accept_capabilities`` to apply a re-pin that widened the plugin after the user confirmed the ``delta``, + ``force`` to apply an update whose security scan returned caution after the user saw the findings); ``remove``: ``name`` (user installs only); ``settings``: ``key`` + ``values`` (``{setting_key: value}``, non-secret schema keys only); ``presence``: ``names`` (catalog names, answered in that order); ``update_all``: no fields; ``auto_update``: ``enable`` to set ``plugins.auto_apply`` (omit to read it). */
 export interface PluginsManageParams {
   profile?: string | null
   action?: PluginsAction
@@ -4509,7 +4415,7 @@ export interface PluginsManageParams {
   values?: Record<string, unknown> | null
   names?: string[] | null
 }
-export type PluginsAction = 'list' | 'toggle' | 'install' | 'inspect' | 'install_desktop' | 'remove_desktop' | 'update' | 'remove' | 'settings' | 'onboarding' | 'presence' | 'update_all' | 'auto_update'
+export type PluginsAction = 'list' | 'toggle' | 'install' | 'inspect' | 'update' | 'remove' | 'settings' | 'onboarding' | 'presence' | 'update_all' | 'auto_update'
 /** ``list`` → ``plugins`` + counts; ``toggle`` → ``ok``/``unchanged``/``restart_required``/``name`` (the canonical key written)/``plugin``; ``install`` → ``hermes_cli.plugins_cmd.dashboard_install_plugin``'s ok payload; ``inspect`` → ``ok``/``agent``/``desktop``/``agent_name``/``desktop_name``/``sha`` (the commit read)/``warnings``/``insecure`` or ``ok=false`` + ``error``; ``toggle``/``install``/``update`` that loaded a plugin also carry ``gateway_reloaded`` (the running gateway picked it up and re-wired its handlers) and ``activation`` — the honest split of what is live now vs deferred, so ``restart_required`` is True only when no gateway answered or the running gateway/backend cannot import the plugin's Python dependencies (``activation.missing_dependencies``); ``update`` → ``ok``/``unchanged``/``sha``, or ``ok=false`` + ``consent_required`` with the ``delta`` (``{surface: [added...]}``) / ``delta_lines`` a widened pin adds — nothing changed until the client retries with ``accept_capabilities`` — or ``ok=false`` + ``scan_blocked`` with ``scan_verdict`` / ``scan_findings`` (retry a caution verdict with ``force``); ``remove`` → ``ok``/``name`` plus ``cleared_memory_provider`` when the removed plugin was the live ``memory.provider``. */
 export interface PluginsManageResult {
   plugins?: AgentPluginRow[] | null
@@ -4546,9 +4452,6 @@ export interface PluginsManageResult {
   agent_name?: string | null
   desktop_name?: string | null
   insecure?: boolean | null
-  path?: string | null
-  paired_with_agent?: boolean | null
-  unpaired_from?: string | null
   results?: PluginUpdateAllRow[] | null
   skipped?: PluginUpdateAllSkip[] | null
   current?: number | null
@@ -4565,7 +4468,6 @@ export interface AgentPluginRow {
   status: string
   portable: boolean
   install_dir: string
-  has_desktop_half: boolean
   servers: PluginServerRow[]
   catalog_name?: string | null
   catalog_tier?: string | null
@@ -6363,8 +6265,6 @@ export interface RpcMethods {
   'display.lease.acquire': { params: DisplayLeaseAcquireParams; result: DisplayLeaseResult }
   /** Hand back. Without a viewer id the release is refused while a human holds unless force. */
   'display.lease.release': { params: DisplayLeaseReleaseParams; result: DisplayLeaseResult }
-  /** Mint a single-use ticket for /api/display/ws and the server-minted viewer id for this connection. */
-  'display.observe': { params: DisplayObserveParams; result: DisplayObserveResult }
   /** Start this profile's Xvnc + Xfce (idempotent); blocks until the display is published. */
   'display.start': { params: ProfileParams; result: DisplayStatus }
   /** Runtime + lease snapshot for this profile's screen. */
@@ -6691,16 +6591,6 @@ export interface RpcMethods {
   'setup.runtime_check': { params: SetupRuntimeCheckParams; result: SetupRuntimeCheckResult }
   /** Loose provider check: is ANY provider auth state discoverable for the (launch or named) profile. */
   'setup.status': { params: ProfileParams; result: SetupStatusResult }
-  /** Record one finished Desktop day (mode use + button presses); recorded=false keeps it for a retry. */
-  'shared_metrics.desktop_daily': { params: SharedMetricsDesktopDailyParams; result: SharedMetricsDesktopDailyResult }
-  /** Count one Desktop dislike signal (fire-and-forget; capped per signal per day; a no-op unless on). */
-  'shared_metrics.desktop_dislike': { params: SharedMetricsDesktopDislikeParams; result: OkResult }
-  /** Count one Desktop area used today (fire-and-forget; once per area per UTC day; a no-op unless on). */
-  'shared_metrics.desktop_feature_use': { params: SharedMetricsDesktopFeatureUseParams; result: OkResult }
-  /** Count one Desktop friction event (fire-and-forget; capped per day; a no-op unless on). */
-  'shared_metrics.desktop_friction': { params: SharedMetricsDesktopFrictionParams; result: OkResult }
-  /** Count one Desktop first-run step transition (fire-and-forget; once per step+event; a no-op unless on). */
-  'shared_metrics.desktop_onboarding': { params: SharedMetricsDesktopOnboardingParams; result: OkResult }
   /** Write both shared-metrics opt-ins at once (send requires collection) and reconcile consent windows. */
   'shared_metrics.set': { params: SharedMetricsSetParams; result: SharedMetricsConsentResult }
   /** Count one user-typed slash command (fire-and-forget; a no-op unless shared metrics are on). */
@@ -6709,8 +6599,6 @@ export interface RpcMethods {
   'shared_metrics.startup_latency': { params: SharedMetricsStartupLatencyParams; result: SharedMetricsStartupLatencyResult }
   /** Pure read of the focused profile's shared-metrics opt-ins (collection, upload, answered). */
   'shared_metrics.status': { params: ProfileParams; result: SharedMetricsConsentResult }
-  /** Count one Desktop packaged self-update outcome (fire-and-forget; a no-op unless shared metrics are on). */
-  'shared_metrics.update_run': { params: SharedMetricsUpdateRunParams; result: SharedMetricsUpdateRunResult }
   /** Run a safe (non-dangerous) shell command captured for ``!cmd`` / inline substitution. */
   'shell.exec': { params: ShellExecParams; result: ShellExecResult }
   /** Skills hub backend: list the profile's skills or search / browse / inspect / install from the hub. */
@@ -6844,7 +6732,6 @@ export const RPC_METHODS = [
   'display.install',
   'display.lease.acquire',
   'display.lease.release',
-  'display.observe',
   'display.start',
   'display.status',
   'display.stop',
@@ -7008,16 +6895,10 @@ export const RPC_METHODS = [
   'session.workspace.move',
   'setup.runtime_check',
   'setup.status',
-  'shared_metrics.desktop_daily',
-  'shared_metrics.desktop_dislike',
-  'shared_metrics.desktop_feature_use',
-  'shared_metrics.desktop_friction',
-  'shared_metrics.desktop_onboarding',
   'shared_metrics.set',
   'shared_metrics.slash_command',
   'shared_metrics.startup_latency',
   'shared_metrics.status',
-  'shared_metrics.update_run',
   'shell.exec',
   'skills.manage',
   'skills.reload',

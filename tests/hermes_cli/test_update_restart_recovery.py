@@ -63,23 +63,16 @@ def test_abort_recovery_hands_managed_profiles_to_a_fresh_process(monkeypatch):
         return _successful_recovery_result(verified=["coder", "default"])
 
     monkeypatch.setattr(abort_recovery.subprocess, "run", fake_run)
-    plan = SimpleNamespace(
-        runtimes=[
-            _runtime("default", "systemd"),
-            _runtime("coder", "launchd"),
-            _runtime("manual-box", "manual"),
-            _runtime("desktop", "desktop", kind="serve"),
-        ]
-    )
+    plan = SimpleNamespace(runtimes=[
+        _runtime("default", "systemd"), _runtime("coder", "launchd"), _runtime("manual-box", "manual")])
 
     result = update_cmd._recover_gateway_restart_after_abort(plan, gateway_mode=False)
     assert result["requested"] == ["coder", "default"]
     assert result["verified"] == ["coder", "default"]
     assert result["relaunch_attempted"] == []
     assert result["failed"] == []
-    # Runtimes the pass does not own are recorded, not silently dropped.
     skipped = {(entry["profile"], entry["kind"]) for entry in result["skipped"]}
-    assert skipped == {("manual-box", "gateway"), ("desktop", "serve")}
+    assert skipped == {("manual-box", "gateway")}
     assert all(entry["reason"] for entry in result["skipped"])
 
     assert len(calls) == 1
@@ -89,9 +82,7 @@ def test_abort_recovery_hands_managed_profiles_to_a_fresh_process(monkeypatch):
     payload = json.loads(kwargs["input"])
     assert payload["profiles"] == ["coder", "default"]
     assert payload["supervisors"] == {"coder": "launchd", "default": "systemd"}
-    # Serve units travel in the same payload so one fresh child covers both
-    # runtime families (#92145).
-    assert set(payload["serve_units"]) == {"recover", "skip"}
+    assert set(payload) == {"profiles", "supervisors"}
     assert kwargs["env"]["HERMES_UPDATE_RESTART_RECOVERY"] == "1"
 
 
@@ -187,21 +178,12 @@ def test_abort_recovery_rejects_malformed_json_success(monkeypatch):
 
 
 def test_abort_recovery_does_not_restart_manual_only_fleet(monkeypatch):
-    """No gateway authority and no serve authority means no child at all.
-
-    On a Linux host with systemctl the child is spawned anyway for the
-    serve-unit pass (test_serve_only_fleet_still_spawns_the_recovery_child);
-    this test pins the OTHER side of that contract, so the serve authority
-    probe is explicitly disabled here.
-    """
+    """No gateway restart authority means no child and no service restart."""
     calls = []
     monkeypatch.setattr(
         update_cmd.subprocess,
         "run",
         lambda *args, **kwargs: calls.append((args, kwargs)),
-    )
-    monkeypatch.setattr(
-        abort_recovery, "_serve_unit_recovery_available", lambda: False
     )
     plan = SimpleNamespace(runtimes=[_runtime("manual-box", "manual")])
 
@@ -211,29 +193,6 @@ def test_abort_recovery_does_not_restart_manual_only_fleet(monkeypatch):
     assert result["failed"] == []
     assert [entry["profile"] for entry in result["skipped"]] == ["manual-box"]
     assert calls == []
-
-
-def test_abort_recovery_records_serve_runtimes_as_skipped_with_reason(monkeypatch):
-    """Serve/dashboard ledger entries must not vanish from the recovery pass."""
-    monkeypatch.setattr(
-        update_cmd.subprocess,
-        "run",
-        lambda *args, **kwargs: _successful_recovery_result(verified=["default"]),
-    )
-    plan = SimpleNamespace(
-        runtimes=[
-            _runtime("default", "systemd"),
-            _runtime("default", "desktop", kind="serve"),
-            _runtime("ops", "manual-serve", kind="dashboard"),
-        ]
-    )
-
-    result = update_cmd._recover_gateway_restart_after_abort(plan, gateway_mode=False)
-    by_kind = {entry["kind"]: entry for entry in result["skipped"]}
-    assert set(by_kind) == {"serve", "dashboard"}
-    assert "desktop app" in by_kind["serve"]["reason"]
-    assert by_kind["dashboard"]["profile"] == "ops"
-    assert "relaunch" in by_kind["dashboard"]["reason"]
 
 
 def test_service_matching_is_exact_for_overlapping_profile_names():
@@ -461,7 +420,6 @@ def test_recovery_module_end_to_end_in_a_real_fresh_process(tmp_path):
         "relaunch_attempted": ["coder"],
         "verified": ["default"],
         "covered": {},
-        "serve_units": {"verified": [], "failed": []},
     }
     restarts = [json.loads(line) for line in ledger.read_text().splitlines()]
     assert [argv[argv.index("-p") + 1] for argv in restarts] == ["coder", "default"]

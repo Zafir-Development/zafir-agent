@@ -39,7 +39,7 @@ def record_engine(store, version, digest="b" * 64):
 
 
 def test_status_uses_pm_pin_and_ignores_legacy_tag(runtime_env, monkeypatch):
-    from hermes_cli.web_routers import local_models as lm
+    from hermes_cli import local_models_service as lm
 
     store, lock = runtime_env
     section = {"enabled": True, "backend": "cpu", "tag": "b99999"}

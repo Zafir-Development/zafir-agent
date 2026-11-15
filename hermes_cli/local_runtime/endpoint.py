@@ -92,7 +92,7 @@ def resolve_llamacpp_endpoint(config: dict | None = None,
     """Managed-first, detection-second endpoint for llamacpp aliases.
 
     Boot-race rung: on a fresh backend start there is NO state file yet — the lifespan boot thread
-    is still spawning the server (≈1-3 s) while the desktop's readiness probe fires the moment the
+    is still spawning the server (≈1-3 s) while a client's readiness probe fires the moment the
     WebSocket connects.
     """
     managed = _state_endpoint()

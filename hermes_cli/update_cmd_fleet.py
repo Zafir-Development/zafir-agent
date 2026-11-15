@@ -33,7 +33,7 @@ _FRESH_RESTART_SUPERVISORS = frozenset({"systemd", "launchd", "service", "s6"})
 
 _SYSTEMD_SCOPES = (("user", ["systemctl", "--user"]), ("system", ["systemctl"]))
 _LIST_GATEWAY_UNITS = [
-    "list-units", "hermes-gateway*", "hermes-serve*", "hermes-dashboard*",
+    "list-units", "hermes-gateway*",
     "--plain", "--no-legend", "--no-pager",
 ]
 
@@ -210,12 +210,12 @@ def _receipt_reports_stale_runtime(receipt: dict, expected_sha: str | None = Non
 
 
 _SUPERVISED_SERVE_BACKENDS = frozenset(
-    {"manual-serve", "desktop", "desktop-ssh", "systemd", "launchd", "windows-service", "service"}
+    {"manual-serve", "systemd", "launchd", "windows-service", "service"}
 )
 # Backends whose supervisor restarts the process without any updater bookkeeping. ``manual-serve``
 # is excluded: it owes a durable handoff (``defer_manual_serve``) before it stops counting.
-# The inventory writer classifies a serve/dashboard row as launchd, desktop, desktop-ssh, systemd (a unit's
-# MainPID, #141021) or manual-serve (``update_inventory._collect_ledger_runtimes``); ``windows-service`` and
+# The inventory writer classifies a serve/dashboard row as launchd, systemd (a unit's MainPID,
+# #141021) or manual-serve (``update_inventory._collect_ledger_runtimes``); ``windows-service`` and
 # ``service`` mirror ``_SUPERVISED_SERVE_BACKENDS`` for parity only — they are set for gateway rows alone.
 _SUPERVISOR_OWNED_SERVE_BACKENDS = _SUPERVISED_SERVE_BACKENDS - {"manual-serve"}
 
@@ -239,7 +239,7 @@ def _receipt_owed_gateways(receipt: dict, pending_manual: list[dict]) -> set[tup
         kind = entry.get("kind", default_kind)
         profile = entry.get("profile")
         # A serve/dashboard row is outside the gateway matrix's evidence, not evidence against the
-        # gateways it does cover: a supervised backend (desktop, systemd, launchd) is its
+        # gateways it does cover: a supervised backend (systemd, launchd) is its
         # supervisor's to restart, and a manual-serve row outside the retention list is the serve
         # obligation mechanism's — a host running a dashboard carries such a row in every receipt,
         # and a blanket veto made the gateway warning permanently undischargeable there (#115090).
@@ -365,12 +365,11 @@ def _marker_only_restart_obsolete() -> bool:
     the checkout is the only code it can be held to. With no live gateway at all, the inventory-less marker
     asks the host instead (``update_cmd_fleet_gatewayless``): it clears when no profile left a
     gateway that should be running and every live runtime is supervisor-owned or handed off, so a
-    Desktop-only install stops failing every later update (#118742).
+    serve-only install stops failing every later update (#118742).
 
-    A serve/dashboard row whose supervisor owns the restart (Desktop backend, systemd/launchd
-    unit, Windows service) is outside the gateway matrix's evidence, not evidence against it —
-    the same boundary ``_receipt_owed_gateways`` draws for receipts (#115090) and the restart
-    phase draws for the Desktop backend (#111494). Counting it made the warning permanently
+    A serve/dashboard row whose supervisor owns the restart (systemd/launchd unit, Windows
+    service) is outside the gateway matrix's evidence, not evidence against it — the same
+    boundary ``_receipt_owed_gateways`` draws for receipts (#115090). Counting it made the warning permanently
     undischargeable on every host that runs a dashboard. A manual-serve row still needs its
     durable handoff (``defer_manual_serve``), and an unclassified backend stays fail-closed.
     Discharging here strands nobody: the same row is still accounted at update time by
@@ -389,7 +388,7 @@ def _marker_only_restart_obsolete() -> bool:
         return False
     if owed is not None and not owed:
         # A pull that recorded no gateway runtime owes no restart; clearing avoids the
-        # stuck "Fleet restart incomplete" loop on Desktop-hosted (no-service) installs.
+        # stuck "Fleet restart incomplete" loop on installs with no service-managed gateway.
         _clear_fleet_restart_pending_marker()
         logger.debug("Fleet-restart-pending marker discharged: no gateway obligation recorded")
         return True
@@ -684,12 +683,6 @@ def _fleet_restart_skip_reason(plan) -> str | None:
     return None
 
 
-def _run_pending_fleet_restart() -> bool:
-    """Historical retry hook; new retries use the ordinary completion owner."""
-    from hermes_cli._old_updater import stop_for_relaunch
-    stop_for_relaunch(incomplete=True)
-
-
 def _systemctl(cmd: list, *, timeout: float):
     """Run a systemctl (or sudo systemctl) invocation, capturing utf-8 text with a timeout."""
     return subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout, check=False)
@@ -749,19 +742,16 @@ def _is_serve_or_dashboard_unit(unit: str) -> bool:
 
 
 def _is_hermes_gateway_unit(unit: str) -> bool:
-    """Exact base unit or hyphenated profile family only: ``startswith("hermes-serve")``
-    would accept ``hermes-server.service``."""
+    """Match only the gateway unit or a hyphenated profile unit."""
     return (
-        # list-units is already pattern-filtered, but keep the name gate so a stray non-gateway/serve line
-        # cannot enter the restart path. See #83595.
+        # Keep an exact name gate even when systemctl returns near-prefix units.
         unit == "hermes-gateway.service"
         or unit.startswith("hermes-gateway-")
-        or _is_serve_or_dashboard_unit(unit)
     )
 
 
 def _for_each_systemd_gateway_unit(list_units_stdout: str, *, process_unit, on_unit_timeout) -> None:
-    """Process each hermes-gateway*/hermes-serve* unit from ``systemctl list-units``.
+    """Process each hermes-gateway* unit from ``systemctl list-units``.
 
     ``TimeoutExpired`` from ``process_unit`` is isolated per unit via ``on_unit_timeout``
     so one wedged systemctl call cannot abort the rest of the fleet.
@@ -1015,38 +1005,13 @@ def _surviving_gateway_pids_after_failed_restart():
 _MANUAL_GATEWAY_SKIP_REASON = (
     "manual gateway has no supervisor relaunch authority; left running for explicit operator restart"
 )
-_DESKTOP_SERVE_SKIP_REASON = (
-    "desktop app owns and respawns this serve backend;"
-    " the recovery pass must not restart it out from under its supervisor"
-)
-# NOT a claim that no supervisor exists: a unit's MainPID row is classified "systemd" (#141021),
-# and "manual-serve" still covers a process inside some unit's cgroup it is not MainPID of, or
-# unreadable ownership. Unit-backed serves are recovered by the fresh child's systemd pass;
-# survivors reported by _surviving_pre_update_serve_runtimes.
-_SERVE_SKIP_REASON = (
-    "no per-profile relaunch command reaches a serve/dashboard runtime; recovered by the fresh"
-    " systemd unit pass when a hermes-serve*/hermes-dashboard* unit owns it, else left running for explicit"
-    " operator restart"
-)
-# A launchd-owned backend (#116503): the fresh child has no per-label kickstart for serve/dashboard
-# jobs, but the post-update dashboard cleanup pass kickstarts the loaded job — never a detached
-# argv respawn, which would fight the job's own KeepAlive.
-_LAUNCHD_SERVE_SKIP_REASON = (
-    "launchd job owns this backend; the post-update dashboard cleanup kickstarts the job through"
-    " launchd, never a detached argv respawn that would fight its KeepAlive"
-)
-
-
 def _gateway_recovery_partition(plan, *, skip_profiles: set[str] | None = None) -> tuple[dict[str, str], list[dict]]:
     """Partition pre-update runtimes into fresh-restart candidates and skips.
 
     Uses only the pre-checkout inventory: re-importing ``hermes_cli.gateway`` in the
     failing interpreter is what raises the original ``ImportError``. Returns
     ``(candidates, skipped)``: profile → supervisor for supervised gateways the fresh
-    process may restart; every other inventoried runtime with an explicit reason so
-    nothing vanishes silently. Skipped serve/dashboard is NOT unrecoverable: the fresh
-    child's ``hermes-serve*`` systemd pass enumerates units from systemd; leftovers are
-    caught by :func:`_surviving_pre_update_serve_runtimes`.
+    process may restart; manual gateways are returned with an explicit reason.
     """
     skip_profiles = skip_profiles or set()
     candidates: dict[str, str] = {}
@@ -1065,15 +1030,6 @@ def _gateway_recovery_partition(plan, *, skip_profiles: set[str] | None = None) 
                     candidates.setdefault(profile, str(supervisor))
                     continue
                 reason = _MANUAL_GATEWAY_SKIP_REASON
-            elif kind in ("serve", "dashboard"):
-                from hermes_cli.update_inventory import CLIENT_OWNED_SERVE_SUPERVISORS
-
-                if supervisor in CLIENT_OWNED_SERVE_SUPERVISORS:
-                    reason = _DESKTOP_SERVE_SKIP_REASON
-                elif supervisor == "launchd":
-                    reason = _LAUNCHD_SERVE_SKIP_REASON
-                else:
-                    reason = _SERVE_SKIP_REASON
             else:
                 continue
             skipped.append({"profile": profile, "kind": str(kind), "supervisor": str(supervisor), "reason": reason})
@@ -1345,7 +1301,7 @@ def _restart_one_systemd_gateway_unit(
 def _restart_systemd_gateway_units(
     restarted_services, failed_or_stale_units, restarted_scoped_units, drain_budget, self_restart_pending=None,
 ):
-    """Restart every active hermes-gateway*/hermes-serve* systemd unit (user + system).
+    """Restart every active hermes-gateway* systemd unit (user + system).
 
     Settled units → ``restarted_services`` (bare) and ``restarted_scoped_units``
     (``scope/name``); failures → ``failed_or_stale_units``. Per-unit timeouts isolated.
@@ -1605,13 +1561,11 @@ def _force_kill_stuck_gateways(killed_pids) -> None:
 
 
 def _recover_after_restart_phase_abort(
-    e, _pre_update_plan, out: _GatewayRestartOutcome, *, gateway_mode, restarted_scoped_units
+    e, _pre_update_plan, out: _GatewayRestartOutcome, *, gateway_mode
 ) -> None:
     """Phase-abort recovery: fresh-child restart + fail-closed verdict; updates ``out`` in place."""
-    from hermes_cli.update_abort_recovery import _owed_stale_serve_rows
     from hermes_cli.update_cmd import (
-        _abort_recovery_is_complete, _recover_gateway_restart_after_abort, _surviving_pre_update_serve_runtimes,
-        _warn_stale_serve_runtimes,
+        _abort_recovery_is_complete, _recover_gateway_restart_after_abort,
     )
     logger.debug("Gateway restart during update failed: %s", e)
     out.phase_errors.append(str(e))
@@ -1639,16 +1593,7 @@ def _recover_after_restart_phase_abort(
     )
     _recovery_result = _recover_gateway_restart_after_abort(
         _pre_update_plan, gateway_mode=gateway_mode, skip_profiles=_already_restarted_profiles,
-        skip_units=set(restarted_scoped_units),
     )
-    _serve_units_failed = list((_recovery_result.get("serve_units") or {}).get("failed") or [])
-    # Deliberately NOT merged into ``restarted_services`` (gateway vocabulary feeding the
-    # fleet probe); serve coverage lives in the recovery result/receipt. A serve/dashboard
-    # still the SAME pre-update process is live on old code (unreachable by `gateway
-    # restart`): recovery may not claim success while one remains, and must never kill
-    # one (manual/Desktop serves have no relaunch authority).
-    _stale_runtime_rows = _surviving_pre_update_serve_runtimes(_pre_update_plan)
-    _recovery_result["stale_runtimes"] = _stale_runtime_rows
     # Only systemd-VERIFIED outcomes claim coverage; a relaunch that merely exited 0
     # ("relaunch_attempted") was never observed and must not clear incomplete.
     _recovery_verified = set(_recovery_result.get("verified") or [])
@@ -1659,22 +1604,15 @@ def _recover_after_restart_phase_abort(
         planned_gateway_profiles=_planned_gateway_profiles,
         covered_gateway_profiles=_already_restarted_profiles | _recovery_verified,
         recovery_result=_recovery_result,
-        stale_runtime_rows=_stale_runtime_rows,
     ):
-        # Fresh child is terminal; the fleet-version matrix stays the authoritative
-        # read-back before success is declared. Desktop-owned survivors (the only rows
-        # that can remain here) are named, not owed. See #111494.
+        # Fresh child is terminal; the fleet-version matrix stays the authoritative read-back.
         out.incomplete = False
-        _warn_stale_serve_runtimes(_stale_runtime_rows)
     elif (
         _restart_phase_failure_is_incomplete(_surviving, out.pre_restart_gateway_pids)
-        or _owed_stale_serve_rows(_stale_runtime_rows)
-        or _serve_units_failed
     ):
         # Owed restart (C3): verification records the follow-up; the /update marker stays committed.
         out.incomplete = True
         _warn_gateway_restart_phase_aborted(e, _surviving)
-        _warn_stale_serve_runtimes(_stale_runtime_rows)
     out.record_receipt(phase_error=str(e), fresh_recovery=_recovery_result)
 
 
@@ -1714,7 +1652,7 @@ def _restart_gateway_fleet_after_update(_pre_update_plan, gateway_mode: bool):
     # handler fail closed on an empty survivor probe rather than reporting a clean update (#78574).
     # Declared outside the restart try/except below (and never reset to None) so it's always safe to read
     # afterwards even if that block raises before reaching its own restart bookkeeping — needed to forward
-    # already-restarted units to ``_refresh_dashboard_after_update`` (review on #83595).
+    # already-restarted units to the update completion path.
     restarted_scoped_units: set = set()
 
     try:
@@ -1764,7 +1702,7 @@ def _restart_gateway_fleet_after_update(_pre_update_plan, gateway_mode: bool):
 
     except Exception as e:
         _recover_after_restart_phase_abort(
-            e, _pre_update_plan, out, gateway_mode=gateway_mode, restarted_scoped_units=restarted_scoped_units
+            e, _pre_update_plan, out, gateway_mode=gateway_mode
         )
 
     out.restarted_scoped_units = set(restarted_scoped_units)

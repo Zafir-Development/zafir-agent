@@ -1,4 +1,4 @@
-"""shared_metrics.status / shared_metrics.set: the Desktop consent path keeps the CLI wizard's
+"""shared_metrics.status / shared_metrics.set: the RPC consent path keeps the CLI wizard's
 invariants (sending needs collection, every change reconciles the consent windows) and lands in the
 profile the request names, never the launch profile."""
 
@@ -79,21 +79,8 @@ def test_status_is_undecided_until_a_key_is_written(tmp_path, monkeypatch):
         "enabled": True, "send": False, "decided": True, "reask": False}
 
 
-def test_only_the_first_run_answer_records_desktop_setup_completed(tmp_path, monkeypatch):
-    _launch, _worker = _bind_homes(monkeypatch, tmp_path)
-    import hermes_cli.observability.shared_metrics_events as events
-
-    calls: list[dict] = []
-    monkeypatch.setattr(events, "record_setup_completed", lambda **kw: calls.append(kw))
-
-    _call("shared_metrics.set", {"profile": "code", "enabled": True, "send": False, "first_run": True})
-    _call("shared_metrics.set", {"profile": "code", "enabled": True, "send": True})
-
-    assert calls == [{"surface": "desktop", "provider": "nous"}]
-
-
 def test_an_opt_out_purges_receipts_kept_for_a_later_start(tmp_path, monkeypatch):
-    """A Desktop "No" must not leave an installer receipt or a parked update receipt for a later opt-in
+    """An RPC "No" must not leave an installer receipt or a parked update receipt for a later opt-in
     to count; only the named profile is touched."""
     launch, worker = _bind_homes(monkeypatch, tmp_path)
     kept = [worker / "telemetry" / "shared_metrics" / name for name in ("pending_installs", "pending_updates")]

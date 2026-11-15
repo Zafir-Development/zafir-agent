@@ -1,7 +1,7 @@
 ---
 sidebar_position: 2
 title: "Installation"
-description: "Install Hermes Agent with desktop bundles, source installers, Docker, Nix, or the Termux APT package"
+description: "Install Hermes Agent with desktop bundles, source installers, Docker, or the Termux APT package"
 ---
 
 <head>
@@ -192,10 +192,6 @@ before installing dependencies. `--non-interactive` runs never prompt. If
 the install cannot run, the error names the exact command for the package
 manager it found.
 
-:::tip Nix users
-Nix is **no longer an explicitly supported install path** (best-effort only). If you already use Nix (on NixOS, macOS, or Linux), there's a dedicated setup path with a Nix flake, declarative NixOS module, and optional container mode. See the **[Nix & NixOS Setup](./nix-setup.md)** guide.
-:::
-
 ---
 
 ## Manual / Developer Installation
@@ -277,7 +273,7 @@ an existing directory cannot establish that the intended volume is mounted.
 ## Install method auto-detection
 
 The update owner depends on the running installation, not only its data home.
-Source checkouts use the managed Git update path. Desktop bundles, Docker,
-Nix, and Termux packages retain their package owner's update mechanism.
+Source checkouts use the managed Git update path. Desktop bundles, Docker, and
+Termux packages retain their package owner's update mechanism.
 `hermes doctor` reports installation provenance. See
 [Updating & Uninstalling](./updating.md) before changing package-owned files.

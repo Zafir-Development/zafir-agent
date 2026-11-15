@@ -245,7 +245,7 @@ mining, per-epoch anchor windows) before default flip.
 14. **Why was the merge of PR #86589 aborted during the 'Merge all' command?**  
    gold: `GraphQL: Pull Request has merge conflicts (mergePullRequest)`
 15. **What specific file was modified to fix the 'artifacts page timestamps render 1970' issue via PR #86749?**  
-   gold: `apps/desktop/src/app/session/hooks/use-session-actions/utils.ts`
+   gold: `use-session-actions/utils.ts` in the desktop renderer (since removed)
 
 </details>
 

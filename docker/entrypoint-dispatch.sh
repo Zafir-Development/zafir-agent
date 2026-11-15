@@ -15,8 +15,8 @@
 set -e
 
 if [ "$$" -eq 1 ]; then
-    # The interactive CMD owns the terminal. Supervised gateways and dashboard
-    # output must go to s6's logger instead of overwriting the TUI or shell.
+    # The interactive CMD owns the terminal. Supervised gateway output must go
+    # to s6's logger instead of overwriting the TUI or shell.
     # Resolve this before /init wires the service descriptors, leaving headless
     # docker logs and explicit s6 settings unchanged.
     if [ -t 0 ] && [ -t 1 ]; then

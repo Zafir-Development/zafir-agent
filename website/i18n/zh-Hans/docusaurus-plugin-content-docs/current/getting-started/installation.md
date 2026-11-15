@@ -101,9 +101,6 @@ POSIX 源码脚本需要 Git、curl、tar 和 SHA-256 工具。源码构建还�
 Hermes 要求 Python 3.14（`>=3.14,<3.15`），工具版本由 `pm/lock.json` 决定。
 自包含桌面软件包不要求用户自行编译基础依赖。
 
-:::tip Nix 用户
-如果你使用 Nix（在 NixOS、macOS 或 Linux 上），有专门的配置路径，包含 Nix flake、声明式 NixOS 模块和可选容器模式。请参阅 **[Nix & NixOS 配置](./nix-setup.md)** 指南。
-:::
 
 ---
 
@@ -137,4 +134,4 @@ Linux 用户服务需要在注销后继续运行时，由管理员为该用户�
 
 ## 安装方式自动检测
 
-Hermes 会自动检测安装方式（git 安装程序、Docker 或 NixOS），`hermes update` 会打印对应路径的更新命令。无需设置任何环境变量——检测基于安装目录结构（`~/.hermes/hermes-agent/` 检出、Docker 镜像标记或 Nix store 路径）。`hermes doctor` 也会在其环境摘要中显示检测到的安装方式。
+Hermes 会自动检测安装方式（git 安装程序或 Docker），`hermes update` 会打印对应路径的更新命令。无需设置任何环境变量——检测基于安装目录结构（`~/.hermes/hermes-agent/` 检出或 Docker 镜像标记）。`hermes doctor` 也会在其环境摘要中显示检测到的安装方式。

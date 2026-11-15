@@ -95,10 +95,9 @@ retains the shipped extras along with the new requirements. Later generations
 use the recorded extra selection as their baseline.
 
 Termux uses a separate bionic build and a sealed APT package. Docker bakes its
-runtime into the image and disables on-demand dependency installation. Nix
-provides its runtime through derivations. See the
-[Termux](../getting-started/termux.md), [Docker](../user-guide/docker.md), and
-[Nix](../getting-started/nix-setup.md) guides for their limits.
+runtime into the image and disables on-demand dependency installation. See the
+[Termux](../getting-started/termux.md) and [Docker](../user-guide/docker.md)
+guides for their limits.
 
 ## Writable state
 
@@ -270,7 +269,7 @@ For the pinned macOS Python, PM defaults `AR` to `/usr/bin/ar`: the distributed
 interpreter's sysconfig still points at its supplier's temporary LLVM directory.
 This applies to source and bundle builds alike. Explicit `AR` and `CC` values
 remain authoritative; PM does not change the toolchain of a caller-supplied
-interpreter such as Nix Python. No `CC` default is needed for the current pin.
+interpreter such as a system Python. No `CC` default is needed for the current pin.
 
 The pinned Linux Python records `clang`/`clang++` as `CC`/`CXX` and the same
 temporary `llvm-ar` as `AR`. When a recorded compiler is not on `PATH` but its
@@ -347,7 +346,7 @@ dependencies. Run an explicit `hermes pm install` to prepare PM first.
 
 Native bundles and Docker images stage this same PM lock through the shared
 runtime builder. Termux supplies its verified offline wheelhouse to that
-builder. Nix builds the PM lock as a separate derivation. Packaged workers use
+builder. Packaged workers use
 only their recorded PM dependency directory, never the application's libraries.
 
 ### Activate an existing installation
@@ -539,7 +538,7 @@ covers `[all]`; to change test coverage, pass `--test-extras=anthropic` to POSIX
 activation or `-TestExtras anthropic` to PowerShell;
 those arguments select runtime extras *in the test interpreter only*.
 
-In an isolated environment where activation is unavailable (for example, a Nix
+In an isolated environment where activation is unavailable (for example, a system
 dev shell), a caller can explicitly supply `HERMES_PYTHON` with pytest, or build
 an independent disposable environment:
 
@@ -585,12 +584,9 @@ selects an explicit build interpreter. `--sealed` removes build-time `.pth`
 references. `--offline` and `--cache` control dependency acquisition.
 
 For application environment builds, PM must already be able to start in the
-invoking Python. These builds are not an interpreter bootstrap. They do not modify a running application's
-imports or replace its selected environment. Nix's declarative uv2nix builds
-remain Nix-owned: `nix develop` still builds its dependencies with uv2nix, then
-re-homes that venv onto the interpreter `pm/lock.json` pins (uv2nix cannot build
-against a tarball interpreter). The shell's uv, node, npm, ripgrep and ffmpeg are
-the lock's builds too.
+invoking Python. These builds are not an interpreter bootstrap. They do not
+modify a running application's imports or replace its selected environment.
+The shell's uv, node, npm, ripgrep and ffmpeg are the lock's builds too.
 Package-manager commands for unrelated projects or agent
 sandboxes do not manage Hermes itself.
 
@@ -637,12 +633,6 @@ not substitutes for an installed application's update mechanism.
 | `pm update --termux [--check]` | Repin the termux pool archives the rolling pool has retired (the runtime-lib pin table and the bionic lock rows). `--check` reports without writing and exits 1 when a pin is retired. |
 | `pm install --target TARGET NAME...` | Stage explicit cross-target packages without recording them as the host's installed runtime. The win32 `git` target pins a self-extracting PortableGit archive: staging it runs the vendor extractor and therefore requires a Windows host. |
 | `pm bundle --out DIR [--ref REF]` | Stage a source snapshot, native tools, facts, and Python dependencies. It does not produce a signed desktop installer. |
-
-The Nix flake pins the pnpm store that `pnpm-lock.yaml` resolves to with one
-fixed-output hash, `nix/pnpm-deps-hash`. `pm update --pnpm` does not refresh it:
-after any change to `pnpm-lock.yaml`, run `nix run .#update-pnpm-lockfile`
-([Nix setup](../getting-started/nix-setup.md#updating-the-pnpm-lockfile)) or
-copy the hash the `nix` workflow's `pnpm-deps-hash` job reports.
 
 The complete desktop builder also builds the JavaScript surfaces, generates
 launchers, and invokes native packaging. Maintainers can read

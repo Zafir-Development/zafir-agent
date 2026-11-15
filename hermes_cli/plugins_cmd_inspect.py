@@ -1,9 +1,7 @@
 """Read-only inspection of a plugin source before install: which halves (agent, desktop) it ships.
 
-The gateway's answer to the install dialog's repository check, for a client with no Git of its own
-(the browser-hosted app). Native Desktop runs the same check in Electron
-(``apps/desktop/electron/desktop-plugin-install.ts`` ``probePluginRepo``); the detection rules and the
-result shape match it. The source goes through the installer's own resolution, kill list and
+The gateway's answer to the install dialog's repository check, for a client with no Git of its own.
+The source goes through the installer's own resolution, kill list and
 clone (non-interactive, credentials scrubbed, ``plugins.clone_timeout_seconds``) into a temporary
 directory outside every profile's ``plugins/``. Nothing is installed, imported or run: only the
 manifest files are read, as text.

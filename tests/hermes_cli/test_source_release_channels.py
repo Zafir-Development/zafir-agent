@@ -68,6 +68,13 @@ def releases(tmp_path, monkeypatch, request):
     responses["/repos/NousResearch/hermes-agent/releases/latest"] = {
         "tag_name": tags["stable"], "draft": False, "prerelease": False,
     }
+    # GitHub lists releases newest first. A draft canary and a plain stable release
+    # are newer than the published receipt and must never outrank it.
+    responses["/repos/NousResearch/hermes-agent/releases?per_page=100&page=1"] = [
+        {"tag_name": "v99.0.1+canary.20260912T125822Z", "draft": True, "prerelease": True},
+        {"tag_name": "v99.0.0", "draft": False, "prerelease": False},
+        {"tag_name": tags["canary"], "draft": False, "prerelease": True},
+    ]
     responses["/releases/stable/release-candidates.json"] = {
         "tag": tags["stable"], "commit": commits[1],
     }
@@ -302,3 +309,43 @@ def test_default_stable_only_moves_forward_until_the_channel_is_chosen(releases,
     set_install_channel("stable", releases.root)
     update_cmd._cmd_update_impl(SimpleNamespace(branch=None, channel=None, force_venv=True), False)
     assert git(releases.root, "rev-parse", "HEAD") == releases.commits[1]
+
+
+def test_published_github_canary_reaches_the_source_updater_without_r2(releases, monkeypatch, capsys):
+    """Canary's only promotion is its GitHub prerelease.
+
+    Desktop packaging removal deleted the R2 canary record/pointer and made
+    ``release.py --canary`` publish a GitHub prerelease. A canary subscriber must
+    therefore check and apply that exact release with no R2 read at all: drafts and
+    non-prerelease entries are skipped, and a missing publication never falls back
+    to another tag.
+    """
+    from hermes_cli import source_releases
+
+    def no_r2(name, repository):
+        raise AssertionError("canary must not read an R2 channel record or pointer")
+
+    monkeypatch.setattr(source_releases, "_resolve_channel", no_r2)
+    _track_official_origin(releases)
+    set_install_channel("canary", releases.root)
+
+    update_cmd._cmd_update_check()
+    assert releases.tags["canary"] in capsys.readouterr().out
+    assert not any(path.startswith("/releases/") for path in releases.requests), releases.requests
+
+    opts = update_cmd._UpdateOptions(
+        pre_update_version=None, gw_input_fn=None,
+        assume_yes=True, keep_stash=False, switch_branch=False, discard_local_changes=False,
+    )
+    monkeypatch.setattr(update_cmd, "_resolve_update_options", lambda *_: opts)
+    monkeypatch.setattr(update_cmd, "_begin_update_receipt_and_plan", lambda *_: None)
+    monkeypatch.setattr(main, "_run_pre_update_backup", lambda *_: None)
+    monkeypatch.setattr(main, "_pause_windows_gateways_for_update", lambda: None)
+    monkeypatch.setattr(update_cmd, "_prepare_git_command", lambda **_: (False, ["git"], False))
+    applied = []
+    monkeypatch.setattr(update_cmd, "_complete_source_update", lambda request: applied.append(request))
+    update_cmd._cmd_update_impl(SimpleNamespace(branch=None, channel=None, force_venv=True), False)
+    assert [request["expected_sha"] for request in applied] == [releases.commits[2]]
+    assert git(releases.root, "rev-parse", "HEAD") == releases.commits[2]
+    update_cmd._cmd_update_check()
+    assert "Up to date with" in capsys.readouterr().out

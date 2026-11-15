@@ -12,9 +12,9 @@ The same 503 later came back for well-signed Portal JWTs this instance does not 
 user's Portal CLI token (``aud=hermes-cli:hermes-cli``), another instance's ``aud`` or
 ``agent_instance_id``, and a ``kid`` the reachable JWKS does not hold.
 
-Real ``NousDashboardAuthProvider`` + real ``SelfHostedOIDCProvider`` JWKS path,
-a real local HTTP JWKS server (reachable case) or a closed port (unreachable),
-and the real gated web_server app for the HTTP-level assertion.
+Real ``NousDashboardAuthProvider`` + real ``SelfHostedOIDCProvider`` JWKS path
+against a real local HTTP JWKS server (reachable case) or a closed port
+(unreachable).
 """
 from __future__ import annotations
 
@@ -30,17 +30,11 @@ import jwt
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
 from jwt.algorithms import RSAAlgorithm
-from starlette.testclient import TestClient
-
-from hermes_cli import web_server
 from hermes_cli.dashboard_auth import (
     InvalidCodeError,
     ProviderError,
     classify_jwks_lookup_error,
-    clear_providers,
-    register_provider,
 )
-from hermes_cli.dashboard_auth.cookies import SESSION_AT_COOKIE, SESSION_RT_COOKIE
 import plugins.dashboard_auth.nous as nous_plugin
 
 OPAQUE_PEER_KEY = "hk_live_opaque_peer_key_0123456789abcdef"
@@ -172,110 +166,3 @@ def test_self_hosted_provider_shares_the_classification(empty_jwks_server, monke
     )
     with pytest.raises(InvalidCodeError):
         provider._verify_id_token(OPAQUE_PEER_KEY)
-
-
-# ── HTTP level: the gated API answers 401, not 503 ────────────────────────
-
-@contextmanager
-def _gated_app(portal_url: str):
-    """The real gated dashboard app with only the Nous provider, pointed at ``portal_url``."""
-    clear_providers()
-    keys = ("bound_host", "bound_port", "auth_required")
-    prev = {k: getattr(web_server.app.state, k, None) for k in keys}
-    web_server.app.state.bound_host = "agent.example.test"
-    web_server.app.state.bound_port = 443
-    web_server.app.state.auth_required = True
-    register_provider(_nous(portal_url))
-    try:
-        yield TestClient(web_server.app, base_url="https://agent.example.test")
-    finally:
-        clear_providers()
-        for k, v in prev.items():
-            setattr(web_server.app.state, k, v)
-
-
-@pytest.fixture
-def _gated_nous(empty_jwks_server):
-    with _gated_app(empty_jwks_server) as client:
-        yield client
-
-
-@pytest.fixture
-def gated_portal(portal):
-    with _gated_app(portal[0]) as client:
-        yield client
-
-
-def test_gated_api_rejects_opaque_bearer_with_401_not_503(_gated_nous):
-    r = _gated_nous.get("/api/auth/me", headers={"Authorization": f"Bearer {OPAQUE_PEER_KEY}"})
-    assert r.status_code != 503, r.text
-    assert r.status_code == 401
-    assert "unreachable" not in r.text.lower()
-
-
-def test_gated_api_rejects_opaque_cookie_with_401_not_503(_gated_nous):
-    _gated_nous.cookies.set(SESSION_AT_COOKIE, OPAQUE_PEER_KEY)
-    r = _gated_nous.get("/api/auth/me")
-    assert r.status_code != 503, r.text
-    assert "unreachable" not in r.text.lower()
-
-
-def _bearer(client, token):
-    return client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
-
-
-def test_gated_api_accepts_own_portal_token(gated_portal, portal):
-    assert _bearer(gated_portal, _mint(portal)).status_code == 200
-
-
-@pytest.mark.parametrize("token_kwargs", [
-    pytest.param({"aud": "hermes-cli:hermes-cli"}, id="portal-cli-token"),
-    pytest.param({"aud": "agent:other-instance"}, id="other-instance-aud"),
-    pytest.param({"agent_instance_id": "other-instance"}, id="other-instance-claim"),
-    pytest.param({"kid": "rotated-out"}, id="unknown-kid"),
-])
-def test_gated_api_rejects_foreign_portal_jwt_bearer_with_401_not_503(gated_portal, portal, token_kwargs):
-    r = _bearer(gated_portal, _mint(portal, **token_kwargs))
-    assert r.status_code == 401, r.text
-    assert r.json()["reason"] == "invalid_or_expired_session"
-
-
-def test_gated_api_foreign_portal_jwt_cookie_is_401_not_503(gated_portal, portal):
-    """Cookie path: a foreign access-token cookie with no refresh token is a signed-out 401."""
-    gated_portal.cookies.set(f"__Host-{SESSION_AT_COOKIE}", _mint(portal, aud="hermes-cli:hermes-cli"))
-    r = gated_portal.get("/api/auth/me")
-    assert r.status_code == 401, r.text
-    assert r.json()["reason"] == "invalid_or_expired_session"
-
-
-def test_gated_api_refresh_minting_foreign_token_is_401_not_503(gated_portal, portal):
-    """Cookie path with a refresh token: the rotated token Portal hands back does not verify
-    here, so the provider rejects the RT (signed-out 401), never a 503 or an uncaught 500."""
-    foreign = _mint(portal, aud="hermes-cli:hermes-cli")
-    grant = MagicMock(status_code=200, headers={"content-type": "application/json"})
-    grant.json.return_value = {"access_token": foreign, "token_type": "Bearer", "refresh_token": "rt2"}
-    # The __Host- names the server sets over HTTPS (bare names are not read there, #136772).
-    gated_portal.cookies.set(f"__Host-{SESSION_AT_COOKIE}", foreign)
-    gated_portal.cookies.set(f"__Host-{SESSION_RT_COOKIE}", "rt-old")
-    with patch("plugins.dashboard_auth._shared.httpx.post", return_value=grant) as post:
-        r = gated_portal.get("/api/auth/me")
-    assert post.called
-    assert r.status_code == 401, r.text
-    assert r.json()["reason"] == "invalid_or_expired_session"
-
-
-def test_forged_alg_with_published_kid_is_rejected_without_a_drift_warning(portal, caplog):
-    """The drift WARNING is reserved for aud/iss mismatches, which PyJWT reports only after the
-    signature verified. A forged token naming the published kid with another alg is rejected
-    before any signature check: a 401, and no attacker-sized log line."""
-    forged = jwt.encode({"iss": "x" * 4000, "aud": "y"}, "k" * 32, algorithm="HS256", headers={"kid": _KID})
-    provider = _nous(portal[0])
-    with caplog.at_level(logging.WARNING, logger="plugins.dashboard_auth._shared"):
-        assert provider.verify_session(access_token=forged) is None
-    assert "verification failed" not in caplog.text
-
-
-def test_gated_api_unreachable_jwks_is_still_503(portal):
-    """The outage contract is kept: a JWKS that cannot be fetched stays a 503."""
-    with _gated_app("http://127.0.0.1:9") as client:  # discard port: connection refused
-        assert _bearer(client, _mint(portal)).status_code == 503

@@ -2,10 +2,10 @@
 
 * ``drive_tui_gateway`` — ``python -m tui_gateway.entry`` over stdio, exactly how
   the Ink TUI spawns it (launch dir = the user's shell cwd); stops on stdin EOF.
-* ``drive_serve`` — ``hermes serve --host 127.0.0.1 --port 0`` spawned the way the
-  Desktop spawns it (``TERMINAL_CWD`` + ``HERMES_DASHBOARD_SESSION_TOKEN`` +
-  ``HERMES_DESKTOP=1`` env, stdin closed), port read from the READY sentinel on
-  stdout, one turn over the ``/api/ws`` JSON-RPC WebSocket; stops on SIGTERM.
+* ``drive_serve`` — ``hermes serve --host 127.0.0.1 --port 0`` spawned the way a
+  client spawns it (``TERMINAL_CWD`` + ``HERMES_DASHBOARD_SESSION_TOKEN`` env,
+  stdin closed), port read from the READY sentinel on stdout, one turn over the
+  ``/api/ws`` JSON-RPC WebSocket; stops on SIGTERM.
 
 Both speak the same contract (``tui_gateway/contracts``): ``session.create`` →
 ``prompt.submit`` → ``message.complete`` event. Follows the driver contract in
@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import queue
+import re
 import subprocess
 import threading
 import time
@@ -35,6 +36,10 @@ from tests.fakes.fake_llm_provider import FakeLLMServer
 import sys
 
 READY_TIMEOUT = 120.0
+
+# ``hermes serve`` announces its bound port on stdout; nothing may precede it for a
+# strict first-line read, but a spawned backend may print source-update banners first.
+_READY_RE = re.compile(r"(?<!\w)HERMES_BACKEND_READY port=(\d+)")
 
 
 class RpcClient:
@@ -173,7 +178,7 @@ def drive_tui_gateway(ph: ParityHome, srv: FakeLLMServer, prompt: str) -> DriveR
                        extra={"exit_code": proc.returncode, "stderr_tail": cap.stderr[-2000:]})
 
 
-# hermes serve (Desktop backend) ------------------------------------------------------
+# hermes serve (local backend) -------------------------------------------------------
 
 
 @dataclass
@@ -184,7 +189,7 @@ class ServeProcess:
 
 
 def spawn_serve(ph: ParityHome) -> ServeProcess:
-    """Spawn ``hermes serve`` with the Desktop's argv/env/stdio shape (electron/main.ts)."""
+    """Spawn ``hermes serve`` with a client's argv/env/stdio shape (stdin closed)."""
     token = uuid.uuid4().hex
     env = ph.env({
         "TERMINAL_CWD": str(ph.project),
@@ -212,26 +217,24 @@ def first_stdout_line(sp: ServeProcess, timeout: float = READY_TIMEOUT) -> str:
             return line
         if "HERMES_BACKEND_READY" in sp.cap.stderr:
             raise AssertionError(
-                "READY sentinel was written to STDERR; the Desktop only watches stdout "
+                "READY sentinel was written to STDERR; the port reader only watches stdout "
                 f"(backend-ready.ts):\n{sp.cap.stderr[-1500:]}")
         if time.monotonic() >= deadline:
             raise AssertionError(f"no stdout line from serve within {timeout}s\n{sp.cap.stderr[-3000:]}")
 
 
-def desktop_port(sp: ServeProcess, timeout: float = READY_TIMEOUT) -> int:
-    """The port the Desktop would learn from this backend's stdout (junk-tolerant, like
-    backend-ready.ts). The strict "sentinel is the first line" rule is test_boot_contract's."""
-    from tests.e2e.core.parity._boot_contract import desktop_parse
-
+def serve_port(sp: ServeProcess, timeout: float = READY_TIMEOUT) -> int:
+    """The port announced on stdout (tolerating banners before the sentinel). The strict
+    "sentinel is the first line" rule is test_boot_contract's."""
     deadline = time.monotonic() + timeout
     seen = ""
     while True:
         remaining = deadline - time.monotonic()
         line = first_stdout_line(sp, timeout=max(remaining, 0.1))
         seen += line
-        verdict = desktop_parse(seen)
-        if "port" in verdict:
-            return int(verdict["port"])
+        match = _READY_RE.search(seen)
+        if match:
+            return int(match.group(1))
 
 
 def ws_rpc(port: int, token: str) -> tuple[RpcClient, Callable[[], None]]:
@@ -256,7 +259,7 @@ def drive_serve(ph: ParityHome, srv: FakeLLMServer, prompt: str) -> DriveResult:
     sp = spawn_serve(ph)
     graceful = False
     try:
-        port = desktop_port(sp)
+        port = serve_port(sp)
         rpc, close = ws_rpc(port, sp.token)
         try:
             rpc.wait_event("gateway.ready", timeout=READY_TIMEOUT)
@@ -264,7 +267,7 @@ def drive_serve(ph: ParityHome, srv: FakeLLMServer, prompt: str) -> DriveResult:
         finally:
             close()
     finally:
-        # Desktop quit path: SIGTERM, bounded wait.
+        # client quit path: SIGTERM, bounded wait.
         code = terminate(sp.proc, timeout=60)
         graceful = code is not None and code in (0, -15, 143)
     return DriveResult(final_text=text, toolset="hermes-cli", cwd_channel="TERMINAL_CWD + session.create cwd",

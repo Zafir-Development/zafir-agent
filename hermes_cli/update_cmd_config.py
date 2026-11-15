@@ -12,29 +12,13 @@ from hermes_cli.update_cmd_common import _best_effort
 logger = logging.getLogger("hermes_cli.update_cmd")
 
 
-def _reload_config_modules() -> None:
-    """Historical updater hook; migration now belongs to fresh completion Python."""
-    from hermes_cli._old_updater import stop_for_relaunch
-    stop_for_relaunch(incomplete=True)
-
-
-def _run_config_check_fresh() -> tuple:
-    from hermes_cli._old_updater import stop_for_relaunch
-    stop_for_relaunch(incomplete=True)
-
-
-def _run_migrate_config_fresh(*, interactive: bool = False, quiet: bool = False) -> dict:
-    from hermes_cli._old_updater import stop_for_relaunch
-    stop_for_relaunch(incomplete=True)
-
-
 def _migrate_sibling_profile_configs(notes: dict[str, list[str]] | None = None) -> list[tuple[str, int, int]]:
     """Migrate every SIBLING profile's config.yaml (the shared checkout serves all profiles). Per
     sibling (active skipped): scope via the context-local HERMES_HOME override (never ``os.environ``)
     and run the NON-INTERACTIVE quiet migration — prompt-requiring settings wait for that profile's
     own session. Returns ``[(name, from_version, to_version), ...]``; never raises. *notes* receives
     each migrated sibling's display lines for what quiet mode muted (a reset/removed setting, a
-    warning), as the active profile's quiet path re-prints them; the tuple shape stays for old updaters.
+    warning), as the active profile's quiet path re-prints them.
 
     91277 Phase 2 (fleet-wide config migration; #20438/#54926/#79048): the shared checkout serves every
     profile, but ``hermes update`` historically migrated only the active profile's config — siblings drifted

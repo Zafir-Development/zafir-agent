@@ -47,7 +47,7 @@ def tui_source(source_products, monkeypatch):
 
 
 @pytest.mark.platforms("posix")
-def test_source_launch_prepares_base_union_but_compiles_only_tui(tui_source):
+def test_source_launch_prepares_dependencies_and_compiles_tui(tui_source):
     root, acquired = tui_source
     argv, cwd = main_tui_launch._make_tui_argv(root / "ui-tui", tui_dev=False)
     assert cwd == root / "ui-tui"
@@ -56,8 +56,6 @@ def test_source_launch_prepares_base_union_but_compiles_only_tui(tui_source):
     assert [event["step"] for event in _events(root)] == ["deps", "tui"]
     assert acquired == ["pnpm"]
     assert (root / "ui-tui/node_modules").exists()
-    assert (root / "web/node_modules").exists()
-    assert not (root / "apps/desktop/node_modules").exists()
 
 
 @pytest.mark.platforms("posix")
@@ -150,7 +148,7 @@ def test_runtime_node_comes_from_pm_without_legacy_repair(tmp_path, monkeypatch)
 
 
 @pytest.mark.platforms("linux")
-def test_tui_rebuild_preserves_the_prepared_desktop_and_web_union(tui_source):
+def test_tui_rebuild_preserves_the_prepared_tui_deps(tui_source):
     from hermes_cli.source_build import build_update_products
 
     root, acquired = tui_source
@@ -165,5 +163,3 @@ def test_tui_rebuild_preserves_the_prepared_desktop_and_web_union(tui_source):
     main_tui_launch._make_tui_argv(root / "ui-tui", tui_dev=False)
     assert _events(root) == [*before, {"step": "tui"}]
     assert acquired == ["pnpm", "pnpm"]
-    assert (root / "web/node_modules").exists()
-    assert (root / "apps/desktop/node_modules").exists()

@@ -144,9 +144,9 @@ def default_channel(project_root: Optional[Path] = None) -> str:
     stable release. Forks, mirrors and checkout-less trees keep following main.
     ``electron-updater`` and ``app-installer`` bundles report their artifact
     channel: a canary artifact tracks canary, every other bundle
-    tracks stable. The stamp's ``tag`` is the authority, the same fact
-    apps/desktop/product-identity.cjs keys the published feed name on — so
-    the feed a canary artifact asks for and the feed it was published to
+    tracks stable. The stamp's ``tag`` is the authority the published feed
+    name is keyed on — so the feed a canary artifact asks for and the feed it
+    was published to
     can never disagree. Deriving stable here instead would send a fresh
     canary install to look for its ``canary.yml`` feed file under the
     newest STABLE release, where that file does not exist (404), leaving

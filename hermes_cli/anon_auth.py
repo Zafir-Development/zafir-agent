@@ -1,12 +1,12 @@
 """Nous free-tier identity: the ``anonymous`` auth method of the ``nous`` provider.
 
-The identity is created in two places: by the desktop's first install, which claims the welcome
-trial (``hermes_cli.welcome_trial``), and on the first hosted connector action for anyone without a
+The identity is created in two places: by a first install's welcome-trial claim
+(``hermes_cli.welcome_trial``), and on the first hosted connector action for anyone without a
 Nous identity (``tools.connectors.gateway.config.ensure_guest_identity``, gated by ``guest_allowed``).
 Either mints an anonymous Nous account (``POST /api/anonymous/create``); its ``anon_`` credential is
 later exchanged for short-lived JWTs (``POST /api/anonymous/token``). The result is persisted as the
 singleton ``providers.nous``. Only a guest stamped with the trial claim carries inference
-(:func:`free_inference_active`), on every surface of the install once the desktop claimed it: chats,
+(:func:`free_inference_active`), on every surface of the install once that claim landed: chats,
 cron, side agents, workers, the CLI. Every other guest serves connectors and managed tools. In the resolver ladder (``resolve_provider``) a guest that
 carries inference sits directly above the implicit AWS Bedrock chain (NS-829): any explicit provider
 (env key, ``model.provider``, OpenRouter pool, a logged-in ``active_provider``) beats it, and the
@@ -54,7 +54,7 @@ ANON_SECRET_ENV = "HERMES_ANON_API_SECRET"
 # Preview cohort for the free tier's connector set, sent once on account creation so the account
 # service can record it on the account. "1" / "true" send true and "0" / "false" send false; anything
 # else (unset included) omits the field and the service applies its default. Self-reported and
-# baked into desktop bundles in plain text: the service must treat it as a preference, never proof.
+# readable by whoever sets it: the service must treat it as a preference, never proof.
 PREVIEW_FULL_CONNECTORS_ENV = "HERMES_PREVIEW_FULL_CONNECTORS"
 GUEST_MINT_TIMEOUT_SECONDS = 5.0
 # Copy shared by every surface that names the free tier (R-USR-1): never guest / anonymous / account.
@@ -199,17 +199,17 @@ def has_guest() -> bool:
     return is_guest_state(current_nous_state())
 
 
-def on_local_desktop_backend() -> bool:
-    """This activity is work for the Desktop app on this machine: a request from, or a turn of a chat
-    created by, a connection ``process_identity.local_desktop_client`` accepted. Never an SSH, URL or
-    cloud backend, a shell the desktop launched, or the gateway's other clients."""
-    from hermes_cli.process_identity import serves_local_desktop_now
-    return serves_local_desktop_now()
+def on_local_host_backend() -> bool:
+    """This activity serves a client connected to this machine: a request from, or a turn of a chat
+    created by, a connection ``process_identity.local_host_client`` accepted. Never an SSH, URL or
+    cloud client, or the gateway's other clients."""
+    from hermes_cli.process_identity import serves_local_host_now
+    return serves_local_host_now()
 
 
 def free_inference_active(state: Any = None) -> bool:
     """The welcome trial carries inference: a guest that claimed it and guests
-    still allowed. Only the claim is the local Desktop's (``welcome_trial``); once claimed, every
+    still allowed. Only the claim is the local backend's (``welcome_trial``); once claimed, every
     surface of the install runs on it. *state* defaults to the profile's."""
     state = current_nous_state() if state is None else state
     return is_guest_state(state) and state.get(WELCOME_CLAIM_FLAG) is True and guest_allowed()
@@ -674,7 +674,7 @@ def ensure_portal_identity(
     ``explicit`` is required and must be True: the only callers are the first hosted connector action
     (``tools.connectors.gateway.config.ensure_guest_identity``), the connectors dead-credential
     replacement (``managed_tool_gateway._replace_dead_guest_token``) and the desktop's welcome-trial
-    claim (``welcome_trial.claim_desktop_free_tier``), which passes ``welcome_claim=True`` so a guest
+    claim (``welcome_trial.claim_welcome_trial``), which passes ``welcome_claim=True`` so a guest
     it mints carries the stamp from its first write. Every other guest is minted with
     ``welcome_claim: False`` and serves connectors only.
     Nothing creates an identity as a side effect of reading status, resolving a provider or fetching a

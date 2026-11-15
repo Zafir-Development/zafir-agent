@@ -46,9 +46,8 @@ def _builtin_gateway_liveness() -> Optional[bool]:
     """Tri-state readiness of a scheduler serving THIS home (None = probe failed).
 
     A gateway launched from this home proves itself by process liveness. Any other scheduler that
-    ticks this home — the host multiplexer for a served profile, or the in-process ticker inside
-    ``hermes serve`` / the Desktop backend (#121881) — proves itself only by the fresh heartbeat it
-    writes into this home's store. External providers use their own machinery and are exempt.
+    ticks this home — the host multiplexer for a served profile, or another in-process ticker
+    (#121881) — proves itself only by the fresh heartbeat it writes into this home's store. External providers use their own machinery and are exempt.
     """
     try:
         if _active_cron_provider_name() != "builtin":
@@ -566,8 +565,8 @@ def cron_status():
             if not gateway_alive_via_lock:
                 served_by_multiplexer = named_profile_served_by_running_multiplexer()
             if not gateway_alive_via_lock and not served_by_multiplexer:
-                # `hermes serve` / the Desktop backend ticks every local profile in-process: no
-                # gateway argv, lock or host record — only the heartbeat it writes here (#121881).
+                # An in-process ticker can serve every local profile without any gateway argv,
+                # lock or host record — it proves itself only by the heartbeat it writes here (#121881).
                 with contextlib.suppress(Exception):
                     from cron.jobs import get_ticker_heartbeat_age, ticker_heartbeat_writer_alive
                     in_process_ticker = (_ticker_age_is_fresh(get_ticker_heartbeat_age())
@@ -588,8 +587,8 @@ def cron_status():
                 print("  Scheduler host: the host gateway (multiplexing this profile)")
                 _print_ticker_health([], restart_command="hermes --profile default gateway restart")
             elif in_process_ticker:
-                print(f"  Scheduler host: an in-process ticker (hermes serve / Desktop backend) ticking profile '{active}'")
-                _print_ticker_health([], restart_command="restart the Hermes Desktop app (or its serve backend)")
+                print(f"  Scheduler host: an in-process ticker ticking profile '{active}'")
+                _print_ticker_health([], restart_command="hermes gateway restart")
             else:
                 _print_ticker_health(pids)
         else:
@@ -884,7 +883,7 @@ def _job_action(action: str, job_id: str, success_verb: str) -> int:
         # this call so in-process callers (tests, embedding apps) are not tainted.
         with contextlib.suppress(Exception):
             # The background path in ``_try_dispatch_background_run`` triggers when the CLI inherits a
-            # gateway/desktop session env (HERMES_SESSION_KEY); declare the channel stateless so
+            # gateway session env (HERMES_SESSION_KEY); declare the channel stateless so
             # ``async_delivery_supported()`` gates it off and the run executes synchronously to completion
             # instead. See #86721.
             from gateway.session_context import _SESSION_ASYNC_DELIVERY

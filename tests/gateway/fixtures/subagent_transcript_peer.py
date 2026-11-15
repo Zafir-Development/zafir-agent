@@ -65,9 +65,8 @@ async def probe():
     from gateway.session_ancillary import physical_target
     from gateway.session_authority import initialize_session_authority
     from gateway.run_api import start_gateway_api, stop_gateway_api
+    from tests.gateway.fixtures.native_ws_auth import prepare_listener, subprotocols, ws_url
     from gateway.session_contract import SessionRef
-    from hermes_cli import web_server
-    from hermes_cli.dashboard_auth.ws_tickets import mint_ticket
     from tests.gateway.fixtures.local_recovery_probe import rpc
     from tools.delegate_tool_child_run import _register_child
     from tools.delegate_tool_registry import _unregister_subagent
@@ -77,16 +76,15 @@ async def probe():
     (home / 'config.yaml').write_text('gateway:\n  multiplex_profiles: false\nmodel:\n  provider: custom\n  default: no-inference\n  base_url: http://127.0.0.1:1/v1\nauxiliary:\n  title_generation:\n    enabled: false\n')
     runner = GatewayRunner()
     authority = await initialize_session_authority(runner, profile_id=str(home), instance_id='subagent-transcript')
+    prepare_listener(runner)
     api = await start_gateway_api(runner)
-    web_server.app.state.auth_required = True
     receipt = {}
 
     class Agent:
         pass
 
     def socket(actor):
-        ticket = mint_ticket(user_id=actor, provider='fixture')
-        return connect(api.api_origin.replace('http:', 'ws:') + '/api/ws?ticket=' + ticket)
+        return connect(ws_url(api), subprotocols=subprotocols(runner, subject=actor))
 
     async def transcript(ws, sid, subagent_id, **extra):
         reply = await rpc(ws, 'session.transcript', session_id=sid, subagent_id=subagent_id, **extra)

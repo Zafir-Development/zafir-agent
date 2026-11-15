@@ -2,11 +2,9 @@
 
 import asyncio
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-import importlib.util
 import json
 import os
 from pathlib import Path
-import socket
 import sys
 import threading
 import traceback
@@ -50,15 +48,15 @@ class ModelPeer(BaseHTTPRequestHandler):
 
 
 async def probe():
-    import uvicorn
     import websockets
     from gateway.config import Platform, PlatformConfig
     from gateway.platforms.base import BasePlatformAdapter, SendResult
     from gateway.platforms.event import MessageEvent
     from gateway.run import GatewayRunner
+    from gateway.run_api import start_gateway_api, stop_gateway_api
     from gateway.session import SessionSource
-    from hermes_cli import web_server
-    from hermes_cli.dashboard_auth.ws_tickets import mint_ticket
+    from gateway.session_authority import initialize_session_authority
+    from tests.gateway.fixtures.native_ws_auth import prepare_listener, subprotocols, ws_url
     from tui_gateway import server
     from run_agent import AIAgent
     from shared_authority_recovery import prepare_crash, recover_probe, verify_envelope_guards
@@ -92,9 +90,8 @@ async def probe():
             return {"id": chat_id}
 
     runner = GatewayRunner()
-    if importlib.util.find_spec("gateway.session_authority") is not None:
-        from gateway.session_authority import initialize_session_authority
-        await initialize_session_authority(runner, profile_id="default", instance_id="test-owner")
+    await initialize_session_authority(runner, profile_id=os.environ['HERMES_HOME'], instance_id="test-owner")
+    prepare_listener(runner)
     adapter = CaptureAdapter()
     runner.adapters[Platform.TELEGRAM] = adapter
     adapter.set_message_handler(runner._handle_message)
@@ -111,40 +108,19 @@ async def probe():
     warm_agent = runner._cached_agent_for(entry.session_key)
     assert isinstance(warm_agent, AIAgent), "Messaging warmup must retain a real live agent"
 
-    api_handle = None
-    if importlib.util.find_spec("gateway.run_api") is not None:
-        from gateway.run_api import start_gateway_api
-        api_handle = await start_gateway_api(runner)
-        port = api_handle.socket.getsockname()[1]
-    else:
-        # Retain the historical transport only for the pre-authority A/B tree.
-        app = web_server.app
-        app.state.auth_required = True
-        listener = socket.socket()
-        listener.bind(("127.0.0.1", 0))
-        listener.listen()
-        listener.setblocking(False)
-        port = listener.getsockname()[1]
-        http = uvicorn.Server(uvicorn.Config(app, log_level="warning", lifespan="off", ws="websockets"))
-        task = asyncio.create_task(http.serve(sockets=[listener]))
-        await async_wait_until(lambda: http.started or task.done(), timeout=10, what='uvicorn to start')
-        if task.done():
-            await task
+    api_handle = await start_gateway_api(runner)
     frames = []
     receipt = {"messaging_completed": True, "stored_id": entry.session_id,
                "unauthenticated_rejected": False, "ws_completed": False, "same_agent": False}
     try:
         try:
-            async with websockets.connect(f"ws://127.0.0.1:{port}/api/ws"):
+            async with websockets.connect(ws_url(api_handle)):
                 raise AssertionError("Missing WS credential was accepted")
         except websockets.exceptions.InvalidStatus as exc:
             assert exc.response.status_code == 403, str(exc)
             receipt["unauthenticated_rejected"] = True
-        if api_handle is not None:
-            credential = f"token={web_server._SESSION_TOKEN}"
-        else:
-            credential = f"ticket={mint_ticket(user_id='fixture-user', provider='fixture')}"
-        async with websockets.connect(f"ws://127.0.0.1:{port}/api/ws?{credential}") as ws:
+        async with websockets.connect(ws_url(api_handle),
+                                      subprotocols=subprotocols(runner, subject='fixture-user')) as ws:
             async def until(predicate):
                 async with asyncio.timeout(35):
                     while True:
@@ -171,7 +147,7 @@ async def probe():
                     authority = getattr(runner, 'session_authority', None)
                     if authority is not None:
                         from gateway.session_contract import SessionRef
-                        receipt["same_agent"] = authority.agent(SessionRef('default', sid)) is warm_agent
+                        receipt["same_agent"] = authority.agent(SessionRef(authority.profile_id, sid)) is warm_agent
                     else:
                         receipt["same_agent"] = server._sessions[sid].get("agent") is warm_agent
             receipt["messaging_outputs"] = adapter.sent
@@ -236,13 +212,7 @@ async def probe():
     finally:
         Path(os.environ["HERMES_HOME"], "receipt.json").write_text(json.dumps(receipt, indent=2))
         Path(os.environ["HERMES_HOME"], "frames.json").write_text(json.dumps(frames, indent=2))
-        if api_handle is not None:
-            from gateway.run_api import stop_gateway_api
-            await stop_gateway_api(api_handle)
-        else:
-            http.should_exit = True
-            await asyncio.wait_for(task, 10)
-            listener.close()
+        await stop_gateway_api(api_handle)
     print(json.dumps(receipt))
 
 

@@ -13,9 +13,11 @@ test('the real wrapper builds and checks native icon artifacts in an independent
   try {
     const args = ['--source', fileURLToPath(new URL('..', import.meta.url)), '--out', out]
     expect(generateIcons(args, { env })).toBe(0)
-    const png = fs.readFileSync(path.join(out, 'apps/desktop/assets/icon.png'))
-    expect(png.subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
-    expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([1024, 1024])
+    // Retained outputs: the shared brand master and the website favicon.
+    const svg = fs.readFileSync(path.join(out, 'assets/icon-master.svg'), 'utf8')
+    expect(svg).toContain('<svg')
+    const ico = fs.readFileSync(path.join(out, 'website/static/img/favicon.ico'))
+    expect(ico.subarray(0, 4)).toEqual(Buffer.from([0, 0, 1, 0]))
     expect(generateIcons([...args, '--check'], { env })).toBe(0)
     expect(env.PYTHONPATH).toBe(path.join(out, 'foreign-site'))
   } finally {

@@ -2,8 +2,8 @@
 
 The MCP client, the toolset resolver, the profile editor, the catalog and the list/status
 surfaces used to parse the key four different ways, so ``enabled: 0`` was off for the resolver
-and on for the client, and ``enabled: "false"`` was on in the server list. The case table is
-shared with the desktop (``apps/desktop/src/lib/mcp-enabled-cases.json``).
+and on for the client, and ``enabled: "false"`` was on in the server list. The case table lives
+beside the other shared fixtures (``tests/fixtures/mcp_enabled_cases.json``).
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 CASES = json.loads(
-    (Path(__file__).resolve().parents[2] / "apps/desktop/src/lib/mcp-enabled-cases.json").read_text(encoding="utf-8"))
+    (Path(__file__).resolve().parents[1] / "fixtures/mcp_enabled_cases.json").read_text(encoding="utf-8"))
 
 
 def _readers():

@@ -1,0 +1,372 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Схема работы Hermes Agent",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "surfaces",
+        "label": "Интерфейсы",
+        "focus": [
+          "cli",
+          "tui",
+          "dashboard",
+          "rpc"
+        ],
+        "note": "Все локальные интерфейсы подключаются к gateway-процессу профиля."
+      },
+      {
+        "id": "turn",
+        "label": "Ход агента",
+        "focus": [
+          "rpc",
+          "cron",
+          "agent",
+          "tools",
+          "llm"
+        ],
+        "note": "Ввод или расписание проходят очередь допуска и превращаются в ход AIAgent с вызовом инструментов."
+      },
+      {
+        "id": "state",
+        "label": "Состояние",
+        "focus": [
+          "agent",
+          "state",
+          "rpc"
+        ],
+        "note": "Транскрипты, поиск FTS5 и очередь допуска живут рядом с профилем."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "cli",
+      "type": "frontend",
+      "label": "CLI-клиент",
+      "sublabel": "hermes · hermes chat",
+      "tag": "attach",
+      "pos": [
+        40,
+        100
+      ],
+      "size": [
+        175,
+        60
+      ]
+    },
+    {
+      "id": "tui",
+      "type": "frontend",
+      "label": "TUI (Ink)",
+      "sublabel": "hermes --tui",
+      "tag": "Node",
+      "pos": [
+        40,
+        190
+      ],
+      "size": [
+        175,
+        60
+      ]
+    },
+    {
+      "id": "dashboard",
+      "type": "frontend",
+      "label": "Web-дашборд",
+      "sublabel": "FastAPI SPA · /chat",
+      "tag": "браузер",
+      "pos": [
+        40,
+        280
+      ],
+      "size": [
+        175,
+        60
+      ]
+    },
+    {
+      "id": "ide",
+      "type": "external",
+      "label": "IDE и внешние API",
+      "sublabel": "ACP · HTTP API",
+      "tag": "клиенты",
+      "pos": [
+        40,
+        370
+      ],
+      "size": [
+        175,
+        60
+      ]
+    },
+    {
+      "id": "rpc",
+      "type": "backend",
+      "label": "JSON-RPC и сессии",
+      "sublabel": "очередь допуска · стрим",
+      "tag": "/api/ws",
+      "pos": [
+        440,
+        220
+      ],
+      "size": [
+        190,
+        90
+      ]
+    },
+    {
+      "id": "agent",
+      "type": "backend",
+      "label": "Ядро агента",
+      "sublabel": "AIAgent · turn loop · сжатие",
+      "tag": "prompt cache",
+      "pos": [
+        780,
+        130
+      ],
+      "size": [
+        200,
+        90
+      ]
+    },
+    {
+      "id": "tools",
+      "type": "backend",
+      "label": "Инструменты",
+      "sublabel": "70+ tools · 28 toolsets",
+      "tag": "терминал · браузер · MCP",
+      "pos": [
+        780,
+        270
+      ],
+      "size": [
+        200,
+        80
+      ]
+    },
+    {
+      "id": "cron",
+      "type": "backend",
+      "label": "Cron и фоновые задачи",
+      "sublabel": "расписания · уведомления",
+      "tag": "в процессе",
+      "pos": [
+        440,
+        400
+      ],
+      "size": [
+        190,
+        80
+      ]
+    },
+    {
+      "id": "adapters",
+      "type": "messagebus",
+      "label": "Адаптеры платформ",
+      "sublabel": "Telegram · Discord · Slack · ~20",
+      "tag": "in / out",
+      "pos": [
+        780,
+        410
+      ],
+      "size": [
+        200,
+        80
+      ]
+    },
+    {
+      "id": "llm",
+      "type": "external",
+      "label": "LLM-провайдеры",
+      "sublabel": "Nous Portal · OpenRouter · OpenAI",
+      "tag": "HTTPS",
+      "pos": [
+        1100,
+        130
+      ],
+      "size": [
+        180,
+        80
+      ]
+    },
+    {
+      "id": "state",
+      "type": "database",
+      "label": "state.db",
+      "sublabel": "SQLite + FTS5",
+      "tag": "HERMES_HOME",
+      "pos": [
+        1100,
+        270
+      ],
+      "size": [
+        180,
+        80
+      ]
+    },
+    {
+      "id": "platforms",
+      "type": "external",
+      "label": "Мессенджеры",
+      "sublabel": "Telegram · Discord · Slack",
+      "tag": "~20 платформ",
+      "pos": [
+        1100,
+        410
+      ],
+      "size": [
+        180,
+        70
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Gateway-процесс · один владелец на хост",
+      "wraps": [
+        "rpc",
+        "agent",
+        "tools",
+        "adapters",
+        "cron"
+      ],
+      "pad": 26
+    }
+  ],
+  "connections": [
+    {
+      "id": "cli-attach",
+      "from": "cli",
+      "to": "rpc",
+      "label": "attach · /api/ws",
+      "labelAt": [
+        268,
+        120
+      ]
+    },
+    {
+      "id": "tui-attach",
+      "from": "tui",
+      "to": "rpc",
+      "label": "JSON-RPC по WS",
+      "labelAt": [
+        268,
+        210
+      ]
+    },
+    {
+      "id": "dashboard-attach",
+      "from": "dashboard",
+      "to": "rpc",
+      "label": "TUI по /api/pty",
+      "labelAt": [
+        268,
+        300
+      ]
+    },
+    {
+      "id": "ide-attach",
+      "from": "ide",
+      "to": "rpc",
+      "label": "ACP / HTTP",
+      "labelAt": [
+        268,
+        390
+      ]
+    },
+    {
+      "id": "admit-turn",
+      "from": "rpc",
+      "to": "agent",
+      "label": "очередь → ход",
+      "variant": "emphasis"
+    },
+    {
+      "id": "model-calls",
+      "from": "agent",
+      "to": "llm",
+      "label": "API модели"
+    },
+    {
+      "id": "tool-calls",
+      "from": "agent",
+      "to": "tools",
+      "label": "tool calls",
+      "labelAt": [
+        880,
+        245
+      ]
+    },
+    {
+      "id": "persist",
+      "from": "agent",
+      "to": "state",
+      "label": "транскрипты"
+    },
+    {
+      "id": "inbound",
+      "from": "platforms",
+      "to": "adapters",
+      "label": "входящие события",
+      "labelAt": [
+        1040,
+        424
+      ]
+    },
+    {
+      "id": "outbound",
+      "from": "adapters",
+      "to": "platforms",
+      "label": "ответы",
+      "variant": "dashed"
+    },
+    {
+      "id": "to-session",
+      "from": "adapters",
+      "to": "rpc",
+      "label": "в сессию"
+    },
+    {
+      "id": "schedule",
+      "from": "cron",
+      "to": "rpc",
+      "label": "по расписанию",
+      "labelAt": [
+        535,
+        355
+      ]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Путь одного сообщения",
+      "items": [
+        "Клиент отправляет prompt.submit в gateway-процесс",
+        "Очередь допуска фиксирует ввод, затем AIAgent выполняет ход",
+        "События и ответ стримятся всем подключённым зрителям сессии"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Что живёт в gateway",
+      "items": [
+        "Сессии, AIAgent, инструменты и платформенные адаптеры",
+        "Cron и фоновые уведомления запускают новые ходы",
+        "Процесс не привязан к окну клиента: отключение не отменяет ход"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Расширения и состояние",
+      "items": [
+        "state.db хранит транскрипты, поиск FTS5 и очередь",
+        "config.yaml, .env, скиллы и память — в HERMES_HOME профиля",
+        "Плагины, MCP и субагенты добавляют возможности без роста ядра"
+      ]
+    }
+  ]
+}

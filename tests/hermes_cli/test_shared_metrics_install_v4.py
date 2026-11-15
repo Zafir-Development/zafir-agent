@@ -90,37 +90,30 @@ def _rpc(params: dict) -> dict:
         {"jsonrpc": "2.0", "id": "r1", "method": "shared_metrics.startup_latency", "params": params})
 
 
-def test_rpc_takes_the_declared_surface_else_env_detection(marks, monkeypatch):
-    monkeypatch.delenv("HERMES_DESKTOP", raising=False)
-    monkeypatch.delenv("HERMES_DESKTOP_TERMINAL", raising=False)
-
-    # A Desktop attached to a URL/cloud backend: no HERMES_DESKTOP here, the client says who it is.
-    assert _rpc({"elapsed_ms": 2500, "surface": "desktop_attach", "launch_id": "a"})["result"] == {"ok": True}
-    assert _rpc({"elapsed_ms": 700, "launch_id": "b"})["result"] == {"ok": True}
-    monkeypatch.setenv("HERMES_DESKTOP", "1")
-    assert _rpc({"elapsed_ms": 12_000, "launch_id": "c"})["result"] == {"ok": True}
+def test_rpc_records_the_declared_tui_surface(marks):
+    # The Ink TUI names itself: the backend records the declared surface, not env detection.
+    assert _rpc({"elapsed_ms": 2500, "surface": "tui", "launch_id": "a"})["result"] == {"ok": True}
     assert _rpc({"elapsed_ms": -5, "surface": "tui", "launch_id": "d"})["result"] == {"ok": True}
+    assert _rpc({"elapsed_ms": -5, "launch_id": "e"})["result"] == {"ok": True}  # no duration: not a claim
 
     assert [data for _, data in marks] == [
-        {"latency_bucket": "2s_to_5s", "surface": "desktop_attach"},
-        {"latency_bucket": "500ms_to_1s", "surface": "tui"},
-        {"latency_bucket": "gte_10s", "surface": "desktop_attach"},
+        {"latency_bucket": "2s_to_5s", "surface": "tui"},
     ]
 
 
 def test_rpc_counts_each_client_launch_once_per_backend_process(marks):
-    # A Desktop reconnecting to the same backend re-sends its launch; a later Desktop launch
-    # against the same long-lived backend is a new launch and still counts.
+    # A TUI reconnecting to the same backend re-sends its launch; a later launch against the same
+    # long-lived backend is a new launch and still counts.
     for _ in range(3):
-        _rpc({"elapsed_ms": 1200, "surface": "desktop_attach", "launch_id": "launch-1"})
-    _rpc({"elapsed_ms": 300, "surface": "desktop_attach", "launch_id": "launch-2"})
+        _rpc({"elapsed_ms": 1200, "surface": "tui", "launch_id": "launch-1"})
+    _rpc({"elapsed_ms": 300, "surface": "tui", "launch_id": "launch-2"})
     # Older clients send no id and latch on their side; the backend still counts them once.
     for _ in range(2):
         _rpc({"elapsed_ms": 1200, "surface": "tui"})
 
     assert [data for _, data in marks] == [
-        {"latency_bucket": "1s_to_2s", "surface": "desktop_attach"},
-        {"latency_bucket": "lt_500ms", "surface": "desktop_attach"},
+        {"latency_bucket": "1s_to_2s", "surface": "tui"},
+        {"latency_bucket": "lt_500ms", "surface": "tui"},
         {"latency_bucket": "1s_to_2s", "surface": "tui"},
     ]
 

@@ -22,7 +22,7 @@ from hermes_cli.plugin_capabilities import _child_dict
 from hermes_cli.secret_prompt import masked_secret_prompt
 from utils import rmtree_readonly
 
-# Topical siblings. The facade re-exports what other modules, tests and the old updater import from
+# Topical siblings. The facade re-exports what other modules and tests import from
 # ``hermes_cli.plugins_cmd``; sibling bodies read those names back through the facade at call time.
 from hermes_cli.plugins_cmd_capabilities import (
     _declared_capabilities_for_key, _declared_capabilities_from_manifest, _resolve_tool_override_grant,
@@ -481,13 +481,6 @@ def _unknown_plugin_message(name: str, *, downloaded_only: bool = False) -> str:
 # ``plugins.disabled`` is an explicit deny-list that wins over the ``plugins.enabled`` allow-list.
 _get_disabled_set = functools.partial(_config_name_set, "plugins", "disabled")
 _get_enabled_set = functools.partial(_config_name_set, "plugins", "enabled")
-
-
-def _save_enabled_set(enabled: set) -> None:
-    """Frozen old-updater import: never resurrect a raw plugin-selection write."""
-    from hermes_cli._old_updater import stop_for_relaunch
-
-    stop_for_relaunch()
 
 
 def _plugin_selection_version() -> str:

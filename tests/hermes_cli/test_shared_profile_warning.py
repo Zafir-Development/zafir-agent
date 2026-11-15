@@ -162,28 +162,6 @@ def test_cli_startup_quarantines_corrupt_ledger(homes, tmp_path, corrupt):
         assert entries[0]["hermes_home"] == hermes_home_key(homes)
 
 
-def test_status_surfaces_live_warning_without_host_details(homes, tmp_path, monkeypatch):
-    from fastapi.testclient import TestClient
-    from hermes_cli import web_server
-
-    monkeypatch.setattr(web_server.app.state, "auth_required", True, raising=False)
-    client = TestClient(web_server.app)
-    assert client.get("/api/status").json()["shared_profile_warning"] is False
-    with running_cli(homes, tmp_path / "canary"):
-        response = client.get("/api/status")
-        assert response.status_code == 200
-        assert response.json()["shared_profile_warning"] is True
-    assert client.get("/api/status").json()["shared_profile_warning"] is False
-    work = homes / "profiles" / "work"
-    work.mkdir(parents=True)
-    (work / "config.yaml").write_text("{}")
-    with running_install(work, tmp_path / "canary"):
-        assert client.get("/api/status").json()["shared_profile_warning"] is False
-        response = client.get("/api/status?profile=work")
-        assert response.status_code == 200
-        assert response.json()["shared_profile_warning"] is True
-
-
 def test_warning_rejects_reused_or_unverifiable_process_identity(homes, tmp_path):
     from hermes_cli.shared_profile_warning import shared_profile_warning
 

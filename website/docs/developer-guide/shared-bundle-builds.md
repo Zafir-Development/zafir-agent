@@ -9,14 +9,14 @@ interfaces, not proof that every distribution passed native acceptance.
 
 | Layer | Responsibility | Implementation |
 |---|---|---|
-| Dependency providers | Prepare tools, Python environments, JavaScript dependencies, and native bindings | PM (`pm.build_environment`), `scripts/build/node-deps.mjs`, Nix, and Termux |
+| Dependency providers | Prepare tools, Python environments, JavaScript dependencies, and native bindings | PM (`pm.build_environment`), `scripts/build/node-deps.mjs`, and Termux |
 | Product builders | Compile icons/TUI/web/desktop UI or assemble a runnable agent from prepared inputs | `scripts/generate_icons.py` and `scripts/build/` |
-| Distribution adapters | Select products and package them for their target | `scripts/bundles/`, `Dockerfile`, `nix/`, and `scripts/termux/` |
+| Distribution adapters | Select products and package them for their target | `scripts/bundles/`, `Dockerfile`, and `scripts/termux/` |
 
 Providers retain their package managers and locks. Product builders do not
 install missing dependencies or download inputs. The Node dependency provider
-uses one locked workspace union. Nix supplies its own Node and Python inputs.
-Termux supplies bionic tools and wheels. Shared recipes do not imply identical
+uses one locked workspace union. Termux supplies bionic tools and wheels.
+Shared recipes do not imply identical
 bytes, dependency selections, or Python environments across targets.
 
 | Product | Implementation | Inputs |
@@ -183,12 +183,10 @@ The CLI contracts are in `scripts/bundles/desktop.py`,
 
 - `contained` keeps runtime inputs inside the native payload.
 - `fixed` retains the Docker or Termux installation prefix.
-- `references` keeps installed code and dependencies in separate Nix store paths.
 
 The assembler derives console commands from `[project.scripts]`. It copies
 source-layout resources and selected frontends, or links explicit reference
-inputs. It writes the completion manifest after structural assembly. Nix also
-receives a command/environment map for its native wrappers.
+inputs. It writes the completion manifest after structural assembly.
 
 The launcher implementation lives in `scripts/build/launchers.py`.
 `launcher_wrapper.py` and `mint_launchers.py` live in that same directory.
@@ -213,14 +211,13 @@ application dependency graph. The application environment and `pm-runtime`
 are separate inputs to agent assembly.
 
 Native and Docker preparation use `pm.runtime_stage.stage_runtime`. Termux
-uses that function with its offline wheelhouse. Nix uses the independent
-`nix/pm-runtime.nix` derivation. Native sealing records the payload interpreter
+uses that function with its offline wheelhouse. Native sealing records the payload interpreter
 and PM-only site directory in `pm-runtime.json`.
 
 Resident PM workers run the declared interpreter with `-I -S -B`. They add
 only the declared PM dependency directory before the worker script. They do
 not borrow application dependencies or add PM packages to the caller's
-interpreter. Docker and Nix stamps point to their declared PM runtime.
+interpreter. Docker stamps point to their declared PM runtime.
 These contracts live in `pm/runtime.py:55–88,171–182` and
 `scripts/bundles/payload.py:58–90`.
 
@@ -238,10 +235,6 @@ admission, generation selection, and transaction state. Both paths use
 | Desktop bundled/Store | Icons, TUI, web, agent, desktop UI | Products: `apps/desktop/build/products/`. Agent: `apps/desktop/build/agent-payload/`. UI: `apps/desktop/dist/`. Packages: `apps/desktop/release/` |
 | Desktop light | Icons and desktop UI | `apps/desktop/dist/` and `apps/desktop/release/`, without an agent payload |
 | Docker | Icons, TUI, web, agent | Agent at `/opt/hermes`, dependencies at `.venv`, PM at `pm-runtime`, generated commands at `libexec` |
-| Nix TUI | TUI | `$out/lib/hermes-tui/{dist/entry.js,package.json}` |
-| Nix web | Web | `$out/index.html` and assets |
-| Nix agent | Agent with TUI/web references | `$out/bin`, `$out/share/hermes-agent`, `$out/ui-tui`, `manifest.json`, and `command-map.json` |
-| Nix desktop | Icons and desktop UI, with the Nix agent | `$out/share/hermes-desktop` and `$out/bin/hermes-desktop` |
 | Termux | TUI and agent | `OUT/hermes-agent_<version>_aarch64.deb`, installed at `$PREFIX/lib/hermes-agent/` |
 
 Native payloads contain `hermes-agent`, `tools`, `venv`, `pm-runtime`, `bin`,
@@ -259,17 +252,6 @@ runtime stage copies only the frontend products and the locked TypeScript packag
 runtime linting. Node/npm and Photon's separately installed sidecar dependencies
 remain runtime inputs. Python dependency preparation precedes the application
 source copy. Actual cache-hit and layer-size claims require build evidence.
-
-Nix retains `fetchPnpmDeps`, uv2nix, platform overrides, and store references.
-Its builders run during derivation builds, not evaluation. Per-product source
-filters keep frontend, Python, and resource inputs separate. Nix wrappers
-consume the assembler's command map and retain their PATH and extra-Python
-collision policies.
-
-**Nix wheel policy:** `nix/python.nix:128–135` sets `HERMES_NIX_BUILD=1` only
-for the Hermes derivation. `setup.py:34–72` rejects general Hermes wheel/sdist
-builds. The shared assembler uses the installed Nix code without another copy.
-Other providers use source-layout code and metadata, not a public Hermes wheel.
 
 Termux retains bionic wheel compilation, offline installation, native library
 paths, and its fixed prefix. Its installed root contains `app`, `tools`,
@@ -385,8 +367,8 @@ fetch entries with `--target` and `--store`; Termux also passes `--payload` for
 runtime libraries. Cache hits do not skip preservation. Desktop R2 credentials
 are scoped to upload steps. Untrusted PR jobs receive no publication credentials.
 
-Installed PM clients, bootstrap installers, and Nix pin consumers use the
-primary URL followed by the public mirror if the download is unavailable.
+Installed PM clients and bootstrap installers use the primary URL followed by
+the public mirror if the download is unavailable.
 The pinned hash remains binding; no credentials or uploads are needed by
 clients. PM keeps per-source resume state and reports attempted URLs.
 For Termux files already removed upstream, the CI publisher can recover the
@@ -417,10 +399,9 @@ Focused helper tests cannot establish all of these requirements:
 - PM isolation after native payload relocation.
 - Retained-cache offline reconstruction of a mutable application environment.
 - Docker non-root CLI/TUI/web/browser behavior and every image layer's contents.
-- Actual Nix package execution through reference-based wrappers.
 - Fresh network-disabled Termux package installation and Android device behavior.
 
 Use the existing acceptance checks in `tests/install/BUNDLED_UPDATES.md`,
-`tests/docker/`, Nix checks, and `scripts/termux/check_deb.sh` plus
+`tests/docker/`, and `scripts/termux/check_deb.sh` plus
 `validate_installed.py`. Container acceptance does not substitute for Android
 device acceptance. No build-pass claim follows from this document.

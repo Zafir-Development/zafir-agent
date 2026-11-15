@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "doc": "Which halves a plugin folder ships. Both inspectors read these cases: the gateway's (hermes_cli/plugins_cmd_inspect.py detect_components) and native Desktop's (apps/desktop/electron/desktop-plugin-install.ts detectPluginComponents). A rule changed in one must change in both, and here. Each case is a folder named 'root' holding 'files'; agent_name falls back to that folder's name.",
+  "doc": "Which halves a plugin folder ships, as read by hermes_cli/plugins_cmd_inspect.py detect_components. A rule changed there must change here. Each case is a folder named 'root' holding 'files'; agent_name falls back to that folder's name.",
   "cases": [
     {
       "name": "yaml manifest with a package is an agent half named by the manifest",

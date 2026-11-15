@@ -8,13 +8,6 @@ import json
 import re
 from pathlib import Path
 
-# The machine's saved-gateways list and its OAuth sign-ins (``hermes_cli.gateway_connections``), with
-# their ``.lock`` dir and ``.corrupt-<ms>`` sidecars: machine-wide root state every profile reads at the
-# root, holding plaintext session tokens. A copy in a clone is dead weight, and an export must not ship it.
-GATEWAY_CONNECTION_STORES = ("gateway-connections.json", "gateway-connection-tokens.json")
-GATEWAY_CONNECTION_STORE_RE = re.compile(r"gateway-connections?(?:-tokens)?\.json(?:\..+)?")
-
-
 # Text/config suffixes secret-scrubbed on export; binary DBs, images etc. are left alone.
 _EXPORT_REDACT_SUFFIXES = frozenset({
     ".md", ".txt", ".yaml", ".yml", ".json", ".jsonl", ".toml", ".ini", ".cfg", ".conf", ".py", ".sh",

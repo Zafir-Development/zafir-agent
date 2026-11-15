@@ -162,19 +162,6 @@ def test_monitoring_reports_stops_and_misses_as_themselves(monkeypatch):
     assert sent[0]["outcome"] == "cancelled"
 
 
-def test_a_cancelled_agent_run_names_its_reason_in_history():
-    from hermes_cli.web_routers.cron import _reconcile_cron_runs
-
-    session = {"id": "s1", "title": "Morning brief", "cron_execution_id": "ex1",
-               "started_at": 100.0}
-    attempts = [{"id": "ex1", "status": "cancelled", "error": "cancelled on request (Stop)",
-                 "claimed_at": 99.0, "finished_at": 120.0}]
-
-    rows = _reconcile_cron_runs([session], [], attempts, "job", 10)
-
-    assert [r["title"] for r in rows] == ["CANCELLED · cancelled on request (Stop)"]
-
-
 def test_a_capped_count_says_so_after_a_catch_up(store):
     job = jobs.create_job(prompt="tick", schedule="every 1m", deliver="local", catch_up=True)
     stored = jobs.load_jobs()

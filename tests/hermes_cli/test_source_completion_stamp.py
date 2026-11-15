@@ -33,7 +33,7 @@ def _repo(tmp_path: Path) -> Path:
 
 def _completion_dependencies(monkeypatch, maintenance):
     monkeypatch.setattr("hermes_cli.venv_sync.publish_launchers", lambda root: None)
-    monkeypatch.setattr("hermes_cli.source_build.build_update_products", lambda root, *, desktop, after_dependencies=None: None)
+    monkeypatch.setattr("hermes_cli.source_build.build_update_products", lambda root, *, after_dependencies=None: None)
     monkeypatch.setattr("hermes_cli.update_cmd_maint._run_post_update_maintenance", maintenance)
 
 
@@ -46,7 +46,7 @@ def test_successful_source_completion_writes_checkout_identity(tmp_path, monkeyp
 
     _completion_dependencies(monkeypatch, maintenance)
 
-    assert complete_source_checkout(root, desktop=False, assume_yes=True)
+    assert complete_source_checkout(root, assume_yes=True)
     assert (root / "install-stamp.json").is_file()
 
 
@@ -54,12 +54,12 @@ def test_failed_source_completion_does_not_publish_identity(tmp_path, monkeypatc
     root = _repo(tmp_path)
     _completion_dependencies(monkeypatch, lambda **_kwargs: True)
 
-    def broken_build(root, *, desktop, after_dependencies=None):
+    def broken_build(root, *, after_dependencies=None):
         raise RuntimeError("web UI build: npm exited 1")
 
     monkeypatch.setattr("hermes_cli.source_build.build_update_products", broken_build)
     owed: list = []
-    assert not complete_source_checkout(root, desktop=False, assume_yes=True, followups=owed)
+    assert not complete_source_checkout(root, assume_yes=True, followups=owed)
     # The tail is owed, so the checkout identity is not published.
     assert [step for step, _ in owed] == ["build"]
     assert not (root / "install-stamp.json").exists()
@@ -71,7 +71,7 @@ def test_unsafe_sqlite_withholds_success_but_not_the_finished_tail(tmp_path, mon
     root = _repo(tmp_path)
     _completion_dependencies(monkeypatch, lambda **_kwargs: False)
     owed: list = []
-    assert not complete_source_checkout(root, desktop=False, assume_yes=True, followups=owed)
+    assert not complete_source_checkout(root, assume_yes=True, followups=owed)
     assert owed == []
     assert (root / "install-stamp.json").is_file()
 
@@ -104,7 +104,7 @@ def test_completion_holds_the_update_lock_during_the_tail(tmp_path, monkeypatch)
     marker = _sandboxed_marker(tmp_path, monkeypatch)
     seen = {}
 
-    def build(_root, *, desktop, after_dependencies=None):
+    def build(_root, *, after_dependencies=None):
         from hermes_cli.update_lock import read_live_update
 
         seen["holder"] = read_live_update()
@@ -113,7 +113,7 @@ def test_completion_holds_the_update_lock_during_the_tail(tmp_path, monkeypatch)
     monkeypatch.setattr("hermes_cli.venv_sync.publish_launchers", lambda root: None)
     monkeypatch.setattr("hermes_cli.update_cmd_maint._run_post_update_maintenance", lambda **_kwargs: True)
 
-    assert complete_source_checkout(root, desktop=False, assume_yes=True)
+    assert complete_source_checkout(root, assume_yes=True)
 
     assert seen["holder"] is not None, "the tail must hold the shared lock while it builds"
     assert seen["holder"].pid == os.getpid()
@@ -127,7 +127,7 @@ def test_completion_refuses_to_stack_on_a_live_update(tmp_path, monkeypatch, for
     _completion_dependencies(monkeypatch, lambda **_kwargs: True)
 
     with pytest.raises(RuntimeError, match="an update is still running"):
-        complete_source_checkout(root, desktop=False, assume_yes=True)
+        complete_source_checkout(root, assume_yes=True)
 
 
 def test_completion_runs_under_a_parents_claim_without_releasing_it(tmp_path):
@@ -146,10 +146,10 @@ def test_completion_runs_under_a_parents_claim_without_releasing_it(tmp_path):
         "import hermes_cli.source_build, hermes_cli.update_cmd_maint, hermes_cli.update_lock, hermes_cli.venv_sync\n"
         "from hermes_cli.source_completion import complete_source_checkout\n"
         "hermes_cli.venv_sync.publish_launchers = lambda root: None\n"
-        "hermes_cli.source_build.build_update_products = lambda root, *, desktop, after_dependencies=None: None\n"
+        "hermes_cli.source_build.build_update_products = lambda root, *, after_dependencies=None: None\n"
         "hermes_cli.update_cmd_maint._run_post_update_maintenance = lambda **_kwargs: True\n"
         f"hermes_cli.update_lock.update_marker_path = lambda: Path({str(marker)!r})\n"
-        f"print(json.dumps(complete_source_checkout(Path({str(root)!r}), desktop=False, assume_yes=True)))\n"
+        f"print(json.dumps(complete_source_checkout(Path({str(root)!r}), assume_yes=True)))\n"
     )
     parent = (
         "import os, subprocess, sys, time\n"

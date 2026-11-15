@@ -11,11 +11,6 @@
  *
  * The contract:
  *
- * - ``@streamdown/math`` is NOT a root dependency. It's imported only
- *   by desktop's own TS code (``apps/desktop/src/...``), so it belongs in
- *   ``apps/desktop/package.json`` (alongside its sibling ``@streamdown/code``)
- *   — not root, where it was subject to the exact same pruning risk.
- *
  * - ``@askjo/camofox-browser`` is NOT eager. Camofox is an opt-in browser
  *   backend that ships as the ``camofox`` catalog plugin (Hermes core carries
  *   no Camofox code). Its postinstall fetches a ~300MB Firefox-fork binary,

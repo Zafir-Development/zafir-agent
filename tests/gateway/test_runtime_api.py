@@ -1,7 +1,13 @@
-"""Real TCP HTTP/WS coverage for the gateway-owned API lifecycle."""
+"""Real TCP HTTP/WS coverage for the gateway-owned session listener.
+
+The listener owns exactly one route — the native ticketed WebSocket at ``/api/ws`` — and never
+takes signals or starts/stops runtime services. Everything else is a 404 (HTTP) or a closed
+upgrade, which is the regression this file pins after the dashboard app was removed.
+"""
 
 import asyncio
 import json
+from pathlib import Path
 import signal
 
 import httpx
@@ -9,84 +15,121 @@ import pytest
 from websockets.asyncio.client import connect
 from websockets.exceptions import InvalidStatus
 
+PROTOCOL = "hermes-gateway-v1"
+TICKET_PREFIX = "hermes-gateway-ticket."
+
+
+async def _raw_upgrade(origin: str, protocols, *, host_header: str) -> int:
+    """Send a raw WebSocket handshake with a chosen Host header; return the HTTP status."""
+    port = int(origin.rsplit(":", 1)[1])
+    reader, writer = await asyncio.open_connection("127.0.0.1", port)
+    writer.write(
+        b"GET /api/ws HTTP/1.1\r\n"
+        + f"Host: {host_header}\r\n".encode()
+        + b"Upgrade: websocket\r\nConnection: Upgrade\r\n"
+        + b"Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
+        + b"Sec-WebSocket-Version: 13\r\n"
+        + f"Sec-WebSocket-Protocol: {', '.join(protocols)}\r\n\r\n".encode()
+    )
+    await writer.drain()
+    status = int((await asyncio.wait_for(reader.readline(), 10)).split()[1])
+    writer.close()
+    return status
+
 
 @pytest.mark.asyncio
-async def test_http_lifespan_does_not_start_or_stop_runtime_services(monkeypatch):
-    from hermes_cli import web_server as web
-    from tui_gateway import methods_groups
-
-    calls = []
-    monkeypatch.setenv("HERMES_DESKTOP", "1")
-    for name in ("_warm_gateway_module", "_eager_reconcile_own_session_db",
-                 "_start_desktop_cron_ticker", "_terminate_desktop_managed_gateway"):
-        monkeypatch.setattr(web, name, lambda *a, _name=name, **k: calls.append(_name))
-    for name in ("start_hosted_room_service", "stop_hosted_room_service"):
-        monkeypatch.setattr(methods_groups, name, lambda *a, _name=name, **k: calls.append(_name))
-    # A real gateway owns these services; HTTP must not acquire or release them.
-    monkeypatch.setattr(web.app.state, "gateway_runner", object(), raising=False)
-    async with web.app.router.lifespan_context(web.app):
-        await asyncio.sleep(0)
-        assert calls == []
-    assert calls == []
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize('shared', [False, True])
-async def test_owner_serves_existing_routes_and_ws_without_signal_ownership(monkeypatch, tmp_path, shared):
-    from gateway.run_api import start_gateway_api, stop_gateway_api
-    from hermes_cli import web_server as web
-
+async def test_owner_serves_only_the_native_session_ws(monkeypatch, tmp_path):
     from gateway.run import GatewayRunner
     from gateway.config import GatewayConfig
+    from gateway.run_api import start_gateway_api, stop_gateway_api
+    from gateway.runtime_bootstrap import TicketStore
+    from gateway.session_authority import initialize_session_authority
+    from hermes_state import SessionDB
 
     runner = GatewayRunner(GatewayConfig(sessions_dir=tmp_path / "gateway-sessions"))
     assert runner.adapters == {}
-    request = {"jsonrpc": "2.0", "id": 1, "method": "ping", "params": {}}
-    if shared:
-        from gateway.config import Platform
-        from gateway.session import SessionSource
-        from gateway.session_authority import initialize_session_authority
-        authority = await initialize_session_authority(runner, profile_id='fixture', instance_id='api-owner')
-        ref = authority.register(SessionSource(platform=Platform.TELEGRAM, chat_id='api-test', user_id='fixture'))
-        request.update(method='session.resume', params={'session_id': ref.session_id})
+    # Boot publishes the runtime descriptor before the listener binds; the readiness gate reads it.
+    runner.session_runtime_descriptor = {"state": "ready"}
+    runner._draining = False
+    # The ticket names the authority's profile HOME (its store's directory), as the control socket
+    # does; the native dispatch checks the identity's profile against the bound authority.
+    db = SessionDB(tmp_path / "state.db")
+    home = str(tmp_path)
+    await initialize_session_authority(
+        runner, profile_id=home, instance_id="api-owner", db=db)
+    tickets = TicketStore("api-owner", [home])
+    runner.session_ticket_store = tickets
     before = {sig: signal.getsignal(sig) for sig in (signal.SIGINT, signal.SIGTERM)}
+
     handle = await start_gateway_api(runner)
     try:
-        assert handle.api_origin == f"http://127.0.0.1:{web.app.state.bound_port}"
-        assert web.app.state.bound_port > 0
-        assert web.app.state.gateway_runner is runner
+        assert handle.api_origin.startswith("http://127.0.0.1:")
         assert before == {sig: signal.getsignal(sig) for sig in before}
-        auth = {"Authorization": f"Bearer {web._SESSION_TOKEN}"}
-        async with httpx.AsyncClient(base_url=handle.api_origin) as client:
-            assert (await client.get("/api/config/raw")).status_code == 401
-            assert (await client.get("/api/config/raw", headers=auth)).status_code == 200
-            assert (await client.post("/api/ws-ticket")).status_code in (401, 403)
-            assert (await client.get("/api/config/raw", headers={**auth, "Host": "attacker.invalid"})).status_code == 400
+        # No dashboard app: every HTTP path is a plain 404, token or not.
+        async with httpx.AsyncClient(base_url=handle.api_origin, trust_env=False) as client:
+            assert (await client.get("/api/status")).status_code == 404
+            assert (await client.get("/")).status_code == 404
+            assert (await client.post("/api/ws-ticket")).status_code == 404
+            assert (await client.get("/api/config/raw",
+                                     headers={"Authorization": "Bearer x"})).status_code == 404
+
         url = handle.api_origin.replace("http:", "ws:") + "/api/ws"
+        # No credential at all: refused at the handshake (4403 → HTTP 403).
         with pytest.raises(InvalidStatus) as rejected:
             async with connect(url):
                 pass
         assert rejected.value.response.status_code == 403
-        async with connect(url + "?token=" + web._SESSION_TOKEN) as ws:
-            await ws.send(json.dumps(request))
+        # A browser Origin is refused even with an otherwise valid ticket.
+        ticket = tickets.mint(profile_id=home, subject="human", purpose="interactive")
+        with pytest.raises(InvalidStatus):
+            async with connect(url, origin="http://attacker.invalid",
+                               subprotocols=[PROTOCOL, TICKET_PREFIX + ticket]):
+                pass
+        # A foreign Host is refused before the ticket is redeemed (DNS-rebinding guard).
+        ticket = tickets.mint(profile_id=home, subject="human", purpose="interactive")
+        assert await _raw_upgrade(handle.api_origin, [PROTOCOL, TICKET_PREFIX + ticket],
+                                  host_header="attacker.invalid") == 403
+        # The native ticket path answers RPCs against the bound authority.
+        ticket = tickets.mint(profile_id=home, subject="human", purpose="interactive")
+        async with connect(url, subprotocols=[PROTOCOL, TICKET_PREFIX + ticket]) as ws:
+            assert ws.subprotocol == PROTOCOL
+            await ws.send(json.dumps({"jsonrpc": "2.0", "id": 1, "method": "session.list", "params": {}}))
             while True:
                 reply = json.loads(await asyncio.wait_for(ws.recv(), 10))
                 if reply.get("id") == 1:
                     break
             assert "result" in reply, reply
-            if shared:
-                assert reply['result'].get('authority_epoch') == authority.epoch, reply
-                assert reply['result']['session_id'] == ref.session_id
-                assert len(authority.sessions[ref.session_id].subscribers) == 1
         with pytest.raises(RuntimeError, match="already"):
             await start_gateway_api(runner)
     finally:
         await stop_gateway_api(handle)
         if runner._session_db is not None:
             await runner._session_db.close()
-    await stop_gateway_api(handle)
-    assert web.app.state.session_authority is None
     assert before == {sig: signal.getsignal(sig) for sig in before}
     with pytest.raises(httpx.ConnectError):
         async with httpx.AsyncClient() as client:
-            await client.get(handle.api_origin + "/api/config/raw")
+            await client.get(handle.api_origin + "/api/status")
+
+
+@pytest.mark.asyncio
+async def test_readiness_gate_refuses_sockets_before_ready(tmp_path):
+    from gateway.run_api import start_gateway_api, stop_gateway_api
+    from gateway.runtime_bootstrap import TicketStore
+
+    class Runner:
+        _draining = False
+        session_runtime_descriptor = {"state": "starting"}
+        session_authority = None
+
+    runner = Runner()
+    tickets = TicketStore("owner", [str(tmp_path)])
+    runner.session_ticket_store = tickets
+    handle = await start_gateway_api(runner)
+    try:
+        url = handle.api_origin.replace("http:", "ws:") + "/api/ws"
+        ticket = tickets.mint(profile_id=str(tmp_path), subject="human", purpose="interactive")
+        with pytest.raises(InvalidStatus):
+            async with connect(url, subprotocols=[PROTOCOL, TICKET_PREFIX + ticket]):
+                pass
+    finally:
+        await stop_gateway_api(handle)

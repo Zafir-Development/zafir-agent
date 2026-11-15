@@ -4,8 +4,7 @@ One gateway per host serves every profile. ``hermes -p X gateway install|start``
 while a live multiplexer already served X; on a host with no multiplexer running (or one that had not
 rescanned yet) it wrote a brand-new per-profile unit. Now every named profile is refused without
 ``--force`` and pointed at ``hermes gateway install`` (default) / ``hermes gateway migrate --multiplex``;
-``--force`` stays the one escape and a ``--force``-installed service stays startable without it. The
-dashboard ``/api/gateway/start`` twin (``multiplexed_profile_refusal``) applies the same rule.
+``--force`` stays the one escape and a ``--force``-installed service stays startable without it.
 """
 
 from __future__ import annotations
@@ -60,7 +59,6 @@ def _run(fn, **ns):
 
 def test_named_profile_install_and_start_refuse_without_force_when_no_multiplexer_runs(quiet_host):
     import hermes_cli.gateway as gw
-    from hermes_cli.web_server_gateway import multiplexed_profile_refusal
     root, calls, use = quiet_host
 
     # A -> B -> A: the refusal names the right profile from each home and installs nothing.
@@ -74,10 +72,6 @@ def test_named_profile_install_and_start_refuse_without_force_when_no_multiplexe
             assert f"hermes -p {profile} gateway install --force" in out
             assert "already serves" not in out  # nothing is running: this is the no-multiplexer form
         assert not gw.get_systemd_unit_path(system=False).exists()
-        # Dashboard twin: same rule, same pointers, `stop` untouched (nothing serves the profile).
-        refusal = multiplexed_profile_refusal(profile, "start")
-        assert refusal and f"'{profile}'" in refusal and "migrate --multiplex" in refusal and "--force" in refusal
-        assert multiplexed_profile_refusal(profile, "stop") is None
     assert calls == []
 
     # Control: the default profile's own install is unchanged.
@@ -106,7 +100,6 @@ def test_named_profile_install_and_start_refuse_without_force_when_no_multiplexe
 
 def test_force_installs_a_separate_profile_gateway_and_its_service_stays_startable(quiet_host):
     import hermes_cli.gateway as gw
-    from hermes_cli.web_server_gateway import multiplexed_profile_refusal
     _root, calls, use = quiet_host
     use("coder")
 
@@ -115,11 +108,10 @@ def test_force_installs_a_separate_profile_gateway_and_its_service_stays_startab
     assert calls == ["install"]
 
     # The --force-installed fleet member is not NEW: its supervisor (ExecStart carries no --force)
-    # and a plain `gateway start` must keep reaching it, CLI and dashboard alike.
+    # and a plain `gateway start` must keep reaching it.
     unit = gw.get_systemd_unit_path(system=False)
     unit.parent.mkdir(parents=True)
     unit.write_text("[Service]\n")
     with contextlib.redirect_stdout(io.StringIO()):
         gw._cmd_start(argparse.Namespace(system=False, all=False, run_as_user=None, force=False))
     assert calls == ["install", "start"]
-    assert multiplexed_profile_refusal("coder", "start") is None

@@ -1,6 +1,6 @@
-// Star Map palette — ported from apps/desktop/src/app/starmap/color.ts so the
-// TUI overlay derives the same memory ink (complement of the theme primary) and
-// the same age fade (rgba(ink, alpha) over the background) as the desktop panel.
+// Star Map palette — the TUI overlay derives its memory ink (complement of the
+// theme primary) and its age fade (rgba(ink, alpha) over the background) from
+// the theme seeds, without a per-panel palette.
 
 interface Rgb {
   b: number

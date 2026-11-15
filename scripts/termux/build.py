@@ -14,7 +14,7 @@ import sys
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from scripts.releases.commit_build import require_commit
+from scripts.releases.versioning import require_commit
 from scripts.termux.deb_version import deb_version_for_tag
 
 

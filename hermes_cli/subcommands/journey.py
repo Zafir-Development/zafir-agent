@@ -10,10 +10,10 @@ def build_journey_parser(subparsers) -> None:
     journey_parser = subparsers.add_parser(
         "journey", aliases=["learning", "memory-graph"],
         help="Timeline of learned skills + memories over time",
-        description="A terminal rendition of the desktop Star Map / Memory Graph: a "
+        description="A terminal rendition of the Star Map / Memory Graph: a "
             "timeline bar chart of learned skills and memories over time "
             "(oldest at top, newest at bottom) plus a playable constellation "
-            "scrubber. Mirrors the TUI `/journey` overlay and the desktop panel.")
+            "scrubber. Mirrors the TUI `/journey` overlay.")
     try:
         from hermes_cli.journey import register_cli as _register_journey_cli
 

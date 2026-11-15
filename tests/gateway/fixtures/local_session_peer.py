@@ -19,22 +19,20 @@ async def probe(peer, target, kind):
     from gateway.session_authority import initialize_session_authority
     from gateway.session_contract import SessionRef
     from gateway.run_api import start_gateway_api, stop_gateway_api
-    from hermes_cli import web_server
+    from tests.gateway.fixtures.native_ws_auth import prepare_listener, subprotocols, ws_url
     from run_agent import AIAgent
     from tools.approval import resolve_gateway_approval
 
     runner = GatewayRunner()
-    authority = await initialize_session_authority(runner, profile_id='fixture', instance_id='local')
+    home = Path(os.environ['HERMES_HOME'])
+    authority = await initialize_session_authority(runner, profile_id=str(home), instance_id='local')
+    prepare_listener(runner)
     api = await start_gateway_api(runner)
-    port = api.socket.getsockname()[1]
-    web_server.app.state.auth_required = True
-    from hermes_cli.dashboard_auth.ws_tickets import mint_ticket
     sid = None
     sockets = []
 
     async def connect():
-        ticket = mint_ticket(user_id='fixture-creator', provider='local-fixture')
-        ws = await websockets.connect(f'ws://127.0.0.1:{port}/api/ws?ticket={ticket}')
+        ws = await websockets.connect(ws_url(api), subprotocols=subprotocols(runner, subject='fixture-creator'))
         sockets.append(ws)
         return ws
 
@@ -55,11 +53,24 @@ async def probe(peer, target, kind):
         before_sessions = set(authority.sessions)
         runner._draining = True
         try:
-            draining = await rpc(a, 'session.create', request_id='during-drain', source='cli')
-            assert draining.get('error', {}).get('message') == 'runtime_draining', draining
+            # A draining owner cuts an attached operator socket on its next frame and refuses a
+            # fresh upgrade at admission: no new session is admitted either way.
+            try:
+                await rpc(a, 'session.create', request_id='during-drain', source='cli')
+            except websockets.exceptions.ConnectionClosed:
+                pass
+            else:
+                raise AssertionError('a draining owner answered a new-session request')
             assert set(authority.sessions) == before_sessions
+            try:
+                async with websockets.connect(
+                        ws_url(api), subprotocols=subprotocols(runner, subject='fixture-creator')):
+                    raise AssertionError('a draining owner admitted a new socket')
+            except websockets.exceptions.InvalidStatus as exc:
+                assert exc.response.status_code == 403, str(exc)
         finally:
             runner._draining = False
+        a = await connect()
         created = await rpc(a, 'session.create', request_id='fresh', source='cli')
         assert 'result' in created, created
         sid = created['result']['session_id']
@@ -84,7 +95,7 @@ async def probe(peer, target, kind):
         from gateway.session_local import create_local_session
         from gateway.session_contract import SessionActor
         from hermes_state_runtime import RuntimeStoreError
-        for actor, reason in ((SessionActor('read-only', 'fixture', frozenset({'session:read'}), 'readonly'),
+        for actor, reason in ((SessionActor('read-only', authority.profile_id, frozenset({'session:read'}), 'readonly'),
                                'permission_denied'),
                               (SessionActor('creator', 'foreign', frozenset({'session:create'}), 'foreign'),
                                'profile_mismatch')):
@@ -140,10 +151,13 @@ async def probe(peer, target, kind):
         assert pong.get('result', {}).get('pong') is True, pong
         described = await rpc(c, 'runtime.describe')
         assert described['result']['instance_id'] == authority.instance_id
-        assert str(Path(os.environ['HERMES_HOME'])) not in json.dumps(described)
+        # A native client is local: describe names the authority's own served home, and nothing
+        # of the browser-era transport token or another profile.
+        assert described['result']['profile_id'] == authority.profile_id
+        assert 'token' not in json.dumps(described['result'])
         # Public transport auth remains mandatory, even for metadata or fresh sessions.
         try:
-            async with websockets.connect(f'ws://127.0.0.1:{port}/api/ws?token=forged') as bad:
+            async with websockets.connect(ws_url(api)) as bad:
                 await rpc(bad, 'session.create', request_id='forged')
         except (websockets.exceptions.InvalidStatus, websockets.exceptions.ConnectionClosed):
             pass

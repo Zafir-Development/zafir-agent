@@ -1,4 +1,4 @@
-"""C7 two-tenant canary: ONE Desktop backend (``hermes serve``) serving three profiles over /api/ws.
+"""C7 two-tenant canary: ONE ``hermes serve`` backend serving three profiles over /api/ws.
 
 Class: multiplex / tenancy isolation (issue_classes.md C7). Users hit it as "a secondary profile's
 chat showed/stored the default profile's model", "a key or setting I saved for profile B landed in
@@ -7,7 +7,7 @@ profile restarted my backend" (#85669, #101719, #105396, #107422, #107692, #1111
 
 Harness: the real app backend, ``hermes serve --port 0`` with ``HERMES_DESKTOP=1`` (which also runs
 the in-process cron ticker for every served profile), driven over the same ``/api/ws`` JSON-RPC
-socket the Desktop uses: ``session.create {profile}``, ``prompt.submit``, ``config.set``,
+socket the local clients use: ``session.create {profile}``, ``prompt.submit``, ``config.set``,
 ``model.save_key``, ``profiles.create``, ``session.resume``. Each profile owns its own loopback
 provider and distinct canaries (see ``_helpers.Tenant``); every turn runs ``env | sort; pwd`` in
 the terminal tool so the provider receives a snapshot taken inside the tool subprocess.

@@ -1044,7 +1044,7 @@ class TestNativeEnvironmentContracts:
         """A direct child of the repo root (depth=1) is PRESERVED.
 
         Independent audit of every real launcher producer (Electron
-        ``apps/desktop/electron/main.ts``,
+        the app main process,
         ``gateway/run.py::_ensure_windows_gateway_venv_imports``,
         ``cron/scheduler.py::_windows_cron_python_invocation``,
         ``tui_gateway/host_supervisor.py``) shows they all inject the exact

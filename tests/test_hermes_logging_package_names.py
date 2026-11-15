@@ -19,7 +19,7 @@ SAMPLES = {
     "tools": ("tools.file_tools",),
     "cli": ("hermes_cli.update_cmd", "cli"),
     "cron": ("cron.scheduler",),
-    "gui": ("hermes_cli.web_server", "tui_gateway.server"),
+    "gui": ("hermes_cli.desktop", "tui_gateway.server"),
 }
 
 

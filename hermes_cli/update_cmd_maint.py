@@ -21,12 +21,6 @@ from datetime import UTC
 logger = logging.getLogger("hermes_cli.update_cmd")
 
 
-def _prepare_updated_checkout(project_root: Path, *, desktop: bool) -> None:
-    """Historical updater hook: never complete inside the pre-swap interpreter."""
-    from hermes_cli._old_updater import stop_for_relaunch
-    stop_for_relaunch(incomplete=True)
-
-
 _PRE_UPDATE_SNAPSHOT_KEEP = 1
 
 # Per-file cap for the quick snapshot (larger files skipped with a warning): it protects
@@ -60,19 +54,6 @@ def _load_updates_cfg() -> dict:
     cfg = load_config() or {}
     updates = cfg.get("updates", {}) if isinstance(cfg, dict) else {}
     return updates if isinstance(updates, dict) else {}
-
-
-def _purge_stale_hermes_modules() -> None:
-    """Historical updater hook; module-graph surgery cannot complete an update."""
-    from hermes_cli._old_updater import stop_for_relaunch
-    stop_for_relaunch(incomplete=True)
-
-
-def _reload_updated_runtime_modules() -> None:
-    # Historical updater hook: dependency activation belongs to the next process.
-    from hermes_cli._old_updater import stop_for_relaunch
-
-    stop_for_relaunch()
 
 
 def _print_curator_first_run_notice() -> None:
@@ -260,65 +241,9 @@ def _format_time_ago(iso_ts: str) -> str:
         return "recently"
 
 
-def _reload_process_scan_modules() -> None:
-    """Historical updater hook; scans now run only in fresh completion Python."""
-    from hermes_cli._old_updater import stop_for_relaunch
-    stop_for_relaunch(incomplete=True)
-
-
-def _finish_dashboard_update_cleanup(
-    node_failures: list[str], already_restarted_units: set[str] | None = None
-) -> None:
-    """Historical updater hook; do not continue a pre-PM update after the swap."""
-    from hermes_cli._old_updater import stop_for_relaunch
-
-    stop_for_relaunch()
-
-
-def _refresh_dashboard_after_update(*, already_restarted_units: set[str] | None = None) -> set[int]:
-    """Refresh managed dashboards or stop stale manual ones after an update; returns the PIDs it
-    stopped and could not bring back, so the receipt records them ``failed`` (#109290).
-
-    *already_restarted_units*: systemd unit names (no ``.service``) the fleet-restart loop
-    already handled (restarted, declined, or failed; each already reported), so a Serve-only
-    install isn't restarted a second time here and a declined or failed unit isn't retried (#141021).
-
-    See #83595.
-    """
-    from hermes_cli.update_cmd import _m, _record_update_step
-    from hermes_constants import get_hermes_home
-
-    try:
-        stop_result = _m()._kill_stale_dashboard_processes(
-            restart_managed=True, already_restarted_units=already_restarted_units,
-            scope_home=str(get_hermes_home()),
-        )
-    except Exception as exc:
-        # Isolated like every sibling post-update step: a failure here (#112604) used to abort
-        # the fleet matrix, reconciliation and the inner receipt finalize that follow it. A
-        # dashboard/serve left on pre-update code is still caught by the survivor probe →
-        # reconciliation (an owed gateway_restart follow-up).
-        logger.warning("Post-update dashboard cleanup failed: %s", exc)
-        _record_update_step("dashboard_cleanup", False, f"{type(exc).__name__}: {exc}")
-        print()
-        print(f"⚠ Could not refresh running dashboard/serve process(es): {exc}")
-        print("  If one is still running, restart it so it serves the updated code:")
-        print("    hermes dashboard --port <port>   (or: systemctl --user restart hermes-dashboard)")
-        return set()
-    unrecovered = {int(pid) for pid in stop_result.get("unrecovered") or ()}
-    if not unrecovered:
-        return unrecovered
-
-    print()
-    print("⚠ A web dashboard/serve process was stopped during update and could not be auto-restarted.")
-    print("  Re-launch it when you want the web UI back:")
-    print("    hermes dashboard --port <port>")
-    return unrecovered
-
-
 def _print_update_completion(message: str) -> None:
-    """Print the outcome (with branch @ sha so drift is visible) plus, when launched by the
-    dashboard with an action id, a receipt line the Desktop matches after restart.
+    """Print the outcome (with branch @ sha so drift is visible) plus, for an update launched with
+    an action id, the receipt line an orchestrating updater matches after restart.
 
     See #47359, #58764.
     """
@@ -400,13 +325,6 @@ def _print_verified_update_completion(message: str) -> bool:
     for line in _sqlite_partial_completion_lines(sqlite_info.sqlite_version_string):
         print(line)
     return False
-
-
-def _print_update_summary(*, node_failures: list, desktop_build_ok: bool, pre_update_version: str | None) -> bool:
-    """Historical updater hook; old soft-build results cannot establish completion."""
-    from hermes_cli._old_updater import stop_for_relaunch
-
-    stop_for_relaunch()
 
 
 def _restore_state_db_from_snapshot(state_path: Path, snap_state: Path) -> bool:
@@ -804,7 +722,7 @@ def _sweep_bytecode_after_update(branch: str) -> None:
     Never fails the committed update: a failed sweep is a ``bytecode_sweep`` follow-up and the
     fingerprint stays un-stamped, so the launch-time sweep (fingerprint mismatch) retries it.
     """
-    from hermes_cli.main_web_build import _prune_dropped_directories, _recorded_bytecode_fingerprint
+    from hermes_cli.update_bytecode import _prune_dropped_directories, _recorded_bytecode_fingerprint
     from hermes_cli.update_cmd import _m
     from hermes_cli.update_receipt import record_followup
     # Timestamp-based .pyc validation can accept old bytecode after the source swap.
@@ -972,7 +890,7 @@ def _migrate_relay_exporter_env() -> None:
 
 
 def _run_post_update_maintenance(
-    *, assume_yes, gateway_mode, pre_update_snapshot_id, had_desktop_app_before_update,
+    *, assume_yes, gateway_mode, pre_update_snapshot_id,
     pre_update_version, completion_message=None, followups=None,
 ) -> bool:
     """Post-build housekeeping and completion, returning the SQLite runtime verdict.
@@ -998,29 +916,6 @@ def _run_post_update_maintenance(
     from hermes_cli.update_cmd import _check_and_apply_config_migration, _m
     from hermes_cli.update_windows_acl import repair_windows_home_acl
     owed_step("windows_home_acl", repair_windows_home_acl)
-    # macOS TCC: Desktop bundles are re-signed each update, so old grants can go stale
-    # (toggle ON, yet macOS re-prompts with no Allow button). Tell users how to re-grant.
-    # With the post-#73681 identifier-pinned DR, new grants survive rebuilds — but a grant made to a pre-fix
-    # binary stays stale: the System Settings toggle shows ON while macOS re-prompts on every capture, and
-    # the modern prompt has no Allow button, so users loop. One line of guidance after update tells affected
-    # users how to complete the one-time re-grant.
-    if sys.platform == "darwin" and had_desktop_app_before_update:
-        print()
-        print(
-            "  ℹ macOS: if Hermes re-prompts for permissions you already "
-            "granted (toggle shows ON), the stored grant is stale — run "
-            "`tccutil reset ScreenCapture com.nousresearch.hermes` (repeat "
-            "per affected service), toggle it ON in System Settings, then "
-            "fully quit & relaunch once."
-        )
-
-    # macOS TCC interpreter anchor; boot-gated — a failed probe leaves the venv untouched.
-    try:
-        # See #95596.
-        from hermes_cli.macos_tcc_anchor import ensure_tcc_anchor
-        ensure_tcc_anchor()
-    except Exception:
-        logger.debug("macOS TCC anchor refresh skipped", exc_info=True)
 
     # state.db integrity guard for root home AND every profile; restore from own snapshot.
     with _best_effort('Post-update state.db integrity check failed: %s'):

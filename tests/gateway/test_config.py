@@ -962,10 +962,9 @@ class TestLoadGatewayConfig:
 
     def test_bridged_allow_all_users_does_not_survive_a_config_flip_or_restart(self, tmp_path, monkeypatch):
         """The bridge owns what it wrote: flipping config.yaml to false and reloading closes the gate,
-        and the restart/dashboard child envs never carry the bridged value (a sticky env var would make
-        the restarted gateway ignore the flipped config and stay open)."""
+        and a restarted gateway's watcher env never carries the bridged value (a sticky env var would
+        make the restarted gateway ignore the flipped config and stay open)."""
         from gateway.run_shutdown import GatewayShutdownMixin
-        from hermes_cli.web_server_gateway import _profile_action_environment
 
         hermes_home = tmp_path / ".hermes"
         hermes_home.mkdir()
@@ -975,7 +974,6 @@ class TestLoadGatewayConfig:
         load_gateway_config()
         assert os.environ.get("GATEWAY_ALLOW_ALL_USERS") == "true"
         assert "GATEWAY_ALLOW_ALL_USERS" not in GatewayShutdownMixin._restart_watcher_env()
-        assert "GATEWAY_ALLOW_ALL_USERS" not in _profile_action_environment(["gateway", "restart"])
 
         (hermes_home / "config.yaml").write_text("gateway:\n  allow_all_users: false\n", encoding="utf-8")
         load_gateway_config()

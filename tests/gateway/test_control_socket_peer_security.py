@@ -110,7 +110,7 @@ def test_clients_refuse_a_control_listener_run_by_another_uid(tmp_path, monkeypa
     import inspect
     from types import SimpleNamespace
     from gateway import control_socket, session_hosted_transport
-    from hermes_cli import gateway_client, webapp_launcher
+    from hermes_cli import gateway_client
     from hermes_cli import gateway_runtime_discovery as discovery
     home = tmp_path / "home"
     home.mkdir(mode=0o700)
@@ -130,8 +130,6 @@ def test_clients_refuse_a_control_listener_run_by_another_uid(tmp_path, monkeypa
                 await asyncio.to_thread(discovery.query_identify, home, timeout=2)
             with pytest.raises(discovery.DiscoveryError, match="unsafe_control_peer"):
                 await asyncio.to_thread(gateway_client._session_ticket, home, endpoint)
-            with pytest.raises(webapp_launcher.GatewayUnreachable, match="unsafe_control_peer"):
-                await asyncio.to_thread(webapp_launcher._control, home, "identify")
             assert answered == []  # refused before a request reached the listener
         finally:
             monkeypatch.undo()

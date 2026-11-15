@@ -1,8 +1,8 @@
-"""Record each verified R2 upload for the GitHub job summary.
+"""Record each verified upload for the GitHub job summary.
 
-The record is a log. A missing summary file or a public-URL failure must not
-fail an upload that already landed. The process exit writes the table, so a
-step that uploads and then exits still reports its objects.
+The record is a log. A missing summary file must not fail an upload that
+already landed. The process exit writes the table, so a step that uploads and
+then exits still reports its objects.
 """
 from __future__ import annotations
 
@@ -27,28 +27,12 @@ def note(key: str) -> None:
         _REGISTERED = True
 
 
-def rows(keys: list[str]) -> list[tuple[str, str]]:
-    """Public URL for each key, in upload order. A bad key is named, not dropped."""
-    from scripts.releases import r2
-
-    base = r2.public_base_url()
-    listed = []
-    for key in keys:
-        try:
-            listed.append((key, r2.public_url_for(base, key)))
-        except ValueError:
-            listed.append((key, ""))
-    return listed
-
-
 def render(keys: list[str]) -> str:
     """One markdown table. Empty when the step uploaded nothing."""
     if not keys:
         return ""
-    lines = ["", "### R2 uploads", "", "| Object | URL |", "|---|---|"]
-    for key, url in rows(keys):
-        cell = f"[download]({url})" if url else "—"
-        lines.append(f"| `{key}` | {cell} |")
+    lines = ["", "### Uploads", "", "| Object |", "|---|"]
+    lines.extend(f"| `{key}` |" for key in keys)
     return "\n".join(lines) + "\n"
 
 
@@ -70,10 +54,10 @@ def flush() -> None:
 
 def main() -> None:
     """Print the table for keys a caller already recorded."""
-    raw = os.environ.get("R2_UPLOAD_KEYS", "")
+    raw = os.environ.get("UPLOAD_KEYS", "")
     keys = json.loads(raw) if raw else []
     if not isinstance(keys, list) or not all(isinstance(key, str) for key in keys):
-        raise SystemExit("R2_UPLOAD_KEYS must be a JSON list of object keys")
+        raise SystemExit("UPLOAD_KEYS must be a JSON list of object keys")
     print(render(keys), end="")
 
 

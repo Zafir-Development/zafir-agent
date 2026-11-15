@@ -14,44 +14,10 @@ import subprocess
 import sys
 
 
-def _live_app_dirs(app: Path, patterns: tuple[str, ...]) -> list[Path]:
-    # electron-builder's appOutDir names (win-unpacked, linux-arm64-unpacked,
-    # mac-arm64) never hold a dot; rollback copies beside them do: a raw
-    # Windows pack's before-pack keeps `<appOutDir>.bak`, which a later
-    # stage-and-swap update leaves alone, and the swap's `.previous` aside.
-    # The product never launches those, so neither may the verifier judge them.
-    return [path for pattern in patterns for path in app.glob(pattern)
-            if "." not in path.relative_to(app / "release").parts[0]]
-
-
-def desktop_outputs(root: Path) -> list[Path]:
-    return _live_app_dirs(root / "apps/desktop", (
-        "release/*/resources/app.asar.unpacked/dist",
-        "release/mac*/Hermes.app/Contents/Resources/app.asar.unpacked/dist",
-    ))
-
-
-def verify_products(root: Path, desktop: str, node: Path | None = None) -> None:
-    app = root / "apps/desktop"
-    outputs = desktop_outputs(root)
-    has_desktop = (app / "dist/index.html").exists() or any((app / "release").glob("*"))
-    if desktop == "absent" and has_desktop:
-        raise RuntimeError("unexpected desktop output in a no-desktop scenario")
-    if desktop == "present":
-        if not outputs or not any((out / "index.html").is_file() for out in outputs):
-            raise RuntimeError("desktop packaged renderer is missing or incomplete")
-        executables = [path for path in _live_app_dirs(app, (
-            "release/*/Hermes.exe", "release/*/Hermes", "release/*/hermes",
-            "release/mac*/Hermes.app/Contents/MacOS/Hermes",
-        )) if path.is_file() and path.stat().st_size]
-        if not executables:
-            raise RuntimeError("desktop executable is missing or empty")
+def verify_products(root: Path, node: Path | None = None) -> None:
     if node is None:
         return  # Historical builds have no compiler receipt contract.
-    products = [("tui", root / "ui-tui/dist"), ("web", root / "hermes_cli/web_dist")]
-    if desktop == "present":
-        products.extend(("desktop", out) for out in outputs)
-    for product, out in products:
+    for product, out in (("tui", root / "ui-tui/dist"),):
         result = subprocess.run(
             [str(node), str(root / "scripts/build/freshness.mjs"),
              "--source", str(root), "--product", product, "--out", str(out)],
@@ -61,7 +27,7 @@ def verify_products(root: Path, desktop: str, node: Path | None = None) -> None:
             raise RuntimeError(f"{product} output is missing, stale, or damaged: {out}")
 
 
-def probe_pm(root: Path, desktop: str, command: list[str]) -> None:
+def probe_pm(root: Path, command: list[str]) -> None:
     # Use the launcher's Python ABI, but deliberately do NOT execute its
     # bootstrap: that would complete dependencies or recover markers for it.
     sys.path.insert(0, str(root))
@@ -80,19 +46,18 @@ def probe_pm(root: Path, desktop: str, command: list[str]) -> None:
     node = installed_package("node")
     if node is None or node.binary is None:
         raise RuntimeError("installed Node is missing or does not match the target pin")
-    verify_products(root, desktop, node.binary)
+    verify_products(root, node.binary)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--launcher", type=Path, required=True)
-    parser.add_argument("--desktop", choices=("absent", "present"), required=True)
     parser.add_argument("--runtime-command", help=argparse.SUPPRESS)
     args = parser.parse_args()
     root = args.root.resolve()
     if args.runtime_command:
-        probe_pm(root, args.desktop, json.loads(args.runtime_command))
+        probe_pm(root, json.loads(args.runtime_command))
     elif (root / "pm/lock.json").is_file():
         env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", HERMES_DISABLE_LAZY_INSTALLS="1")
         result = subprocess.run([str(args.launcher), "--print-runtime-command"],
@@ -102,12 +67,12 @@ def main() -> None:
             raise RuntimeError("invalid published runtime command")
         subprocess.run([command[0], "-I", "-B", str(Path(__file__).resolve()),
                         "--root", str(root), "--launcher", str(args.launcher),
-                        "--desktop", args.desktop, "--runtime-command", json.dumps(command)],
+                        "--runtime-command", json.dumps(command)],
                        env=env, check=True, timeout=300)
     else:
-        verify_products(root, args.desktop)
+        verify_products(root)
         print("Historical install: artifact presence only (no PM/compiler receipt capability)")
-    print(f"Read-only source verification passed: {root} (desktop={args.desktop})")
+    print(f"Read-only source verification passed: {root}")
 
 
 if __name__ == "__main__":

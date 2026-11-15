@@ -1,4 +1,4 @@
-"""Process-owned admission fence for cooperative Desktop backend retirement.
+"""Process-owned admission fence for cooperative gateway backend retirement.
 
 The gate belongs to the process, not a profile or transport. Diagnostic ledgers alone cannot
 close the check/use race: every source of new work must reserve admission before dispatch.
@@ -57,7 +57,7 @@ class RetirementFence:
                 self.release()
 
     def prepare(self):
-        from hermes_cli.web_server_idle_proof import idle_proof
+        from hermes_cli.idle_proof import idle_proof
 
         with self._lock:
             self._expire()

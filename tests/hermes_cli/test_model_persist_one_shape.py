@@ -1,7 +1,7 @@
 """One config.yaml shape for a persisted model selection, whichever surface wrote it.
 
 ``/model --global`` reaches config.yaml from four places (CLI mixin, gateway slash command, TUI
-gateway, dashboard main slot). Each used to hand-roll its own write; the TUI never touched
+gateway, profile model assignment). Each used to hand-roll its own write; the TUI never touched
 ``api_mode`` (stale wire protocol after a switch) and the dashboard wrote ``base_url: ""``. All
 four now go through ``hermes_cli.model_switch.persist_model_selection`` /
 ``apply_model_selection``, so the same ``ModelSwitchResult`` must land as the same ``model.*``
@@ -70,13 +70,13 @@ def _via_tui(home):
         "sid", session, "claude-haiku --provider anthropic --global", confirm_expensive_model=True)
 
 
-def _via_dashboard(home):
-    from hermes_cli.web_server_config import _apply_model_assignment_sync
-    _apply_model_assignment_sync("main", "anthropic", "claude-haiku", "", "")
+def _via_model_assignment(home):
+    from hermes_cli.profile_model_write import assign_main_model
+    assign_main_model("anthropic", "claude-haiku", "", "")
 
 
-@pytest.mark.parametrize("surface", [_via_cli, _via_gateway, _via_tui, _via_dashboard],
-                         ids=["cli", "gateway", "tui", "dashboard"])
+@pytest.mark.parametrize("surface", [_via_cli, _via_gateway, _via_tui, _via_model_assignment],
+                         ids=["cli", "gateway", "tui", "model-assignment"])
 def test_every_persist_surface_writes_the_same_model_block(seeded_home, monkeypatch, surface):
     monkeypatch.setattr("hermes_cli.model_switch.switch_model", lambda **_kw: _RESULT)
     monkeypatch.setattr("cli.HermesCLI._persist_model_switch_to_session", lambda *a, **k: None)

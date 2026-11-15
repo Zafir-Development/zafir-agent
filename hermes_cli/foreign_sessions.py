@@ -254,7 +254,7 @@ def import_foreign_session(source: str, path) -> str:
     store = session_store()
     session_id = new_session_id()
     cwd = parsed.get("cwd")
-    # Resume refuses a folder missing here (another machine's, or deleted), as the Desktop import does.
+    # Resume refuses a folder missing here (another machine's, or deleted), as the foreign import does.
     row = {"id": session_id, "source": "cli", "cwd": cwd if cwd and Path(cwd).is_dir() else None, "messages": turns}
     receipt = store.call("session.mutate", session_id=session_id, request_id=uuid.uuid4().hex, expected_revision=0,
                          operation="import", payload={"sessions": [row]})

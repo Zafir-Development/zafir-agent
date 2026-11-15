@@ -178,9 +178,15 @@ def test_main_follows_the_git_branch_without_reading_a_channel_record(source, mo
     assert "error" not in status, status
     assert status["targetSha"] == source.commits[2]
     assert reads == []
+    # Preview channels still read their record; canary's only authority is its
+    # GitHub prerelease, so an absent publication fails closed without an R2
+    # read and without falling back to main.
     with pytest.raises((ChannelNotFound, urllib.error.HTTPError, TimeoutError)):
+        source_releases.resolve_source_target("preview", ["git"], source.root)
+    assert reads == ["preview"]
+    with pytest.raises(ValueError):
         source_releases.resolve_source_target("canary", ["git"], source.root)
-    assert reads == ["canary"]
+    assert reads == ["preview"]
 
 
 def test_passive_check_reports_retirement_without_adopting_it(source, monkeypatch):

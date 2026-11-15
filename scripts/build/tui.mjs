@@ -58,11 +58,8 @@ export async function buildTui(options) {
       logLevel: 'info'
     })
 
-    // esbuild preserves the shebang from src/entry.tsx into the bundle, but Nix's
-    // patchShebangs phase mangles `/usr/bin/env -S node --foo --bar` (it strips
-    // the `node` token, leaving a broken interpreter). The hermes_cli launcher
-    // always invokes this file as `node dist/entry.js` anyway, so the shebang is
-    // redundant — strip it.
+    // The Hermes launcher invokes this file as `node dist/entry.js`, so esbuild's
+    // preserved shebang is redundant.
     const body = readFileSync(out, 'utf8')
     if (body.startsWith('#!')) {
       writeFileSync(out, body.slice(body.indexOf('\n') + 1))

@@ -18,7 +18,6 @@ function read(relativePath: string): string {
 
 // SAFETY: these are repository-owned manifest/lock inputs, checked below.
 const root = JSON.parse(read('package.json')) as Manifest
-const desktop = JSON.parse(read('apps/desktop/package.json')) as Manifest
 const lock = load(read('pnpm-lock.yaml')) as Lockfile
 const pins = (JSON.parse(read('pm/lock.json')) as PmLock).packages
 
@@ -32,16 +31,14 @@ test.each([
   ['26.0.0', true], ['26.12.1', true], ['27.0.0', true],
   ['22.22.0', false], ['22.23.1', false], ['24.11.0', false], ['24.18.2', false], ['25.2.1', false], ['26.0.0-rc.1', false],
 ] as const)('workspace Node policy for %s is %s', (version: string, accepted: boolean): void => {
-  for (const manifest of [root, desktop]) {
-    assert.equal(semver.satisfies(version, nodeRange(manifest)), accepted)
-  }
+  assert.equal(semver.satisfies(version, nodeRange(root)), accepted)
 })
 
 test('exact independently managed Node satisfies all declared lockfile engines', (): void => {
   assert.ok(semver.valid(pins.node.version), 'node must be an exact pin')
   assert.ok(Object.keys(lock.packages ?? {}).length > 0, 'pnpm-lock.yaml has no packages')
 
-  for (const [name, manifest] of Object.entries({ ...lock.packages, root, desktop })) {
+  for (const [name, manifest] of Object.entries({ ...lock.packages, root })) {
     const range = manifest.engines?.node
 
     if (range) {

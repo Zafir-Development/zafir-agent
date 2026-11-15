@@ -1,5 +1,4 @@
 export { hasAnsi, sanitizeAnsiForRender, stripAnsi } from './ansi'
-export { backendScopeKey, backendScopePrefix, LOCAL_CONNECTION_ID, registryBackendScopeKey } from './backend-scope'
 export {
   BILLING_REFUSAL_POLICY,
   type BillingRecovery,
@@ -55,18 +54,9 @@ export {
   type CronTriggerController,
   type CronTriggerRunResult
 } from './cron-trigger-controller'
-export {
-  clampDataUrlReadMaxMb,
-  DATA_URL_READ_DEFAULT_MAX_MB,
-  DATA_URL_READ_MAX_MAX_MB,
-  DATA_URL_READ_MIN_MAX_MB
-} from './data-url-read-max'
-export { type ExternalUrlTarget, externalUrlTarget } from './external-url'
-export { fileUrlToNativePath } from './file-url'
 export { compactNumber } from './format'
 export { type FuzzyMatch, fuzzyRank, fuzzyScore, fuzzyScoreMulti, type RankedItem } from './fuzzy'
 export * from './gateway-events'
-export { HERMES_CLOUD_MANAGED, isHermesCloudUrl } from './hermes-cloud'
 export {
   applyDocumentLocale,
   type EndonymLocale,
@@ -133,7 +123,6 @@ export {
   type ReconnectBackoffOptions
 } from './reconnect-backoff'
 export { randomUuid } from './session-http-mutations'
-export { skillInvocationText } from './skill-scaffold'
 export {
   type HermesSkin,
   SKIN_BRANDING_TOKENS,
@@ -163,39 +152,6 @@ export {
   type ThemePresetName,
   type ThemePresetPalette
 } from './theme-presets'
-export {
-  backgroundMaterialFor,
-  clampIntensity,
-  DEFAULT_GLASS_MATERIAL,
-  DEFAULT_GLASS_SCOPE,
-  GLASS_MATERIALS,
-  GLASS_SCOPES,
-  glassActive,
-  type GlassMaterial,
-  glassMaterialForPicker,
-  glassMaterialsFor,
-  type GlassScope,
-  glassSupportedOn,
-  glassSurfaceKeep,
-  normalizeMaterial,
-  normalizeMode,
-  normalizeScope,
-  normalizeState,
-  TRANSLUCENCY_CURVE,
-  TRANSLUCENCY_MAX,
-  TRANSLUCENCY_MIN,
-  TRANSLUCENCY_OPACITY_FLOOR,
-  TRANSLUCENCY_STEP,
-  type TranslucencyMode,
-  type TranslucencyState,
-  translucencySupportedOn,
-  vibrancyFor,
-  windowOpacityFor,
-  WINDOWS_BACKGROUND_MATERIALS,
-  WINDOWS_GLASS_MIN_BUILD,
-  type WindowsBackgroundMaterial
-} from './translucency'
-
 export { type UpdateDebt, updateDebt, type UpdateDebtReceipt, type UpdateDebtStep } from './update-debt'
 export { mergeUsage, usageFromTick, type UsageTickPayload } from './usage-tick'
 export {

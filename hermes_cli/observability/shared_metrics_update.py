@@ -1,4 +1,4 @@
-"""Shared-metrics facts for ``hermes update`` runs and Desktop self-updates.
+"""Shared-metrics facts for ``hermes update`` runs.
 
 ``hermes.update.run`` / ``hermes.update.stage`` are DERIVED from the final update receipt in the
 process that finalizes it (``update_receipt.finalize_update_receipt``): the receipt already carries
@@ -7,10 +7,8 @@ stage is instrumented for metrics. A pre-pull interpreter must never import pull
 it is the finalizer it parks the receipt under the store dir (stdlib-only code in update_receipt)
 and :func:`report_pending_updates` records it on the next Hermes start.
 
-Desktop's packaged updaters (electron-updater, App Installer, Store) never run ``hermes update``;
-Desktop reports their outcome through the ``shared_metrics.update_run`` RPC instead. Desktop's
-source-checkout hand-off DOES run ``hermes update``; that receipt is tagged ``initiator=desktop``
-and counted here, never by the RPC, so no run is counted twice.
+A receipt parked by the removed Desktop source-checkout hand-off is still tagged
+``initiator=desktop``; it is read as historical vocabulary so the run is not lost on upgrade.
 
 Run and stage rows agree on where a FAILED run stopped: a run whose ``failed_stage`` names a stage it
 never marked (it exited inside it, before the stage's END mark) also gets one failed stage row for it.
@@ -39,14 +37,9 @@ PENDING_DIRNAME = "pending_updates"
 RECORDED_DIRNAME = "recorded_updates"
 _RECORDED_KEEP = 64
 _UPDATE_ID = re.compile(r"[0-9a-f]{8,64}")
-# Receipt pm/Desktop outcome words → hermes.update.run outcome; anything else failed.
+# Receipt outcome words → hermes.update.run outcome; anything else failed.
 _RUN_OUTCOMES = {"success": "success", "refused": "refused", "noop": "noop"}
 _FLEET_BAD_STATES = frozenset({"stale", "down"})
-# Desktop mechanism (updater strategy kind) → apply_mode.
-_DESKTOP_APPLY_MODES = {
-    "electron-updater": "package", "app-installer": "package", "microsoft-store": "package",
-    "windows-handoff": "git", "posix-handoff": "git",
-}
 # ---- iuf c1 ----
 # ``finalize_pending_update_receipt`` stores ``f"{type(exc).__name__}: {exc}"`` as the stop reason of
 # a run that ended on an exception (main.cmd_update, update_completion._finish). Only the leading
@@ -70,7 +63,7 @@ _EXCEPTION_TYPE_CLASSES = (
     (_OS_ERROR_TYPES, "os_error"), (_SUBPROCESS_ERROR_TYPES, "subprocess_failed"),
 )
 # Fixed stop-reason prefixes Hermes itself writes (only the prefix is read, never what follows):
-# _update_takeover's preparation failure and update_completion's Windows gateway resume failure.
+# the updater's preparation failure and update_completion's Windows gateway resume failure.
 _STOP_REASON_PREFIX_CLASSES = (
     ("historical takeover preparation failed", "deps_failed"), ("Windows gateway recovery failed", "restart_failed"),
 )
@@ -137,7 +130,7 @@ def update_failure_class(receipt: dict[str, Any], stages: list[dict[str, Any]], 
         return named
     if outcome == "refused":
         # Exit 2 at the command boundary is the updater's refusal convention; on main the only
-        # open-receipt exit 2 is another updater holding the lock (update_finish).
+        # open-receipt exit 2 is another updater holding the lock.
         return "lock_held" if exit_code == 2 else "other"
     failed_marks = {s["name"] for s in stages if s.get("outcome") == "failed"}
     if "build" in failed_marks:
@@ -282,6 +275,7 @@ def update_receipt_fields(receipt: dict[str, Any]) -> tuple[dict[str, str], list
             "apply" if failure_class == "local_changes_parked"
             else _failed_stage(stages) if outcome in {"failed", "refused", "partial"} else "none"),
         "from_version_age_bucket": version_age_bucket(age_ms),
+        # Legacy read: receipts parked by the removed Desktop hand-off carry initiator=desktop.
         "kind": "desktop" if receipt.get("initiator") == "desktop" else "cli",
         "outcome": outcome,
         # ---- iuf c1 ----
@@ -420,39 +414,3 @@ def report_pending_updates() -> None:
             settle_claim(claimed, path, saved)
     except Exception:
         logger.debug("Pending update shared metrics not reported", exc_info=True)
-
-
-def desktop_update_fields(
-    *, outcome: Any, failed_stage: Any, duration_ms: Any, mechanism: Any, from_commit_date: Any = None,
-) -> dict[str, str]:
-    """hermes.update.run dims for a Desktop packaged self-update (RPC-reported)."""
-    from .shared_metrics_contract import (
-        DESKTOP_UPDATE_STAGES, UPDATE_OUTCOMES, update_duration_bucket, version_age_bucket,
-    )
-
-    outcome_value = str(outcome or "").strip().lower()
-    outcome_value = outcome_value if outcome_value in UPDATE_OUTCOMES else "failed"
-    stage = str(failed_stage or "").strip().lower()
-    commit = _epoch(from_commit_date)
-    # Desktop sends seconds since epoch (install stamp commitDate); age is measured now.
-    age_ms = None if commit is None else (time.time() - commit) * 1000
-    return {
-        "apply_mode": _DESKTOP_APPLY_MODES.get(str(mechanism or "").strip().lower(), "unknown"),
-        "duration_bucket": update_duration_bucket(duration_ms),
-        "failed_stage": (stage if stage in DESKTOP_UPDATE_STAGES else "other") if outcome_value == "failed" else "none",
-        "from_version_age_bucket": version_age_bucket(age_ms),
-        "kind": "desktop",
-        "outcome": outcome_value,
-        # ---- iuf c1 ----
-        # The Desktop RPC carries a stage, never a reason.
-        "failure_class": "unknown" if outcome_value in {"failed", "refused"} else "none",
-        # ---- end iuf c1 ----
-    }
-
-
-def record_desktop_update(**raw: Any) -> None:
-    """Emit one Desktop self-update run through the enabled() gate. Never raises."""
-    from . import shared_metrics_contract as contract
-    from .shared_metrics_events import _emit
-
-    _emit(contract.UPDATE_RUN_MARK, desktop_update_fields, **raw)

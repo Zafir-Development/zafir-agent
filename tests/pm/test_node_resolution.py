@@ -220,7 +220,6 @@ def npm_consumers(npm_probe, tmp_path, monkeypatch):
     from agent.lsp.install import _install_npm
     from gateway.config import PlatformConfig
     from hermes_cli.main_platform_setup import _whatsapp_install_bridge
-    from hermes_cli.web_routers.messaging import _ensure_whatsapp_bridge_dependencies
     from plugins.platforms.photon import adapter as photon, cli
     from plugins.platforms.whatsapp.adapter import WhatsAppAdapter
 
@@ -237,12 +236,11 @@ def npm_consumers(npm_probe, tmp_path, monkeypatch):
         "photon": (photon._reinstall_sidecar_deps, bridge),
         "photon-cli": (cli._install_sidecar, bridge),
         "cli": (lambda: _whatsapp_install_bridge(bridge), bridge),
-        "dashboard": (lambda: _ensure_whatsapp_bridge_dependencies(bridge), bridge),
     }
 
 
 @pytest.mark.platforms("posix")
-@pytest.mark.parametrize("consumer", ["lsp", "whatsapp", "photon", "photon-cli", "cli", "dashboard"])
+@pytest.mark.parametrize("consumer", ["lsp", "whatsapp", "photon", "photon-cli", "cli"])
 def test_npm_consumers_execute_with_pm_node(npm_probe, npm_consumers, consumer):
     _home, node, binary, publish = npm_probe
     publish()
@@ -320,40 +318,6 @@ def test_adapter_availability_never_provisions_missing_node(tmp_path, monkeypatc
     assert photon.check_requirements() is allowed
     assert installs == []
     assert not (tmp_path / "missing-tools").exists()
-
-
-@pytest.mark.platforms("posix")
-def test_dashboard_pairing_prepares_npm_before_node_lookup(npm_probe, tmp_path, monkeypatch):
-    from gateway.platforms import whatsapp_common
-    from hermes_cli.web_routers.messaging import _spawn_whatsapp_pairing_process
-
-    _home, node, _npm, publish = npm_probe
-    node_facts = paths.facts_path().read_bytes()
-    paths.facts_path().unlink()
-    bridge = tmp_path / "bridge"
-    bridge.mkdir()
-    (bridge / "bridge.js").write_text('console.log(JSON.stringify({argv:process.argv, path:process.env.PATH}));\n')
-    monkeypatch.setattr(whatsapp_common, "resolve_whatsapp_bridge_dir", lambda: bridge)
-    installs = []
-
-    def ensure(name, **kwargs):
-        installs.append((name, kwargs.get("explicit", False)))
-        paths.facts_path().write_bytes(node_facts)
-        return publish()
-
-    monkeypatch.setattr(pm, "ensure", ensure)
-    child = _spawn_whatsapp_pairing_process(tmp_path / "session", "bot")
-    try:
-        output, _ = child.communicate(timeout=10)
-        assert child.returncode == 0
-    finally:
-        if child.poll() is None:
-            child.kill()
-            child.wait(timeout=10)
-    assert installs == [("npm", True)]
-    result = json.loads(output)
-    assert "--pair-json" in result["argv"]
-    assert shutil.which("node", path=result["path"]) == str(node)
 
 
 @pytest.mark.platforms("posix")

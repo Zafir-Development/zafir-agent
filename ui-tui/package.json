@@ -13,7 +13,6 @@
     "i18n:keys": "tsx scripts/i18n-keys.ts",
     "i18n:keys:check": "tsx scripts/i18n-keys.ts --check",
     "build:ink": "pnpm --dir packages/hermes-ink run build",
-    "visual": "node scripts/visual/run.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint src/ packages/",
     "lint:fix": "eslint src/ packages/ --fix",

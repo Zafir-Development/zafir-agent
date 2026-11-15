@@ -88,7 +88,7 @@ def test_every_owed_identity_requires_current_evidence(monkeypatch, bad):
     assert update_cmd_fleet._pending_fleet_restart_needed()
 
 
-@pytest.mark.parametrize("supervisor", ["desktop", "launchd", "systemd"])
+@pytest.mark.parametrize("supervisor", ["launchd", "systemd"])
 def test_supervised_serve_row_never_vetoes_gateway_discharge(monkeypatch, supervisor):
     """A host that also runs a supervised ``hermes dashboard``/``serve`` carries that row in every
     receipt; it must not make gateway coverage unverifiable (#115090). The gateways restarted at

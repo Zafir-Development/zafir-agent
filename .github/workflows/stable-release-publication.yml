@@ -8,8 +8,10 @@ on:
         required: false
         type: string
         default: ''
-  # The success path publishes from Stable Release's own final job; only a
-  # failed run needs this pass, which reruns its failed jobs immediately.
+  # Stable Release's own final job reconciles while its workflow is still
+  # running, so that pass can observe the run as "running" and plan nothing.
+  # Every completed dispatched run is reconciled again here: a success closes
+  # that gap, and a failure also reruns its failed jobs immediately.
   workflow_run:
     workflows: ['Stable Release']
     types: [completed]
@@ -29,8 +31,7 @@ jobs:
   reconcile:
     if: >-
       github.event_name != 'workflow_run' ||
-      (github.event.workflow_run.conclusion != 'success' &&
-       github.event.workflow_run.event == 'workflow_dispatch' &&
+      (github.event.workflow_run.event == 'workflow_dispatch' &&
        github.event.workflow_run.head_repository.full_name == github.repository)
     # GitHub-hosted with docker/setup-buildx-action, as before the runner migration: on
     # Blacksmith `imagetools create` cannot commit a manifest list to Docker Hub (404 on the
@@ -47,7 +48,6 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup-pm
         with:
-          toolchain: node
           cache-python: false
       - name: Set up Docker Buildx for ordered alias promotion
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
@@ -56,20 +56,8 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - name: Reconcile stable drafts and protected heads
-        # The macOS feed merge parses YAML (hermes_yaml -> ruamel); the node toolchain has none.
-        run: python -m scripts.ci.python_packages ruamel.yaml==0.18.17 -- -m scripts.releases.sequencer
+      - name: Reconcile stable drafts and Docker aliases
+        run: python -m scripts.releases.sequencer
         env:
           GH_TOKEN: ${{ github.token }}
           REQUESTED_VERSION: ${{ inputs.version || '' }}
-          CLOUDFLARE_R2_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_R2_ACCOUNT_ID }}
-          CLOUDFLARE_R2_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID }}
-          CLOUDFLARE_R2_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}
-          CLOUDFLARE_R2_BUCKET: ${{ vars.CLOUDFLARE_R2_BUCKET }}
-          CLOUDFLARE_R2_PUBLIC_URL: ${{ vars.CLOUDFLARE_R2_PUBLIC_URL }}
-          MS_STORE_TENANT_ID: ${{ secrets.MS_STORE_TENANT_ID }}
-          MS_STORE_CLIENT_ID: ${{ secrets.MS_STORE_CLIENT_ID }}
-          MS_STORE_CLIENT_SECRET: ${{ secrets.MS_STORE_CLIENT_SECRET }}
-          MS_STORE_PRODUCT_ID: ${{ vars.MS_STORE_PRODUCT_ID }}
-          # Repository variable; 'true' commits the draft held for Publish now.
-          MS_STORE_HOLD: ${{ vars.MS_STORE_HOLD }}

@@ -72,14 +72,7 @@ class TestReceiptLifecycle:
             "verified": ["default"],
             "relaunch_attempted": ["ops"],
             "failed": ["coder"],
-            "skipped": [
-                {
-                    "profile": "desk",
-                    "kind": "serve",
-                    "supervisor": "desktop",
-                    "reason": "desktop app owns and respawns this serve backend",
-                }
-            ],
+            "skipped": [],
         }
 
         ur.begin_update_receipt()
@@ -94,11 +87,6 @@ class TestReceiptLifecycle:
         payload = json.loads(path.read_text(encoding="utf-8"))
         persisted = payload["gateway_restart"]["fresh_recovery"]
         assert {key: persisted[key] for key in recovery} == recovery
-        # Serve coverage is always persisted, even when the pass had nothing
-        # to report, so a reader can tell "no serve runtime" from "the field
-        # predates #92145".
-        assert persisted["serve_units"] == {"verified": [], "failed": []}
-        assert persisted["stale_runtimes"] == []
         # The conservative vocabulary is the persisted contract: no bucket may
         # rebrand an unverified relaunch as supervisor-backed success.
         assert "succeeded" not in persisted

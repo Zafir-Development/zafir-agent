@@ -13,5 +13,6 @@ def test_no_changelog_keeps_the_frame_without_commit_sections():
                                       prev_tag="v1.2.3", no_changelog=True)
 
     assert "Something" not in body and "@dev" not in body
-    assert "<!-- HERMES_BUILDS_TABLE -->" in body
+    # The release body is exactly the notes: no build-table placeholder survives.
+    assert "<!--" not in body
     assert "https://github.com/o/r/compare/v1.2.3...rc.1-v1.2.4" in body

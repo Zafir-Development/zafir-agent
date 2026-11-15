@@ -1,12 +1,9 @@
 """``hermes sessions adopt``: bring this profile's pre-gateway history under its gateway, as the host.
 
-Since #106742 the profile's gateway owns its sessions. Chats written before that (main's CLI, TUI and
-Desktop rows) carry no gateway receipt until one native, same-OS-user client resumes them, which
-adopts them (``gateway/session_local_migration.py::adopt_legacy_session``). A Webapp browser reaches
-the gateway through its dashboard mount as the login it authenticated, never natively, so it may not
-make that first claim. Run this once on the host instead: it is what opening each old chat in the
-native TUI or Desktop would do, and afterwards the browser continues every adopted chat through
-shared operator access.
+Since #106742 the profile's gateway owns its sessions. Chats written before that (main's CLI and
+TUI rows) carry no gateway receipt until one native, same-OS-user client resumes them, which
+adopts them (``gateway/session_local_migration.py::adopt_legacy_session``). Run this once on the
+host instead: it is what opening each old chat in the native TUI would do.
 """
 from __future__ import annotations
 
@@ -70,11 +67,11 @@ async def adopt_sessions(rows, *, report=print) -> tuple[int, Counter]:
     without ending it. ``(adopted, skipped-by-refusal)``; a row the owner refuses is skipped,
     never retried as another principal."""
     from hermes_cli.gateway_client import GatewayRPCError, connect_gateway
-    from hermes_cli.web_server_boundary import _DESKTOP_ATTACHMENT_WS_MAX_BYTES
+    from hermes_cli.web_server_boundary import SESSION_WS_MAX_BYTES
 
     adopted, skipped = 0, Counter()
     # The owner answers a resume with the session's whole history; a long chat outgrows the default frame.
-    async with connect_gateway(max_size=_DESKTOP_ATTACHMENT_WS_MAX_BYTES) as client:
+    async with connect_gateway(max_size=SESSION_WS_MAX_BYTES) as client:
         for done, row in enumerate(rows, 1):
             try:
                 snapshot = await client.rpc('session.resume', session_id=row['id'])

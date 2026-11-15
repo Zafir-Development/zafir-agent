@@ -289,8 +289,8 @@ def run(argv: Sequence[str], *, inherit_lock: bool = False, **kwargs) -> subproc
 
 
 def popen_post_commit(argv: Sequence[str], *, label: str, **kwargs) -> subprocess.Popen:
-    """``subprocess.Popen`` for a checkout writer that runs after the update committed (the
-    historical takeover's ``update_finish``). POSIX: the lock fd. Windows inside an update:
+    """``subprocess.Popen`` for a checkout writer that runs after the update committed.
+    POSIX: the lock fd. Windows inside an update:
     created suspended and bound to the update's kill-on-close job before it runs. A refused bind
     must not fail a committed update, so the child still runs, never silently (printed and
     receipted) and never unfenced: it joins the checkout lock holding its own lease (R5b)."""

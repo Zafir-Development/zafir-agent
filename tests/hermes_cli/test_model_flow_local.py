@@ -25,7 +25,7 @@ def test_picked_model_runs_the_quickstart_job_and_reports_how_it_ended(monkeypat
     import hermes_cli.main_provider_setup as provider_setup
     from hermes_cli import setup
     from hermes_cli.model_setup_flows_local import _model_flow_local
-    from hermes_cli.web_routers import local_models as lm
+    from hermes_cli import local_models_service as lm
 
     row = {"id": "tiny", "display_name": "Tiny", "fits": True, "needs_engine": False, "recommended": True,
            "downloaded": False, "size_label": "1.0 GB", "fit_summary": "runs fully on your GPU"}

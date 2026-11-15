@@ -23,7 +23,7 @@ _AUTOSTASH_NAME_PREFIX = "hermes-update-autostash-"
 
 #: Age past which a leftover autostash is called out. Younger entries are normal
 #: (recent --keep-stash park); older ones are almost always forgotten.
-# Entries younger than this are normal (a parked stash from : the desktop updater's --keep-stash run minutes
+# Entries younger than this are normal (a parked stash from a --keep-stash run minutes
 # ago); older ones are almost : always forgotten (#63717 problem 6: an orphan persisted 9+ days unnoticed).
 _AUTOSTASH_WARN_AGE_DAYS = 7
 
@@ -443,7 +443,7 @@ def _untracked_files_replaced_by_update(git_cmd: list[str], cwd: Path, stash_ref
 
 
 def _park_stashed_changes(stash_ref: str) -> None:
-    """Leave a pre-update autostash parked (``--keep-stash``, the desktop updater's mode): local source
+    """Leave a pre-update autostash parked (``--keep-stash``): local source
     edits must never be silently re-applied onto updated code; the entry stays in ``git stash``."""
     print()
     print("ℹ️  Local changes were stashed before updating and were NOT re-applied (--keep-stash).")

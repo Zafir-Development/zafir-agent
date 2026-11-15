@@ -99,20 +99,6 @@ method("display.stop", params=DisplayStopParams, result=DisplayStopResult,
        doc="Stop the screen. Refused (5300, code viewer_mismatch) while a human holds unless force.")
 
 
-class DisplayObserveParams(ProfileParams):
-    viewer_id: str | None = None  # an id THIS connection minted earlier keeps its identity across a reconnect
-
-
-class DisplayObserveResult(DisplayStatus):
-    ticket: str
-    path: str
-    viewer_id: str
-
-
-method("display.observe", params=DisplayObserveParams, result=DisplayObserveResult,
-       doc="Mint a single-use ticket for /api/display/ws and the server-minted viewer id for this connection.")
-
-
 class DisplayInstallResult(Result):
     started: bool
     command: str | None = None

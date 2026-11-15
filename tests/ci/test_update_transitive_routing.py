@@ -28,15 +28,13 @@ from tests.ci.test_update_ci_routing import _REPO, _ci_run, _consumers_reached, 
 ])
 def test_second_hop_update_change_dispatches_real_update_consumers(path):
     lanes = _real_classifier([path])
-    for lane in ("e2e_upgrade", "e2e_desktop_update"):
-        assert lanes[lane], f"{path}: classifier leaves {lane} off"
+    assert lanes["e2e_upgrade"], f"{path}: classifier leaves e2e_upgrade off"
     run = _ci_run(lanes)
-    for lane in ("e2e_upgrade", "e2e_desktop_update"):
-        assert all(_consumers_reached(run, lane).values()), f"{path}: {lane} never reaches its consumers"
+    assert all(_consumers_reached(run, "e2e_upgrade").values()), f"{path}: e2e_upgrade never reaches its consumers"
 
 
 # Off the update lanes (review K132346-ci-cost: 4 of 7 replayed main commits that newly started
-# both update journeys touched only these): the journeys cannot observe code their update never runs.
+# the update journeys touched only these): the journeys cannot observe code their update never runs.
 _PLUGIN_INSTALL = ("hermes_cli/plugins_cmd.py", "hermes_cli/plugins_cmd_install.py")
 
 

@@ -160,37 +160,13 @@ def test_restart_refuses_on_the_published_active_agents_of_an_older_gateway(monk
 def test_stop_all_leaves_another_homes_gateway_process_alone(monkeypatch, recorded, tmp_path):
     """``kill_gateway_processes(all_profiles=True)`` scans every gateway of this account; a scratch-home
     ``stop --all`` must not SIGTERM a gateway running on another Hermes home."""
-    from hermes_cli import dashboard_procs
+    from hermes_cli import process_inventory
     own, other = str(gw.get_hermes_home()), str(tmp_path / "account" / ".hermes")
     monkeypatch.setattr(gw, "find_gateway_pids", lambda *a, **k: [111, 222])
-    monkeypatch.setattr(dashboard_procs, "_hermes_home_for_pid", {111: own, 222: other}.get)
+    monkeypatch.setattr(process_inventory, "_hermes_home_for_pid", {111: own, 222: other}.get)
 
     assert gw.kill_gateway_processes(all_profiles=True) == 1
     assert recorded == [("kill", 111)]
-
-
-def test_dashboard_stop_refuses_while_sessions_are_live(monkeypatch):
-    pytest.importorskip("fastapi")
-    from fastapi.testclient import TestClient
-    from gateway import host_attach
-    from hermes_cli import web_server, web_server_gateway
-
-    _live_gateway(monkeypatch, _WORK)
-    monkeypatch.setattr(host_attach, "host_gateway", lambda **kw: None)
-    monkeypatch.setattr(web_server_gateway, "multiplexed_profile_refusal", lambda *a: None)
-    spawned: list = []
-    monkeypatch.setattr(web_server_gateway, "_spawn_hermes_action",
-                        lambda argv, name: spawned.append(argv) or SimpleNamespace(pid=1))
-    client = TestClient(web_server.app)
-    client.headers[web_server._SESSION_HEADER_NAME] = web_server._SESSION_TOKEN
-
-    refused = client.post("/api/gateway/stop")
-    assert refused.status_code == 409
-    assert "chat turn agent:main:telegram:dm:7" in refused.json()["detail"]
-    assert spawned == []
-
-    assert client.post("/api/gateway/stop?interrupt=true").status_code == 200
-    assert spawned and spawned[0][-1] == "--interrupt"
 
 
 @pytest.mark.platforms("linux")

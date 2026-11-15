@@ -496,8 +496,8 @@ def _is_under(path: Path, root: Path) -> bool:
     return True
 
 
-# Desktop persists a large plain-text paste as a `.txt` under this Hermes-managed
-# directory (apps/desktop/electron/composer-paste.ts) and attaches it as `@file:`.
+# A large plain-text paste is persisted as a `.txt` under this Hermes-managed directory
+# and attached as `@file:`.
 # The chat's cwd is rarely an ancestor of it, so it is the one anchored root the
 # workspace guard admits besides `allowed_root` itself.
 COMPOSER_PASTES_DIRNAME = "composer-pastes"

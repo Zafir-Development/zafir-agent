@@ -22,7 +22,7 @@ _HINT_FILENAMES = ["AGENTS.override.md", "AGENTS.md", "agents.md", "CLAUDE.md", 
 # (Claude Code and Cursor apply none); it is a guard against a stray huge CLAUDE.md in a vendored tree, not a
 # target — keep area AGENTS.md files well under it (~8k) because this text lands in a tool result on the first
 # touch of that directory. Over the ceiling: head+tail kept, marker with the path so the agent can read_file it,
-# and a WARNING in the log (the old 8k silent tail-chop cut apps/desktop/AGENTS.md for months unnoticed).
+# and a WARNING in the log (the old 8k silent tail-chop cut a long AGENTS.md for months unnoticed).
 _MAX_HINT_CHARS = 32_000
 _PATH_ARG_KEYS = {"path", "file_path", "workdir"}
 _COMMAND_TOOLS = {"terminal"}

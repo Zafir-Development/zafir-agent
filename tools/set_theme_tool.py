@@ -17,8 +17,8 @@ ACCENT_SWATCHES = ("mono", "green", "cyan", "nous", "violet", "pink", "red", "or
 THEME_ACCENT = "theme"
 MODES = ("light", "dark", "system")
 PICKERS = ("accent", "layout")
-# The bundled presets (apps/desktop/src/app/contrib/layout-presets.ts). Simple mode shows only the
-# first two; applying an Advanced preset switches the app to Advanced mode.
+# The bundled layout presets. Simple mode shows only the first two; applying an Advanced preset
+# switches the app to Advanced mode.
 SIMPLE_LAYOUTS = ("sidebar-left", "sidebar-right")
 ADVANCED_LAYOUTS = ("default", "basic", "focus", "terminal-deck", "quad")
 

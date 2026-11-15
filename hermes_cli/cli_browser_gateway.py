@@ -1,5 +1,5 @@
-"""Classic CLI ``/browser`` on the shared gateway (#134889 CLI-9): ``browser.manage``, as Ink and
-Desktop send it. Split from ``cli_commands_mixin`` (the file is over its size target)."""
+"""Classic CLI ``/browser`` on the shared gateway (#134889 CLI-9): ``browser.manage``, as the TUI
+sends it. Split from ``cli_commands_mixin`` (the file is over its size target)."""
 from __future__ import annotations
 
 import os
@@ -11,7 +11,7 @@ from hermes_cli.cli_commands_session_tools import _say_block, _t
 
 def _gateway_is_remote() -> bool:
     """True when this CLI attaches to an explicitly named gateway WebSocket that is not loopback
-    (``HERMES_TUI_GATEWAY_URL``): Desktop's ``mode === 'remote'``."""
+    (``HERMES_TUI_GATEWAY_URL``)."""
     raw = os.environ.get("HERMES_TUI_GATEWAY_URL", "").strip()
     if not raw:
         return False
@@ -20,10 +20,10 @@ def _gateway_is_remote() -> bool:
 
 
 def gateway_browser(cli, connection, word: str, rest: str) -> None:
-    """``/browser`` on the shared gateway (#134889 CLI-9): ``browser.manage``, the verb Ink and
-    Desktop send. The browser tools run in the gateway, so changing this process's
+    """``/browser`` on the shared gateway (#134889 CLI-9): ``browser.manage``, the verb the TUI
+    sends. The browser tools run in the gateway, so changing this process's
     ``BROWSER_CDP_URL`` would change nothing the agent uses. ``connect``/``disconnect`` manage a
-    browser on the gateway HOST: only against a local gateway (Desktop's rule). The gateway scopes
+    browser on the gateway HOST: only against a local gateway. The gateway scopes
     them to this session's profile."""
     from hermes_cli.gateway_client import GatewayClientError
     if word in {"connect", "disconnect"} and _gateway_is_remote():

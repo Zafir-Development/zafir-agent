@@ -20,10 +20,9 @@ from tools.set_theme_tool import ACCENT_SWATCHES
 CHAT_TITLE = "Getting started"
 GREETING = "Hi, I'm Hermes. Let's set things up for you. Then we'll get something cool done."
 
-# The scripted opening in each desktop UI language (apps/desktop/src/i18n/languages.ts), played before
-# the model speaks; the model writes the rest of the run in the user's language itself. Each greeting
-# is the desktop's first-run intro copy (firstRun.intro in apps/desktop/src/i18n/*_first_run.ts), its
-# two lines joined: keep the two equal.
+# The scripted opening in each supported UI language, played before the model speaks; the model writes
+# the rest of the run in the user's language itself. Each greeting is the first-run intro copy, its two
+# lines joined: keep the two equal.
 _GREETINGS = {
     "en": GREETING,
     "ar": "مرحبًا، أنا Hermes. لنجهّز كل شيء لك، ثم ننجز معًا شيئًا رائعًا.",

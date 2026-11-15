@@ -77,7 +77,7 @@ INLINE_SOURCE_REJECT = [
     'python -uc "import os" 14980 hermes gateway run',
     # Options that take a SEPARATE operand must not end the option walk before ``-c`` (the operand
     # is not the start of the program's own argv). The repo itself spawns ``-I -S -B -X utf8 …``
-    # (hermes_cli/_old_updater.py, _update_takeover.py), so this shape is not hypothetical.
+    # (fresh-interpreter update hand-off utilities), so this shape is not hypothetical.
     'python -X utf8 -c "import os" 14980 python -m hermes_cli.main gateway run',
     'python -W ignore -c "import os" 14980 python -m hermes_cli.main gateway run',
     'python --check-hash-based-pycs always -c "import os" 14980 hermes gateway run',

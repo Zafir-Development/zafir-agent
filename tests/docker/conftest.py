@@ -1,8 +1,9 @@
 """Shared fixtures for docker-image integration tests.
 
 Tests in this directory build the image with the current ``Dockerfile``
-and exercise it via ``docker run``. They skip when Docker is unavailable
-(e.g. on developer laptops without a daemon).
+and exercise it via ``docker run``. Image tests skip when Docker is
+unavailable (e.g. on developer laptops without a daemon); checks that only
+inspect the build graph still run there.
 
 Override the image with ``HERMES_TEST_IMAGE`` env var to point at a pre-built
 image (faster local iteration); otherwise the ``built_image`` fixture builds
@@ -37,7 +38,7 @@ def _docker_available() -> bool:
 
 
 def pytest_collection_modifyitems(config, items):
-    """Apply docker-suite policy: timeout bump + skip on missing docker."""
+    """Skip tests that need the image when no Docker daemon answers."""
     docker_ok = _docker_available()
     skip_docker = pytest.mark.skip(
         reason="Docker not available or daemon not running",
@@ -45,7 +46,9 @@ def pytest_collection_modifyitems(config, items):
     for item in items:
         if "tests/docker/" not in str(item.fspath).replace(os.sep, "/"):
             continue
-        if not docker_ok:
+        # Only the session-scoped image fixture needs the daemon; static
+        # build-graph checks in this directory must still run without one.
+        if not docker_ok and "built_image" in item.fixturenames:
             item.add_marker(skip_docker)
 
 

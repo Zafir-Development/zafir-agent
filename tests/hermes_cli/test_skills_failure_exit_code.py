@@ -1,7 +1,7 @@
 """A failed ``hermes skills install|update|uninstall|snapshot import`` exits non-zero (#118301).
 
 The Desktop spawns these as detached actions and learns their outcome only from the
-exit code (``apps/desktop/src/store/hub-actions.ts`` toasts on non-zero), so a refused
+exit code (a UI client toasts on non-zero), so a refused
 action that exits 0 reads as "the button did nothing" while the reason sits unread in
 the action log. The scan gate is the common case: a blocked install used to print
 "Not installed: ..." and exit 0.
