@@ -1,4 +1,4 @@
-"""``manage_catalog`` install targets: catalog plugins and hub skills, installed through the card.
+"""``connectors.catalog`` install targets: catalog plugins and hub skills, installed through the card.
 
 ``prepare`` resolves every id against the plugin catalog (the Plugins tab's resolver) or the skills
 hub and fills the row the card draws; an id that does not resolve, or a plugin this OS cannot run,

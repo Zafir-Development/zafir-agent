@@ -554,8 +554,8 @@ class ToolRegistry:
     def _toolset_has_exposable_tools(self, toolset: str, entries: list[ToolEntry]) -> bool:
         """True when at least one tool in *toolset* would be exposed. Mirrors
         :meth:`get_definitions` per-tool filtering so doctor/banners agree with runtime:
-        mixed toolsets (``terminal`` + desktop-only ``read_terminal``) must not be gated
-        by the first ``check_fn``."""
+        a mixed toolset (only some members service-gated by ``check_fn``) must not be
+        gated by the first ``check_fn``."""
         memo: dict[Callable, bool] = {}
         members = (e for e in entries if e.toolset == toolset)
         return any(not e.check_fn or _memo_check(e.check_fn, memo) for e in members)

@@ -85,8 +85,8 @@ def note_inert_pinned_tools(agent: Any, built_for_this_surface: list[str]) -> No
 
     The freeze keeps a previous surface's tools on the wire deliberately — removing them is the one
     thing that would still re-prefill the request behind the preserved prompt — so the model has
-    to be TOLD they are inert here, or it plans around a ``focus_pane`` a terminal turn can only
-    answer with ``tool_error("desktop only")``."""
+    to be TOLD they are inert here, or it plans around a tool this interface cannot service and
+    only learns that from a failed call."""
     from tools.mcp_tool_agent import agent_tool_names
     surface_names = set(built_for_this_surface)
     inert = [name for name in agent_tool_names(agent) if name not in surface_names]

@@ -62,8 +62,8 @@ TRANSITIONS: dict[tuple[str, TargetState], dict[TargetState, Actor]] = {
     ("mcp", _S.initiated): {_S.connected: _A.backend_watcher, _S.failed: _A.backend_watcher, _S.skipped: _A.user},
     ("mcp", _S.failed): {_S.initiated: _A.user, _S.skipped: _A.user},
 }
-# ``manage_catalog`` rows install like an MCP entry: approve starts the host's install, the install
-# worker witnesses ``connected``, Try again re-runs a failed row.
+# ``connectors.catalog`` plugin/skill rows install like an MCP entry: approve starts the host's
+# install, the install worker witnesses ``connected``, Try again re-runs a failed row.
 for _kind in ("plugin", "skill"):
     for (_k, _from), _edges in list(TRANSITIONS.items()):
         if _k == "mcp":

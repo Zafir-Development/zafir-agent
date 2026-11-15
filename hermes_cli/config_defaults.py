@@ -1994,10 +1994,8 @@ DEFAULT_CONFIG = {
             "defer": [
                 "computer_use", "session_search", "image_generate",
                 "todo_list", "process_manage", "cronjob_manage", "browser_vault",
-                # Desktop GUI surface (desktop_ui, project and catalog toolsets)
-                "drive_preview", "gui_tour", "desktop_preview", "annotate_preview", "manage_catalog",
-                "show_tip", "desktop_project", "close_terminal",
-                "set_theme", "read_terminal", "read_window_below", "focus_pane",
+                # Projects (client sessions: TUI)
+                "desktop_project",
             ],
         },
         # Remote connector discovery/lifecycle through the Nous tool gateway.

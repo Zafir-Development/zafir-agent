@@ -717,11 +717,6 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
         self._global_watch_lock = threading.Lock()
         self._global_watch_window_start = self._global_watch_tripped_until = 0.0
         self._global_watch_window_hits = self._global_watch_suppressed_during_trip = 0
-        # Driver-installed sinks (desktop gateway): on_output(session, chunk) streams
-        # live output from reader threads; on_close(session_or_none, process_id) drops
-        # a read-only terminal tab without killing the process.
-        self.on_output = None
-        self.on_close = None
         self._heartbeat_thread: Optional[threading.Thread] = None
 
     # ── heartbeat ───────────────────────────────────────────────────────────
@@ -790,14 +785,6 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
         while lines and any(noise in lines[0] for noise in ProcessRegistry._SHELL_NOISE_SUBSTRINGS):
             lines.pop(0)
         return "\n".join(lines)
-
-    def _emit_output(self, session: ProcessSession, chunk: str) -> None:
-        """Forward a chunk to the live-output sink; called from reader threads, never raises."""
-        sink = self.on_output
-        if sink is None or not chunk:
-            return
-        with suppress(Exception):
-            sink(session, chunk)
 
     def _check_watch_patterns(self, session: ProcessSession, new_text: str) -> None:
         """Scan a freshly-read chunk for watch patterns and queue notifications.
@@ -1455,7 +1442,6 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
                         if len(session.output_buffer) > session.max_output_chars:
                             session.output_buffer = session.output_buffer[-session.max_output_chars:]
                     self._check_watch_patterns(session, delta)
-                    self._emit_output(session, delta)
 
                 check = env.execute(
                     f"kill -0 \"$(cat {q(pid_path)} 2>/dev/null)\" 2>/dev/null; echo $?", timeout=5)
@@ -1530,14 +1516,13 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
             pty.wait, lambda: pty.exitstatus if hasattr(pty, 'exitstatus') else -1)
 
     def _ingest_output(self, session: ProcessSession, text: str, *, unless_exited: bool = False) -> None:
-        """Buffer a freshly-read chunk, then scan watch patterns and stream it live.
+        """Buffer a freshly-read chunk, then scan watch patterns.
         ``unless_exited`` drops the chunk once the session has exited (atomically with a kill)."""
         if not unless_exited:
             session.append_output(text)
         elif not session.append_output_if_running(text):
             return
         self._check_watch_patterns(session, text)
-        self._emit_output(session, text)
 
     def _finish_exited(self, session: ProcessSession, exit_code, reason: str = "exited", source: str = "") -> None:
         """Mark a reader-observed exit (a raced kill keeps its own code/reason) and finish.
@@ -2323,24 +2308,6 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
         session = self.get(session_id)
         pty_enter = "\r\n" if _IS_WINDOWS else "\r"
         return self.write_stdin(session_id, data + (pty_enter if session is not None and session._pty else "\n"))
-
-    def request_close_terminal(self, session_id: str) -> dict:
-        """Ask the desktop GUI to close this process's read-only terminal tab. Does NOT
-        kill the process — output keeps buffering and the tab can be reopened from the
-        status stack. Errors when no UI close sink is wired."""
-        if self.on_close is None:
-            return {"status": "error", "error": "close_terminal is only available in the Hermes desktop app."}
-        # The session may already be finished (or pruned) — the tab can still
-        # linger and be closed, so a missing session is not an error here.
-        try:
-            self.on_close(self.get(session_id), session_id)
-        except Exception as e:
-            return {"status": "error", "error": str(e)}
-        return {
-            "status": "ok", "closed": session_id,
-            "note": "Closed the read-only terminal tab. The process was not killed; "
-                    "its output remains available and the user can reopen the tab "
-                    "from the status stack."}
 
     def close_stdin(self, session_id: str) -> dict:
         """Close a running process's stdin / send EOF without killing the process."""
