@@ -13,3 +13,4 @@
 history/2026-11-09-removal-step-3-desktop/diagram.html
 history/2026-11-10-removal-step-4-dashboard-serve/diagram.html
 history/2026-11-11-removal-step-5-desktop-cli/diagram.html
+history/2026-11-15-removal-step-6-tools-sessions/diagram.html
