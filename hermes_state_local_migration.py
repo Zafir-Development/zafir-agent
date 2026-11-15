@@ -16,6 +16,8 @@ LEGACY_PREFIX = 'gateway.local_legacy.v1:'
 LEGACY_LOCAL_SOURCES = frozenset({'cli', 'tui', 'gui', 'desktop', 'oneshot', 'tool', 'acp'})
 # Legacy labels that are not creation sources of their own (session_policy.SURFACES).
 LEGACY_CREATION_SOURCES = {'desktop': 'gui'}
+# Renderer-era labels: a stored row keeps one as data, but a resumed turn uses a surviving surface.
+LEGACY_CREATION_SOURCES_LABELS = frozenset(LEGACY_CREATION_SOURCES) | {'gui'}
 # Labels a routeless row can carry that never name a chat app: automation and recovery rows, a
 # retired platform, and a third-party WebUI that runs its own agent on this state.db (adopting its rows
 # would legitimise a second writer, so they stay read-only: gateway/session_history_mount.py).
@@ -60,8 +62,14 @@ def legacy_history_row(row):
 
 
 def legacy_creation_source(row):
-    """The creation source an adopted legacy row resumes on (session_policy.SURFACES)."""
-    return 'gui' if client_history_row(row) else LEGACY_CREATION_SOURCES.get(row['source'], row['source'])
+    """The creation source an adopted legacy row resumes on (session_policy.SURFACES).
+
+    Desktop-era rows (``desktop``/``gui``) and routeless client-app chats are historical data: the
+    stored row keeps its label, but a turn resumed on it runs as the surviving local client surface,
+    never as a removed renderer surface (which no longer exists and is refused at create time)."""
+    if client_history_row(row) or row.get('source') in LEGACY_CREATION_SOURCES_LABELS:
+        return 'tui'
+    return row.get('source')
 
 
 def legacy_account_label(row):
