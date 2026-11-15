@@ -1,4 +1,4 @@
-"""Wire contract primitives for the TUI/desktop gateway.
+"""Wire contract primitives for the TUI gateway.
 
 Python is the single source of truth for the JSON-RPC wire: every client→server method
 (params + result), every server→client request (params + result) and every notification

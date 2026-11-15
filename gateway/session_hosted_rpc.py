@@ -94,7 +94,9 @@ class HostedRoomAuthorityRPC:
         agent = dict(config.get('agent') or {})
         agent['disabled_toolsets'] = sorted(
             set(parse_config_string_list(agent.get('disabled_toolsets'))) | {'clarify'})
-        policy = build_policy({'source': 'gui'}, {**config, 'agent': agent}, private_secrets=private)
+        # Seed with a LOCAL creating surface; the room's own label is applied right below. ``gui``
+        # (the old Desktop seed) is no longer a creating surface, and a room is not a desktop chat.
+        policy = build_policy({'source': 'tui'}, {**config, 'agent': agent}, private_secrets=private)
         policy = replace(policy, source='bot_room', platform='bot_room',
                          model=policy.model or _resolve_gateway_model(policy.config()),
                          toolsets=tuple(sorted(set(policy.toolsets) | {'bot_room'})))

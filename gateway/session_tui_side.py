@@ -25,8 +25,7 @@ _RUNTIME_KEYS = ('api_key', 'base_url', 'provider', 'requested_provider', 'api_m
 
 
 def handlers(connection):
-    return {'prompt.background': partial(background, connection), 'prompt.btw': partial(btw, connection),
-            'preview.restart': partial(preview_restart, connection)}
+    return {'prompt.background': partial(background, connection), 'prompt.btw': partial(btw, connection)}
 
 
 def _admit(connection, ref, params, prefix, required='text', optional=()):
@@ -250,51 +249,3 @@ class _SideQuestionStop:
         """Stopped with no fork running: what is left publishes nothing and writes nothing."""
         with self._lock:
             return self.stopped.is_set() and self._fork is None
-
-
-async def preview_restart(connection, ref, params):
-    """Desktop preview pane "restart dev server": a hidden terminal+file agent brings the preview
-    URL's server back up (rules: ``tui_gateway/methods_prompt.py`` ``_PREVIEW_RESTART_RULES``).
-    Detached like ``/bg``; progress rides ``preview.restart.progress``, the answer
-    ``preview.restart.complete`` ``{task_id, text}``. Context is the session's stored transcript."""
-    live, policy, url, task_id = _admit(connection, ref, params, 'preview', required='url',
-                                        optional=('cwd', 'context'))
-    authority = connection.authority
-    cwd, context = (str(params.get(key) or '').strip() for key in ('cwd', 'context'))
-    from gateway.session_local_recovery import transcript_target
-    target = transcript_target(authority, ref)
-    holder = [None]
-
-    def progress(text):
-        if (text := str(text or '').strip()) and (stream := authority.sessions.get(ref.session_id)) is not None:
-            stream.event_stream.publish(ref.session_id, {'task_id': task_id, 'text': text},
-                                        event_type='preview.restart.progress')
-
-    def body():
-        from tui_gateway.agent_callbacks import _preview_restart_history
-        from tui_gateway.methods_prompt import (_final_response_text, _preview_restart_prompt,
-                                                _validated_preview_cwd)
-        preview_cwd = _validated_preview_cwd(cwd)
-        history = _preview_restart_history(authority.db.get_messages_as_conversation(target) if target else [])
-        prompt = _preview_restart_prompt(url, cwd, context, bool(history))
-        with _side_scope(authority, policy, task_id):
-            if preview_cwd:
-                from tools.terminal_tool import register_task_env_overrides
-                register_task_env_overrides(task_id, {'cwd': preview_cwd})
-            try:
-                progress('Starting hidden restart agent')
-                # Deliberately NOT closed via AIAgent.close(): it would kill the background
-                # server this task exists to leave running.
-                agent = _side_agent(authority, policy, live, task_id, enabled_toolsets=['terminal', 'file'],
-                                    disabled_toolsets=None, session_db=None, skip_memory=True,
-                                    tool_start_callback=lambda _id, name, _args: progress(f'Running {name}'))
-                holder[0] = agent
-                result = agent.run_conversation(user_message=prompt, task_id=task_id,
-                                                conversation_history=history or None)
-            finally:
-                with contextlib.suppress(Exception):
-                    from tools.terminal_tool import clear_task_env_overrides
-                    clear_task_env_overrides(task_id)
-        return _final_response_text(result)
-
-    return _spawn(authority, ref, task_id, 'preview.restart.complete', body, holder=holder)

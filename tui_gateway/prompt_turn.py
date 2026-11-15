@@ -649,7 +649,6 @@ def _stage_first_contact_onboarding_note(session: dict, agent, history_empty: bo
             get_hermes_home() / "config.yaml",
             session_history_empty=history_empty,
             install_has_prior_sessions=_install_has_prior_sessions(session),
-            onboarding_run_active="setup_beat" in (getattr(agent, "valid_tool_names", None) or ()),
         )
         if not note:
             return
@@ -713,7 +712,6 @@ def _prepare_turn_input(sid: str, session: dict, st: _TurnRun, text: Any, images
     # Install-first-message onboarding (#82750): gateway parity for the TUI/Desktop
     # surface — no-op unless this is the install's very first message ever.
     _stage_first_contact_onboarding_note(session, agent, not st.history)
-    _stage_onboarding_turn_note(sid, agent, not st.history)
     cwd = _session_cwd(session)
     _register_session_cwd(session)
     cols = session.get("cols", 80)
@@ -811,11 +809,6 @@ def _invoke_agent(
         run_kwargs["persist_user_display_metadata"] = display_metadata
     if turn_author and "turn_author" in run_params:
         run_kwargs["turn_author"] = turn_author
-    if "prelude" in run_params:
-        from agent.onboarding_session import onboarding_prelude
-        prelude = onboarding_prelude(agent, st.history)
-        if prelude is not None:
-            run_kwargs["prelude"] = prelude
     _adopt_submit_user_row(session, agent, run_kwargs["persist_user_message"], text)
     # Live-rename hook: auto-titling fires inside the turn prologue.
     _title_key = session.get("session_key") or sid

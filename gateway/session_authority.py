@@ -362,10 +362,6 @@ class SessionAuthority:
         from gateway.session_local_recovery import local_history, prepare_history, transcript_target
         # The lineage read stays off the loop and the lock; without history the target is resolved under it.
         prepared = await prepare_history(self, ref) if history else None
-        from gateway.session_onboarding import keep_from_discard
-        # The last await before the viewer joins: a fresh launch's claim is taken back with no yield
-        # before the join, and a delete already past it answers not_found below.
-        await keep_from_discard(self, ref.session_id)
         # A delete or eviction can land during those awaits: re-check, so it answers not_found, never a KeyError.
         self.authorize(actor, ref, 'session:read')
         live = self.sessions[ref.session_id]

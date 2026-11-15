@@ -1,8 +1,8 @@
 """Prompt submission, attachments, side agents, approvals, batch-clarify locks (``methods_prompt.py``)
 and voice / wake-word control (``methods_voice.py``).
 
-``profile`` rides on every method here: the desktop routes session-scoped calls through
-``requestForOwnedSession`` / ``requestForBot`` / ``requestGatewayForProfile``, which stamp it.
+``profile`` rides on every method here: a client routing a session-scoped call to a named
+profile stamps it.
 """
 
 from __future__ import annotations
@@ -17,9 +17,8 @@ from .registry import method
 
 
 class ClientSurface(WireEnum):
-    """Where the user typed this turn; anything else is treated as the plain app window."""
+    """Where the user typed this turn; anything else is treated as the plain composer."""
 
-    hud = "hud"
     voice_live = "voice-live"
 
 
@@ -244,16 +243,6 @@ method("prompt.btw", params=SideAgentParams, result=TaskIdResult,
        doc="Side question over a snapshot of the live conversation; the answer arrives as btw.complete.")
 
 
-class PreviewRestartParams(SessionParams):
-    url: str
-    cwd: str | None = None
-    context: str | None = None  # the preview pane's console output
-
-
-method("preview.restart", params=PreviewRestartParams, result=TaskIdResult,
-       doc="Spawn a hidden agent that brings the desktop preview's dev server back up.")
-
-
 # ── batch clarify locks / proxied request answers ─────────────────────────────────────────────
 
 
@@ -415,7 +404,7 @@ method("voice.tts", params=VoiceTtsParams, result=VoiceTtsResult,
 
 
 class WakeStartParams(Params):
-    """``surface`` names the caller ("tui" | "gui"); ``persist`` is the explicit gesture that also
+    """``surface`` names the caller ("tui"); ``persist`` is the explicit gesture that also
     flips ``wake_word.enabled`` on; ``client_capture`` asks for PCM streamed via wake.feed."""
 
     surface: str | None = None

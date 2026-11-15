@@ -27,10 +27,9 @@ def _resolve_model() -> str:
 
 
 def _resolve_session_platform() -> str:
-    """``HERMES_DESKTOP=1`` without ``HERMES_DESKTOP_TERMINAL`` → "desktop" (chat panel; the agent then
-    suggests TUI-only slash commands), else "tui" (embedded terminal pane or standalone ``hermes --tui``)."""
-    desktop = is_truthy_value(os.environ.get("HERMES_DESKTOP"))
-    return "desktop" if desktop and not is_truthy_value(os.environ.get("HERMES_DESKTOP_TERMINAL")) else "tui"
+    """The agent surface of a session this factory builds: the TUI. The env-selected Desktop chat
+    platform is gone with the Desktop (a plugin/gateway caller's explicit source stays its own)."""
+    return "tui"
 
 
 def _resolve_session_source(explicit: str | None) -> str:
@@ -321,12 +320,11 @@ def _load_tool_progress_mode() -> str:
     return mode if mode in _TOOL_PROGRESS_MODES else "all"
 
 
-def _gui_surface_toolsets(platform: str) -> set[str]:
+def _client_surface_toolsets() -> set[str]:
     """Toolsets that exist because of the CLIENT (off ``_HERMES_CORE_TOOLS``; this is the one gate).
-    ``platform`` is the SESSION's source, never a process env var: the desktop may drive a URL/cloud
-    backend where ``HERMES_DESKTOP`` is unset (AGENTS.md surface rule)."""
+    The set is the same on every remaining surface (the TUI): ``CLIENT_SURFACE_TOOLSETS``."""
     from toolsets import CLIENT_SURFACE_TOOLSETS
-    return set(CLIENT_SURFACE_TOOLSETS) if platform == "desktop" else {"project"}
+    return set(CLIENT_SURFACE_TOOLSETS)
 
 
 def _with_session_toolsets(selection, platform: str) -> list[str]:
@@ -334,13 +332,12 @@ def _with_session_toolsets(selection, platform: str) -> list[str]:
 
     The fold-in happens after ``_get_platform_tools`` already subtracted ``agent.disabled_toolsets``,
     so the same subtraction is applied to the fold-in itself — otherwise ``disabled_toolsets:
-    [project]`` is a no-op on desktop/TUI, the only surfaces where the client toolsets exist
-    (#54433). ``desktop_ui`` is kept regardless: it is the client's own control surface, not a
-    model toolset."""
-    fold_in = _gui_surface_toolsets(platform) - set(selection)
+    [project]`` is a no-op on the TUI, the only remaining surface where the client toolsets exist
+    (#54433)."""
+    fold_in = _client_surface_toolsets() - set(selection)
     disabled = set(_load_disabled_toolsets() or [])
     if disabled:
-        fold_in -= disabled - {"desktop_ui"}
+        fold_in -= disabled
     return [*selection, *sorted(fold_in)]
 
 
@@ -448,8 +445,8 @@ def _load_disabled_toolsets() -> list[str] | None:
 
     The classic CLI (``cli_init_mixin``) and the messaging gateway both forward this list to
     AIAgent, where ``get_tool_definitions`` strips the named toolsets even out of composite
-    defaults like ``hermes-cli`` (#17309). The desktop/TUI gateway historically dropped it, so
-    e.g. ``disabled_toolsets: [browser]`` silently had no effect on Desktop — the only consumer
+    defaults like ``hermes-cli`` (#17309). The TUI gateway historically dropped it, so
+    e.g. ``disabled_toolsets: [browser]`` silently had no effect there — the only consumer
     was ``_get_platform_tools``'s name-level subtraction, which can't reach inside a composite
     default toolset (#44499).
     """
@@ -487,7 +484,7 @@ def _tool_progress_enabled(sid: str) -> bool:
 
 _TOOL_LIFECYCLE_UI_TOOLS = frozenset({
     "clarify", "manage_connections", "setup_mcp",
-    "image_generate", "manage_catalog", "delegate_task", "setup_beat", "set_theme",
+    "image_generate", "delegate_task",
     # File edits are the turn's deliverable — the diff card the user reviews.
     "edit_file", "patch", "write_file",
 })
@@ -496,11 +493,9 @@ _TOOL_LIFECYCLE_UI_TOOLS = frozenset({
 def _tool_lifecycle_required_for_ui(name: str) -> bool:
     """Interactive UI / card surfaces, not optional chrome.
 
-    Desktop renders these from the tool-call part itself, so suppressing the
-    lifecycle hides the turn's deliverable entirely (`isCardTool` /
-    `isFileEditTool` in the desktop renderer must stay in
-    sync with `_TOOL_LIFECYCLE_UI_TOOLS`): clarify / connection cards are
-    consent surfaces, image_generate / manage_catalog / delegate_task draw the
+    The TUI renders these from the tool-call part itself, so suppressing the
+    lifecycle hides the turn's deliverable entirely: clarify / connection cards are
+    consent surfaces, image_generate / delegate_task draw the
     thing the user asked for, and file edits are the diff the user reviews.
     The start and complete guards both consult this set, so a card's
     `tool.complete` can never arrive without its `tool.start`.
@@ -636,7 +631,6 @@ def _make_agent(
     synthetic = maybe_build_synthetic_agent(session_id or key, model_override)
     if synthetic is not None:
         return synthetic
-    from agent.onboarding_session import onboarding_toolsets
     from run_agent import AIAgent
     # MCP discovery runs in a daemon thread (a dead server can't freeze the shell); the agent snapshots its tool
     # list once, so briefly wait for in-flight discovery. Dashboard /api/ws uses mcp_startup; TUI stdio uses entry.
@@ -665,8 +659,7 @@ def _make_agent(
         reasoning_config=(
             reasoning_config_override if reasoning_config_override is not None else _load_reasoning_config(str(model or ""))),
         service_tier=service_tier_override if service_tier_override is not None else _load_service_tier(),
-        enabled_toolsets=onboarding_toolsets(_load_enabled_toolsets(platform),
-                                             session_db if session_db is not None else _get_db(), session_id or key),
+        enabled_toolsets=_load_enabled_toolsets(platform),
         disabled_toolsets=_load_disabled_toolsets(),
         # OpenRouter provider_routing prefs (gateway + CLI parity).
         providers_allowed=_pr.get("only"), providers_ignored=_pr.get("ignore"), providers_order=_pr.get("order"),

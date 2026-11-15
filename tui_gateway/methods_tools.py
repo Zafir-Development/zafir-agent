@@ -318,7 +318,6 @@ def _refresh_live_sessions(home=None, *, preserve_prefix: bool = False,
     launch home). ``preserve_prefix``: append-only rebuild inside a live conversation. ``plugin_note``:
     ``(plugin_key, text)`` queued once per session for its next tool result or turn
     (``agent/plugin_live_notes.py``)."""
-    from agent.onboarding_session import carry_onboarding_toolset
     from hermes_constants import hermes_home_key
     want = hermes_home_key(home) if home is not None else None
     with _sessions_lock:
@@ -329,7 +328,7 @@ def _refresh_live_sessions(home=None, *, preserve_prefix: bool = False,
         agent = sess["agent"]
         try:
             with _session_profile_runtime_scope(sess):
-                enabled = carry_onboarding_toolset(_load_enabled_toolsets(getattr(agent, "platform", None)), agent)
+                enabled = _load_enabled_toolsets(getattr(agent, "platform", None))
                 disabled = _load_disabled_toolsets()
                 refresh(agent, enabled_override=enabled, disabled_override=disabled,
                         quiet_mode=True, preserve_prefix=preserve_prefix)

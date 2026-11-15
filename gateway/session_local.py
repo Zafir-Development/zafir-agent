@@ -274,18 +274,16 @@ def staged_creation_follows(authority, actor, request_id):
 
 
 def stage_local_session(authority, actor, params, *, trusted_policy=None, trusted_secrets=None, skills_prompt=None,
-                        client_local=False, desktop_local=False):
+                        client_local=False):
     """Everything before the creation commit: the existing session's ref on an exact retry, else the
     receipt ``commit_local_session`` writes (the async RPC commits it off the owner loop).
     ``client_local``: the gateway's own proof that the client is on this host (its connection redeemed a
-    ticket minted over the private control socket), never a value the client sends. ``desktop_local``:
-    that client is also the Desktop app (``process_identity.local_host_client``); a Desktop chat
-    records it so its turns run as work for the local Desktop (``session_policy.local_desktop_turn``)."""
+    ticket minted over the private control socket), never a value the client sends."""
     if actor.profile_id != authority.profile_id:
         raise RuntimeStoreError('profile_mismatch')
     if 'session:create' not in actor.capabilities:
         raise RuntimeStoreError('permission_denied')
-    from gateway.session_policy import build_policy, BYPASS_FIELDS, FOLLOW_ADOPTED, LOCAL_DESKTOP_CHAT
+    from gateway.session_policy import build_policy, BYPASS_FIELDS, FOLLOW_ADOPTED
     from gateway.run import _resolve_gateway_model
     from dataclasses import replace
     private_secrets = dict(trusted_secrets or {})
@@ -312,7 +310,7 @@ def stage_local_session(authority, actor, params, *, trusted_policy=None, truste
             policy = replace(policy, request_json=json.dumps(
                 {**json.loads(policy.request_json), 'model_requested': raw_model, 'route_derived': derived},
                 sort_keys=True))
-        marks = {LOCAL_DESKTOP_CHAT: True} if desktop_local and policy.source == 'gui' else {}
+        marks = {}
         if policy.model is None:
             from hermes_cli.anon_auth import GUEST_MODEL
             policy = replace(policy, model=_resolve_gateway_model(policy.config()) or None)

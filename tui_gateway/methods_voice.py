@@ -388,7 +388,7 @@ def _voice_status_payload(**extra) -> dict:
 # ── Wake word ("Hey Hermes"): process-global detector (one mic). The first eligible transport
 # to call wake.start owns it until stop, disconnect, or stream failure; on detection we emit
 # wake.detected and the client opens a session + its own capture. The detector yields the mic
-# to voice.record (pause/resume) and to the desktop's browser mic (wake.pause/resume RPCs).
+# to voice.record (pause/resume) and to a client-captured stream (wake.pause/resume RPCs).
 _wake_lock = threading.Lock()
 _wake_owner_transport: Optional[Transport] = None
 _wake_owner_surface = ""
@@ -478,11 +478,11 @@ def _frame_fields(frame: dict) -> dict:
     return {"sample_rate": frame.get("sample_rate", 16000), "frame_length": frame.get("frame_length", 1280)}
 
 
-def _wake_probe(cfg: dict, params: dict, surface: str) -> tuple[str, dict]:
+def _wake_probe(cfg: dict, params: dict) -> tuple[str, dict]:
     """``(capture_mode, requirements)``; capture stamped so the probe matches what would arm.
-    Desktop (gui) prefers client capture (Mac mic → wake.feed PCM); CLI/TUI stay local."""
+    A client that can capture prefers its own mic (PCM → wake.feed); CLI/TUI stay local."""
     from tools.wake_word import check_wake_word_requirements, resolve_capture_mode
-    prefer_client = surface in ("gui", "desktop") or bool(params.get("client_capture"))
+    prefer_client = bool(params.get("client_capture"))
     capture_mode = resolve_capture_mode(cfg, prefer_client=prefer_client)
     return capture_mode, check_wake_word_requirements({**cfg, "capture": capture_mode})
 
@@ -524,19 +524,11 @@ def _(rid, params: dict) -> dict:
     """What the calling client handles. ``server_requests: true`` marks this connection as one that answers
     server→client requests; a WebSocket client that never sends it gets every such request failed fast
     instead of stalling the agent for the deadline (#112548)."""
-    from hermes_cli.process_identity import local_host_client
     from tui_gateway import server_requests
     from tui_gateway.contracts import registry as contracts
     transport = _caller_transport()
-    # Each call updates what it names: the Desktop sends ``desktop_local`` on its own, so a backend older
-    # than the field refuses only that call and keeps the ``server_requests`` it already accepted.
     if "server_requests" in params:
         server_requests.advertise(transport, bool(params.get("server_requests")))
-    if "desktop_local" in params and hasattr(transport, "auth_identity"):
-        transport.desktop_local = local_host_client(transport.auth_identity, params.get("desktop_local"))
-        if transport.desktop_local:
-            from tui_gateway import server
-            server.begin_local_desktop_boot()
     return _ok(rid, {"server_requests": sorted(contracts.SERVER_REQUESTS), "declines_not_shown": True,
                      "canonical_clarify_batch": True})
 
@@ -544,13 +536,13 @@ def _(rid, params: dict) -> dict:
 @method("ping")
 def _(rid, params: dict) -> dict:
     """Cheapest liveness probe, answered on the WS reader thread (works while every agent is mid-turn)
-    so the desktop can tell a half-open socket after sleep/wake."""
+    so a client can tell a half-open socket after sleep/wake."""
     return _ok(rid, {"pong": True})
 
 
 @method("wake.start")
 def _(rid, params: dict) -> dict:
-    """Arm the wake-word listener for the calling surface ("tui" | "gui"); ``{started: False,
+    """Arm the wake-word listener for the calling surface ("tui"); ``{started: False,
     reason}`` when disabled/owned/not ready. ``persist: true`` (explicit gesture) also flips
     ``wake_word.enabled`` on; auto-arm callers omit it."""
     global _wake_owner_transport, _wake_owner_surface
@@ -566,7 +558,7 @@ def _(rid, params: dict) -> dict:
     except Exception as e:
         return _err(rid, 5026, f"wake module unavailable: {e}")
     cfg = load_wake_word_config()
-    capture_mode, reqs = _wake_probe(cfg, params, surface)
+    capture_mode, reqs = _wake_probe(cfg, params)
     # Requirements first: a gesture on an un-armable setup must refuse WITHOUT flipping
     # wake_word.enabled — else config says on while nothing can arm.
     if not reqs["available"]:
@@ -626,7 +618,7 @@ def _(rid, params: dict) -> dict:
 
 @method("wake.pause")
 def _(rid, params: dict) -> dict:
-    """Release the mic (e.g. while the desktop's browser captures audio)."""
+    """Release the mic (e.g. while the client captures audio and feeds it via wake.feed)."""
     try:
         from tools.wake_word import pause_listening
         paused = pause_listening(owner=_caller_transport())
@@ -652,7 +644,7 @@ def _(rid, params: dict) -> dict:
             audio_is_silent, detector_frame_info, get_input_device_status, is_listening,
             load_wake_word_config, owns_listener, silent_audio_hint)
         cfg = load_wake_word_config()
-        probe_capture, reqs = _wake_probe(cfg, params, str(params.get("surface") or "").strip().lower())
+        probe_capture, reqs = _wake_probe(cfg, params)
         owner, owner_surface = _wake_owner_snapshot()
         owned_by_caller = owns_listener(_caller_transport())
         listening = owned_by_caller and is_listening()
@@ -664,7 +656,7 @@ def _(rid, params: dict) -> dict:
         if silent and not hint:
             hint = silent_audio_hint(input_device)
         # Effective capture: prefer the *armed* detector over config/auto, else with capture:auto
-        # a bare status probe reports "local" and the desktop never reattaches the PCM feeder.
+        # a bare status probe reports "local" and the client never reattaches the PCM feeder.
         frame = detector_frame_info()
         if owned_by_caller and (frame.get("external_audio") or listening):
             capture = "client" if frame.get("external_audio") else "local"

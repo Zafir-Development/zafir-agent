@@ -1,11 +1,9 @@
 """Record of who carries inference, for ``setup.status`` and ``setup.ready``.
 
-It runs once per process on a daemon thread: on the gateway, and when a local client first connects
-(``tui_gateway.methods_onboarding.begin_local_desktop_boot``). It never creates an identity: the
+It runs once per process on a daemon thread: on the gateway boot. It never creates an identity: the
 welcome-trial claim (``hermes_cli.welcome_trial``) and the first hosted connector action are the only
-creators. On a local backend it first records a
-fresh install's onboarding decision (``onboarding_run.latch_first_install``) and settles a claim cut
-off before its marker write (``welcome_trial.settle_interrupted_claim``). Then it inventories
+creators. It first settles a claim cut off before its marker write
+(``welcome_trial.settle_interrupted_claim``). Then it inventories
 credentials cheap-first, resolves which provider carries inference, records the answer in process
 memory, and tells every connected client with one ``setup.ready`` event. ``free_tier.status`` and
 ``setup.status`` read the record; provider resolution never reaches the portal.
@@ -63,8 +61,6 @@ _lock = threading.Lock()
 _record: Optional[SetupRecord] = None
 _done = threading.Event()
 _started = False
-_settled = False  # the bootstrap recorded the install and settled the claim (``_settle_install``)
-_resettle_lock = threading.Lock()
 # ``(mtime_ns, size)`` of the files the inventory reads, taken by the inventory that built the
 # current record; ``reconcile_record`` re-inventories only when they moved.
 _inventory_stamp: Optional[tuple] = None
@@ -113,17 +109,15 @@ def reconcile_record() -> Optional[SetupRecord]:
         if _record is not record:  # a retry replaced it meanwhile; its inventory is newer
             return _record
         _record = refreshed
-    _due_changed()
     _broadcast(refreshed)
     return refreshed
 
 
 def reset_for_tests() -> None:
-    global _record, _started, _settled, _inventory_stamp
+    global _record, _started, _inventory_stamp
     with _lock:
         _record = None
         _started = False
-        _settled = False
         _inventory_stamp = None
         _done.clear()
 
@@ -192,7 +186,7 @@ def run_bootstrap(*, announce: bool = True) -> SetupRecord:
     """Settle an interrupted claim -> inventory -> resolve inference -> record ->
     broadcast. Idempotent per process: a second call returns the existing record. Never raises.
     ``announce=False`` skips the ``setup.ready`` event."""
-    global _record, _started, _settled
+    global _record, _started
     with _lock:
         if _record is not None:
             return _record
@@ -202,53 +196,24 @@ def run_bootstrap(*, announce: bool = True) -> SetupRecord:
                 return _record
         _started = True
 
-    settled = _settle_install()
+    _settle_claim()
     record = _build_record(other=_inventory_other_providers())
     with _lock:
-        _record, _settled = record, settled
+        _record = record
         _done.set()
     if announce:
         _broadcast(record)
     return record
 
 
-def _settle_install() -> bool:
-    """Record a fresh install and settle the guest's claim; True when neither step failed. A failure is
-    logged: onboarding.state still answers live, and the record still says who carries inference."""
-    settled = True
-    try:
-        from hermes_cli import anon_auth
-        from hermes_cli.onboarding_run import latch_first_install
-        if anon_auth.on_local_host_backend():
-            latch_first_install()
-    except Exception:
-        settled = False
-        logger.warning("onboarding: could not record the first-install decision", exc_info=True)
+def _settle_claim() -> None:
+    """Settle a welcome-trial claim cut off before its marker write; a failure is logged and the
+    record still says who carries inference."""
     try:
         from hermes_cli.welcome_trial import settle_interrupted_claim
         settle_interrupted_claim()
     except Exception:
-        settled = False
         logger.warning("free tier: could not settle an interrupted claim", exc_info=True)
-    return settled
-
-
-def resettle_after_failed_boot() -> None:
-    """The local Desktop connected again to a process whose bootstrap could not settle the install:
-    try those steps again and rebuild the record when they pass. Nothing before the bootstrap
-    finished or once it settled."""
-    global _settled
-    with _lock:
-        unsettled = _record is not None and not _settled
-    if not unsettled or not _resettle_lock.acquire(blocking=False):  # one retry at a time
-        return
-    try:
-        if _settle_install():
-            with _lock:
-                _settled = True
-            refresh_record()
-    finally:
-        _resettle_lock.release()
 
 
 def refresh_record(*, announce: bool = True) -> Optional[SetupRecord]:
@@ -260,16 +225,9 @@ def refresh_record(*, announce: bool = True) -> Optional[SetupRecord]:
     record = _build_record(other=_inventory_other_providers())
     with _lock:
         _record = record
-    _due_changed()
     if announce:
         _broadcast(record)
     return record
-
-
-def _due_changed() -> None:
-    from hermes_cli import onboarding_due
-
-    onboarding_due.invalidate()
 
 
 def _broadcast(record: SetupRecord) -> None:
@@ -278,12 +236,3 @@ def _broadcast(record: SetupRecord) -> None:
         _broadcast_global_event(SETUP_READY_EVENT, record.as_payload())
     except Exception as exc:  # no serve process (plain CLI): nobody to tell
         logger.debug("setup.ready not broadcast: %s", exc)
-
-
-def start_background_bootstrap() -> threading.Thread:
-    """Run on a daemon thread so the inventory never delays the socket."""
-    from agent.memory_provider import spawn_context_thread
-
-    thread = spawn_context_thread(run_bootstrap, name="free-tier-bootstrap")
-    thread.start()
-    return thread

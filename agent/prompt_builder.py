@@ -611,48 +611,6 @@ STEER_CHANNEL_NOTE = (
 )
 
 
-def hud_surface_note(valid_tool_names: set[str] | None = None,
-                     deferred_tool_names: frozenset[str] | set[str] = frozenset()) -> str:
-    """Per-turn note for a message typed into the desktop's floating HUD ("this"/"here" = the app behind it).
-
-    A per-turn fact, not a platform (one session alternates between app window and HUD), so it rides the
-    model-bound message, never the byte-stable system prompt. Each sentence is gated on the tool it names (an
-    unknown tool name invites a hallucinated call); without read_window_below the whole note is withheld.
-    ``deferred_tool_names`` are tools this session reaches only through the tool_call bridge (the default
-    tool_search defer list holds the desktop tools): they count as available, and the note says to invoke
-    them via tool_call, since a direct call to a deferred name is rejected as an unknown tool.
-    """
-    direct = valid_tool_names or set()
-    deferred = set(deferred_tool_names) - direct
-    names = direct | deferred
-    if "read_window_below" not in names:
-        return ""
-    gated = (
-        (True,
-         "[Note: this message came from HUD mode — a small floating Hermes "
-         "window sitting over whatever the user is actually working in, so an "
-         'unqualified "this" or "here" usually means the app behind the HUD '
-         "rather than anything inside Hermes. read_window_below identifies that app."),
-        (True,
-         "They move the HUD from app to app mid-conversation, so one you identified on an earlier turn is "
-         "still a live target: a reference that does not fit the window below may name one from a turn or two "
-         "ago, and a single message can span both."),
-        ("computer_use" in names,
-         "Prefer carrying the work out in that same app — computer_use "
-         "takes its name in `app` — over pulling the task into a surface of your own."),
-        ("computer_use" in names and "browser_navigate" in names,
-         "When the app underneath is a browser, that means driving the "
-         "user's browser rather than opening yours with browser_navigate."),
-        (True, "This is a prior, not a rule: when the request names its own target, follow the request."),
-    )
-    note = " ".join(text for ok, text in gated if ok)
-    named = ("read_window_below", "computer_use") if "computer_use" in names else ("read_window_below",)
-    bridged = [name for name in named if name in deferred]
-    if bridged:
-        note += f" Call {' and '.join(bridged)} through the tool_call bridge (deferred behind tool search)."
-    return note + "]"
-
-
 # Models whose system prompt is sent as the 'developer' role (stronger instruction-following weight);
 # swapped at the API boundary in _build_api_kwargs().
 DEVELOPER_ROLE_MODELS = ("gpt-5", "codex")
@@ -681,25 +639,6 @@ PLATFORM_HINTS = {
         "are NOT intercepted here (they print as literal text) — deliver a file by stating its absolute path "
         "or URL in plain text."
     ),
-    "desktop": (
-        # Every claim verified against the shipping renderer (inline-preview-directive.tsx). Widget text is
-        # recipe-first: HOW (an inline widget IS a ::preview'd HTML file) and WHY (the frame injects the theme
-        # prelude first; width adopts the first measured span). setup_mcp is taught by its own tool schema.
-        "You are chatting inside the Hermes desktop app, a graphical chat surface. Markdown renders with full GitHub "
-        "flavor (tables, syntax-highlighted code, math via $...$, task lists, callouts). Deliver files by writing "
-        "MEDIA:/absolute/path/to/file — any file type: images/audio/video render inline, everything else becomes a "
-        "card with Download and preview buttons. Remote image URLs render via ![alt](url); local files ONLY via MEDIA: "
-        "(local markdown images are blocked). Inline widget/chart (living IN the chat): write an HTML file, then put "
-        "::preview{file=\"path.html\"} alone on its own line (plugins can register more ::name{...} directives). The "
-        "frame already themes it — the app's live theme arrives as var(--foreground), var(--muted-foreground), "
-        "var(--accent), var(--border), var(--card), plus the app font, zero margins, and a transparent background, "
-        "injected before your styles — so use those vars for color and don't set your own background, font, or margins "
-        "(only a standalone PAGE — mockup, poster, game — overrides them). The frame sizes itself to your content: "
-        "height live, width from the content's first measured span — lay content flush left with no centering wrappers "
-        "or it measures full-bleed. Widgets talk back: data-hermes-send=\"prompt\" on any clickable element (or "
-        "window.hermes.send(\"prompt\")) sends that prompt as a hidden user turn — answer it by updating the widget's "
-        "file, not with prose."
-    ),
     "api_server": (
         "You're responding through an API server. The rendering layer is unknown — assume plain text. No markdown "
         "formatting (no asterisks, bullets, headers, code fences). Treat this like a conversation, not a document. "
@@ -709,16 +648,15 @@ PLATFORM_HINTS = {
         "intercepts nothing — a MEDIA: tag there renders as literal text exposing a raw host filesystem path. For "
         "those cases, state the plain file path in your response text instead of a MEDIA: tag."
     ),
-    # No "webui" hint on purpose: nothing constructs platform="webui" (the dashboard chat resolves to
-    # 'desktop' or 'tui'). If a real WebUI chat surface ships, write a hint from its actual renderer.
+    # No "webui" hint on purpose: nothing constructs platform="webui" (the TUI is 'tui'). If a real
+    # WebUI chat surface ships, write a hint from its actual renderer.
 }
 
 # Telegram rich-messages extension — injected only with
 # ``platforms.telegram.extra.rich_messages: true`` (gateway.* or top-level).
 # NOTE: a "webui" hint lived here until 2026-08-29. It was a ghost (verified in the all-platform hint audit,
-# PR #97873): no code path constructs platform="webui" — the dashboard chat resolves to 'desktop' or 'tui'
-# (tui_gateway/server.py:_resolve_session_platform), and the browser chat tab is an xterm.js PTY hosting the
-# TUI, not an HTML chat renderer. Its content (tables/LaTeX/Mermaid, MEDIA: rich previews incl. Excalidraw)
+# PR #97873): no code path constructs platform="webui" — the remaining chat surface is the TUI ('tui'), not an
+# HTML chat renderer. Its content (tables/LaTeX/Mermaid, MEDIA: rich previews incl. Excalidraw)
 # described a renderer that does not exist anywhere in web/. If a real WebUI chat surface ships, write a
 # hint from its actual renderer — do not resurrect this text.
 TELEGRAM_RICH_MESSAGES_HINT = (
@@ -1655,8 +1593,8 @@ def discover_context_files(cwd_path: Path) -> list[tuple[str, str, Path, str]]:
 
 
 def _project_context_suppressed(cwd: Optional[str], cwd_path: Path, allow_install_tree_fallback: bool) -> bool:
-    """A FALLBACK-picked cwd inside the Hermes install tree must not gain system-prompt authority (the desktop
-    default would load this repo's contributor AGENTS.md). An explicitly configured cwd is honored verbatim —
+    """A FALLBACK-picked cwd inside the Hermes install tree must not gain system-prompt authority (it would
+    load this repo's contributor AGENTS.md). An explicitly configured cwd is honored verbatim —
     the Hermes tree is a legitimate workspace when the user deliberately points a session at it — and
     CLI-style surfaces pass allow_install_tree_fallback=True because their launch dir IS the user's shell cwd
     (developing Hermes in-tree). See #64590."""

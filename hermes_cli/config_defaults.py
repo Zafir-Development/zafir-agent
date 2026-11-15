@@ -2313,8 +2313,6 @@ DEFAULT_CONFIG = {
     "onboarding": {
         "seen": {},
         "profile_build": "ask",  # first-ever message: ask = offer; off = plain intro only
-        # Desktop first run, root profile only (onboarding_run.py): None = fresh install; true = next launch; false = done
-        "run": None,
     },
     # Privacy-safe aggregate metrics in this profile's local telemetry dir. Collection (`enabled`)
     # and upload to Nous (`send`) are separate keys that every consent surface sets together; see

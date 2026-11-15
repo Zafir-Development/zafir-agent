@@ -18,7 +18,7 @@ from __future__ import annotations
 from pydantic import Field
 
 from .base import JsonValue, Payload, WireEnum
-from .common import MessageReaction, PlanGauge, SessionLiveInfo, SubagentStatus, ToolLabel, ToolLabelKind, Usage
+from .common import PlanGauge, SessionLiveInfo, SubagentStatus, ToolLabel, ToolLabelKind, Usage
 from .config_free_tier_control import FreeTierChallengePayload, SessionControlSnapshot
 from .registry import event
 
@@ -83,27 +83,8 @@ class SetupReadyPayload(OpenPayload):
     finished_at: float
 
 
-class OnboardingOutcome(WireEnum):
-    done = "done"
-    skipped = "skipped"
-    replaced = "replaced"
-    deleted = "deleted"
-
-
-class OnboardingEndedPayload(Payload):
-    """``agent/onboarding_record.py::_transition``: the run ``run_id`` stopped being in progress.
-    ``stored_session_id`` is its chat at the compression tip. ``done``: the first-task card was answered;
-    ``skipped``: Skip setup; ``replaced``: a rerun opened a new run; ``deleted``: its chat was deleted."""
-
-    run_id: str
-    stored_session_id: str
-    outcome: OnboardingOutcome
-
-
-event("onboarding.ended", OnboardingEndedPayload,
-      doc="A first-run onboarding run ended; sent to every connected window.")
 event("setup.ready", SetupReadyPayload,
-      doc="The free-tier bootstrap finished (broadcast); the desktop's setup gate reads the record.")
+      doc="The free-tier bootstrap finished (broadcast); a client's setup gate reads the record.")
 
 
 event("free_tier.challenge", FreeTierChallengePayload,
@@ -506,18 +487,6 @@ event("notification.show", NotificationShowPayload, doc="Show / replace a keyed 
 event("notification.clear", NotificationClearPayload, doc="Withdraw the notice with this key.")
 
 
-class TipShowPayload(Payload):
-    """``tools/tip_tool.py``."""
-
-    selector: str
-    text: str
-    title: str | None = None
-    side: str | None = None
-
-
-event("tip.show", TipShowPayload, doc="Point at a desktop element with a one-line tip bubble.")
-
-
 # ── session lifecycle ─────────────────────────────────────────────────────────────────────────
 
 
@@ -607,20 +576,6 @@ class SideAgentCompletePayload(Payload):
 
 event("background.complete", SideAgentCompletePayload, doc="A /background side agent finished.")
 event("btw.complete", SideAgentCompletePayload, doc="A /btw side question was answered.")
-event("preview.restart.complete", SideAgentCompletePayload, doc="The hidden preview-restart agent finished.")
-
-
-class PreviewRestartProgressPayload(Payload):
-    """``methods_prompt`` restart body + ``agent_callbacks._preview_restart_callbacks``."""
-
-    task_id: str
-    text: str
-    level: str | None = None
-
-
-event("preview.restart.progress", PreviewRestartProgressPayload, doc="Progress line from the preview-restart agent.")
-
-
 # ── subagents (tool_progress._progress_subagent) ──────────────────────────────────────────────
 
 
@@ -706,61 +661,6 @@ event("moa.reference", MoaReferencePayload, doc="One MoA reference model's outpu
 event("moa.aggregating", MoaAggregatingPayload, doc="The MoA aggregator started.")
 event("moa.progress", MoaProgressPayload, doc="MoA reference fan-out progress (n/total).")
 event("moa.phase", MoaPhasePayload, doc="MoA phase transition (currently only ``aggregator``).")
-
-
-# ── desktop GUI (tools/desktop_ui emitters) ──────────────────────────────────────────────────
-
-
-class PreviewOpenPayload(Payload):
-    """``tools/open_preview_tool.py``."""
-
-    url: str
-    label: str = ""
-
-
-class PreviewClosePayload(Payload):
-    """``tools/preview_tool.py`` / ``tools/close_preview_tool.py``; ``url`` '' closes every tab."""
-
-    url: str = ""
-
-
-event("preview.open", PreviewOpenPayload, doc="Open a URL / file in the desktop preview pane.")
-event("preview.close", PreviewClosePayload, doc="Close the preview pane or one tab.")
-
-
-class PaneRevealPayload(OpenPayload):
-    """``tools/focus_pane_tool.py``."""
-
-    pane: str
-
-
-event("pane.reveal", PaneRevealPayload, doc="Focus / reveal a named desktop pane.")
-
-
-class MessageReactionPayload(Payload):
-    """``tools/react_to_message_tool.py``."""
-
-    row_id: int
-    reactions: list[MessageReaction]
-    role: str
-
-
-event("message.reaction", MessageReactionPayload, doc="The agent reacted to a message; paint it live.")
-
-
-class TerminalOutputPayload(Payload):
-    """``session_notifications`` process_registry.on_output."""
-
-    process_id: str
-    chunk: str
-
-
-class TerminalClosePayload(Payload):
-    process_id: str
-
-
-event("agent.terminal.output", TerminalOutputPayload, doc="Output chunk from an agent-owned background process.")
-event("terminal.close", TerminalClosePayload, doc="An agent-owned background process closed.")
 
 
 class BrowserProgressPayload(Payload):
@@ -871,16 +771,16 @@ event("bot_relay.outbox.pending", ChangeSignalPayload, doc="A bot-relay outbox e
 __all__ = [
     "BillingBlock", "BillingStepUpVerificationPayload", "BrowserProgressPayload", "ChangeSignalPayload", "ErrorPayload",
     "ErrorSurface", "FreeTierChallengePayload", "GatewayReadyPayload",
-    "MessageCompletePayload", "MessageInterimPayload", "MessageReaction", "MessageReactionPayload", "MoaAggregatingPayload",
+    "MessageCompletePayload", "MessageInterimPayload", "MoaAggregatingPayload",
     "MoaPhasePayload", "MoaProgressPayload", "MoaReferencePayload", "NoticePayload",
-    "NotificationClearPayload", "NotificationShowPayload", "OpenPayload", "PaneRevealPayload",
-    "PetChangedPayload", "PetGenerateProgressPayload", "PetHatchProgressPayload", "PreviewClosePayload",
-    "PreviewOpenPayload", "PreviewRestartProgressPayload", "ReactionPayload", "ResumePhaseStatus",
+    "NotificationClearPayload", "NotificationShowPayload", "OpenPayload",
+    "PetChangedPayload", "PetGenerateProgressPayload", "PetHatchProgressPayload", "ReactionPayload",
+    "ResumePhaseStatus",
     "ReviewSummaryPayload", "SessionControlSnapshot", "SessionControlUpdatePayload",
     "SessionReclaimedPayload", "SessionResumeProgressPayload", "SessionTitlePayload", "SessionUsagePayload",
     "SetupReadyPayload", "SideAgentCompletePayload", "SkinPayload", "StatusUpdatePayload",
-    "StreamDeltaPayload", "SubagentEventPayload", "SubagentOutputTailEntry", "TerminalClosePayload",
-    "TerminalOutputPayload", "TipShowPayload", "TodoUpdatedPayload", "ToolCompletePayload",
+    "StreamDeltaPayload", "SubagentEventPayload", "SubagentOutputTailEntry", "TodoUpdatedPayload",
+    "ToolCompletePayload",
     "ToolGeneratingPayload", "ToolLabel", "ToolLabelKind", "ToolOutputRiskPayload", "ToolProgressPayload",
     "ToolStartPayload",
     "TurnStatus", "VoicePartialPayload", "VoiceStatusPayload",

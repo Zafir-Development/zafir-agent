@@ -28,11 +28,6 @@ FOLLOW_SECTIONS = ('model', 'providers', 'custom_providers', 'fallback_providers
 # A chat created on the welcome trial's model carries it too (``stage_local_session``), so a provider the user
 # connects later replaces that model.
 FOLLOW_ADOPTED = 'follow_adopted'
-# A Desktop chat its creator's connection declared local (``process_identity.local_host_client``): its
-# turns run as work for the local Desktop (``local_desktop_turn``). Owner-set in the policy's own config, so
-# an exact create retry from a socket whose declaration has not landed carries the same creation request,
-# and ``launch_request`` never echoes it.
-LOCAL_DESKTOP_CHAT = 'desktop_local'
 # A launch field's state as a committed session edit left it, in the policy's own config: ``True`` the
 # session chose it (``/reasoning <level>``, a model pick carrying one), ``False`` a reset gave it back to
 # the profile. Either wins over the creation request (the launch identity, never rewritten) and the older
@@ -83,36 +78,49 @@ _TURN_PROFILE: ContextVar = ContextVar('follow_profile_read', default=None)  # (
 # Creation label -> agent surface. ``tool`` (third-party integrations, ``hermes chat --source tool``) and
 # ``oneshot`` (finite ``chat -q`` / ``-z`` runs) run as the CLI but keep their own stored label, so human
 # pickers hide them (INTERNAL_LISTING_SOURCES).
-SURFACES = {'cli': 'cli', 'tui': 'tui', 'gui': 'desktop', 'acp': 'acp', 'tool': 'cli', 'oneshot': 'cli'}
+SURFACES = {'cli': 'cli', 'tui': 'tui', 'acp': 'acp', 'tool': 'cli', 'oneshot': 'cli'}
 # ``tool`` and ``oneshot`` stay stored under their own labels so pickers can hide them.
 # Creation labels of the owner's own chats: the only LOCAL routes that carry OpenAI Daybreak (agent.daybreak),
 # the approved account's own access (no third-party or downstream use). Not ``tool`` (third-party
 # integrations), ``acp`` (editor clients), or the ``bot_room`` / ``a2a`` policies hosted rooms and peers stage.
-DAYBREAK_LABELS = frozenset({'cli', 'tui', 'gui', 'oneshot'})
+DAYBREAK_LABELS = frozenset({'cli', 'tui', 'oneshot'})
 # Every other creation label is rewritten to ``source='local'`` on peer refresh.
 _KEEP_STORED_LABEL = frozenset({'tool', 'oneshot'})
 STORED_AS_LOCAL = frozenset(SURFACES) - _KEEP_STORED_LABEL
 # Routing labels and the accounting placeholder: never a creating surface.
 _NOT_A_SURFACE = frozenset({None, '', 'local', 'unknown'})
+# Historical surface labels only: an earlier build created a Desktop chat as policy label ``gui`` and
+# stored its agent surface as ``desktop``. ``gui`` is no longer a creating label (a create request with
+# it is refused by ``build_policy``), but those stored rows stay readable: the picker's two names and
+# the stored ``created_source`` keep their historical meaning.
+_LEGACY_CREATED_SURFACES = {'gui': 'desktop', 'desktop': 'desktop'}
 
 
 def created_surface(label):
     """``created_source`` for a policy or live label.
 
     ``local`` and ``unknown`` are not surfaces. A label stored as ``local`` maps
-    through ``SURFACES`` (``gui`` is ``desktop``). Any other label, including
-    ``tool`` and ``oneshot``, is kept as itself: created_source is provenance.
+    through ``SURFACES`` (``acp`` stays itself). The historical ``gui`` / ``desktop``
+    pair keeps its one agent surface. Any other label, including ``tool`` and
+    ``oneshot``, is kept as itself: created_source is provenance.
     """
     if label in _NOT_A_SURFACE:
         return None
+    if label in _LEGACY_CREATED_SURFACES:
+        return _LEGACY_CREATED_SURFACES[label]
     return SURFACES[label] if label in STORED_AS_LOCAL else label
 
 
-# Policy label and agent surface for one conversation, keyed by either name: ``--source gui``
-# and ``--source desktop`` are the same rows. ``tool`` and ``oneshot`` are not aliases of
-# ``cli`` here: they keep their own stored label.
+# Policy label and agent surface for one conversation, keyed by either name (each stored label is its
+# own surface on the remaining CLI/TUI/ACP routes). ``tool`` and ``oneshot`` are not aliases of ``cli``
+# here: they keep their own stored label.
 SURFACE_GROUPS = {name: group for group in (frozenset({label, SURFACES[label]}) for label in STORED_AS_LOCAL)
                   for name in group}
+# Read-only historical aliases: rows an earlier build created as ``gui`` stored ``desktop`` as their
+# agent surface. No new gui session can be created, but the CLI picker's ``--source gui`` and
+# ``--source desktop`` must still find those rows.
+_LEGACY_GROUP = frozenset(_LEGACY_CREATED_SURFACES)
+SURFACE_GROUPS.update({name: _LEGACY_GROUP for name in _LEGACY_GROUP})
 
 
 def _refuse(field, detail=None):
@@ -679,8 +687,8 @@ def _resolve_toolsets(params, config, source, safe_mode, coding_posture=False, b
                 # Picking a disabled server must not match nothing and fall through to every enabled one.
                 why = 'is disabled in config' if isinstance(configured[server], dict) else 'has no usable config entry'
                 _refuse('toolsets', f'MCP server {server!r} {why}')
-        if 'desktop_ui' in explicit and source != 'gui':
-            _refuse('toolsets', f'desktop_ui is only available on the Desktop, not on {source}')
+        if 'desktop_ui' in explicit:
+            _refuse('toolsets', 'desktop_ui is not available on any surface')
         config.setdefault('platform_toolsets', {})['acp' if source == 'acp' else 'cli'] = explicit
     posture = None
     if explicit is None and coding_posture:
@@ -693,16 +701,14 @@ def _resolve_toolsets(params, config, source, safe_mode, coding_posture=False, b
         effective = {t for name in enabled for t in resolve_toolset(name)}
         if not requested <= effective:
             _refuse('toolsets', f"not available on this surface: {', '.join(sorted(requested - effective))}")
-    if explicit is None and source in {'tui', 'gui'}:
+    if explicit is None and source == 'tui':
         # Same surface toolsets as the native TUI factory, without its env inference.
         # The fold-in lands after _get_platform_tools subtracted agent.disabled_toolsets, so
         # subtract again or `disabled_toolsets: [project]` is a no-op here (#54433).
-        # desktop_ui is the client's own control surface, not a model toolset.
         from agent.skill_utils import parse_config_string_list
         from toolsets import CLIENT_SURFACE_TOOLSETS
         disabled = set(parse_config_string_list((config.get('agent') or {}).get('disabled_toolsets')))
-        surface = set(CLIENT_SURFACE_TOOLSETS) if source == 'gui' else {'project'}
-        enabled |= surface - (disabled - {'desktop_ui'})
+        enabled |= set(CLIENT_SURFACE_TOOLSETS) - disabled
     if safe_mode:
         # Plugin toolsets are user customizations; the safe worker never imports them.
         from hermes_cli.tools_config import _get_plugin_toolset_keys
@@ -1032,33 +1038,8 @@ def _valid_client_env(value, kind: type = str):
 
 
 def policy_turn_toolsets(authority, policy, config, session_id):
-    """A local turn's toolsets: the policy's current set, plus ``onboarding`` for an onboarding chat
-    (``agent.onboarding_session.onboarding_chat_toolsets``)."""
-    from agent.onboarding_session import onboarding_chat_toolsets
-    return onboarding_chat_toolsets(list(policy.current_toolsets(config)), getattr(authority, 'db', None), session_id)
-
-
-def local_desktop_turn(runner, source, scope):
-    """*scope* (the profile scope a turn enters), also marked as work for the local Desktop when the
-    turn belongs to a Desktop chat its creator's connection declared local (``stage_local_session``);
-    any other turn gets *scope* untouched. Read from the live policy without raising: a cold policy
-    is restored, or refused, by the turn."""
-    from gateway.config import Platform
-    policy = None
-    if getattr(source, 'platform', None) == Platform.LOCAL:
-        policy = getattr(runner._adapter_for_source(source), 'policies', {}).get(source.chat_id)
-    # The request_json mark: a chat an earlier build created, which stamped it into the creation request.
-    if policy is None or policy.source != 'gui' or not any(
-            json.loads(raw).get(LOCAL_DESKTOP_CHAT) is True for raw in (policy.config_json, policy.request_json)):
-        return scope
-    return _serving_local_host_within(scope)
-
-
-@contextmanager
-def _serving_local_host_within(scope):
-    from hermes_cli.process_identity import serving_local_host
-    with scope, serving_local_host(True):
-        yield
+    """A local turn's toolsets: the policy's current set."""
+    return list(policy.current_toolsets(config))
 
 
 def policy_for_source(runner, source):
