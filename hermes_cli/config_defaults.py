@@ -1239,7 +1239,7 @@ DEFAULT_CONFIG = {
     # voice session. Off by default; toggle with /wake.
     "wake_word": {
         "enabled": False,
-        "surface": "auto",  # eligible surface: "auto" (first claimant) | "cli" | "tui" | "gui"
+        "surface": "auto",  # eligible surface: "auto" (first claimant) | "cli" | "tui"
         "input_device": None,  # PortAudio input device index/name; null = process default
         "capture": "auto",  # auto | local | client (a client streams mic via wake.feed)
         # auto: first platform-supported engine (openwakeword, sherpa, porcupine).
