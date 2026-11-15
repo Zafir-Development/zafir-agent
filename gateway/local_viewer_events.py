@@ -97,7 +97,6 @@ def wire(turn, agent) -> dict:
         def connection_callback(payload):
             # Fire-and-forget: the tool thread waits on its own operation; the card answers by op_id.
             publish("connection.request", dict(payload or {}))
-            return None
         agent.connection_callback = connection_callback
     return previous
 
