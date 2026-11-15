@@ -39,7 +39,7 @@ def _explicit_run() -> bool | None:
 
 
 def latch_first_install() -> bool:
-    """The desktop backend's first boot on a fresh install records the decision: ``onboarding.run:
+    """The first boot on a fresh install records the decision: ``onboarding.run:
     true`` and the trial reserved. A launch that misses the run (a late answer, the app closed, the
     user chatting first) then stays due until a run ends. True when it wrote them."""
     from hermes_cli.install_state import probe, reserve_trial

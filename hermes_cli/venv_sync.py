@@ -428,8 +428,8 @@ def prepare_launch(project_root: Path, argv: list[str]) -> Path | None:
     PM's successful input stamp signals a finished dependency sync; the
     ``source-completion-pending`` marker signals the tail still owed after it,
     so a tail that failed is retried on the next launch WITHOUT rebuilding
-    dependencies that are already current. Old updaters need not write a
-    marker (and cannot accidentally clear this obligation).
+    dependencies that are already current. A caller that cannot write the
+    marker keeps the obligation (it cannot accidentally clear it).
     A supervised child leaves that tail to ``hermes update`` when its dependencies
     are current: its manager restarts it on every start, so a sticky marker would
     re-run the tail (and its environment builds) on each boot until the disk fills.
@@ -449,7 +449,7 @@ def prepare_launch(project_root: Path, argv: list[str]) -> Path | None:
     command = command_argv(argv)
     if (command[:1] == ["pm"]
             or _METADATA_FLAGS & set(argv)
-            # This is the recovery path shown by the Desktop when a pending update has
+            # This is the recovery path shown when a pending update has
             # fenced the gateway. Completing that same tail first can take minutes and
             # leaves the user without the fence diagnosis or a usable restart remedy.
             or _is_read_only_gateway_status(command)
@@ -589,7 +589,7 @@ def _finish_source_update(root: Path, *, current: bool, pending: Path) -> None:
         except Exception:
             # The pending marker is armed before this sync. A sync failure is
             # therefore an automatic completion failure too: without recording
-            # it, every Desktop relaunch bypasses the retry backoff and starts
+            # it, every relaunch bypasses the retry backoff and starts
             # the same expensive repair again.
             if not completed:
                 _record_completion_attempt(root, failed=True, inputs=_sync_inputs_digest(root))

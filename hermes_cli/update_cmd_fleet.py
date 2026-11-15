@@ -210,12 +210,12 @@ def _receipt_reports_stale_runtime(receipt: dict, expected_sha: str | None = Non
 
 
 _SUPERVISED_SERVE_BACKENDS = frozenset(
-    {"manual-serve", "desktop", "desktop-ssh", "systemd", "launchd", "windows-service", "service"}
+    {"manual-serve", "systemd", "launchd", "windows-service", "service"}
 )
 # Backends whose supervisor restarts the process without any updater bookkeeping. ``manual-serve``
 # is excluded: it owes a durable handoff (``defer_manual_serve``) before it stops counting.
-# The inventory writer classifies a serve/dashboard row as launchd, desktop, desktop-ssh, systemd (a unit's
-# MainPID, #141021) or manual-serve (``update_inventory._collect_ledger_runtimes``); ``windows-service`` and
+# The inventory writer classifies a serve/dashboard row as launchd, systemd (a unit's MainPID,
+# #141021) or manual-serve (``update_inventory._collect_ledger_runtimes``); ``windows-service`` and
 # ``service`` mirror ``_SUPERVISED_SERVE_BACKENDS`` for parity only — they are set for gateway rows alone.
 _SUPERVISOR_OWNED_SERVE_BACKENDS = _SUPERVISED_SERVE_BACKENDS - {"manual-serve"}
 
@@ -239,7 +239,7 @@ def _receipt_owed_gateways(receipt: dict, pending_manual: list[dict]) -> set[tup
         kind = entry.get("kind", default_kind)
         profile = entry.get("profile")
         # A serve/dashboard row is outside the gateway matrix's evidence, not evidence against the
-        # gateways it does cover: a supervised backend (desktop, systemd, launchd) is its
+        # gateways it does cover: a supervised backend (systemd, launchd) is its
         # supervisor's to restart, and a manual-serve row outside the retention list is the serve
         # obligation mechanism's — a host running a dashboard carries such a row in every receipt,
         # and a blanket veto made the gateway warning permanently undischargeable there (#115090).
@@ -365,12 +365,11 @@ def _marker_only_restart_obsolete() -> bool:
     the checkout is the only code it can be held to. With no live gateway at all, the inventory-less marker
     asks the host instead (``update_cmd_fleet_gatewayless``): it clears when no profile left a
     gateway that should be running and every live runtime is supervisor-owned or handed off, so a
-    Desktop-only install stops failing every later update (#118742).
+    serve-only install stops failing every later update (#118742).
 
-    A serve/dashboard row whose supervisor owns the restart (Desktop backend, systemd/launchd
-    unit, Windows service) is outside the gateway matrix's evidence, not evidence against it —
-    the same boundary ``_receipt_owed_gateways`` draws for receipts (#115090) and the restart
-    phase draws for the Desktop backend (#111494). Counting it made the warning permanently
+    A serve/dashboard row whose supervisor owns the restart (systemd/launchd unit, Windows
+    service) is outside the gateway matrix's evidence, not evidence against it — the same
+    boundary ``_receipt_owed_gateways`` draws for receipts (#115090). Counting it made the warning permanently
     undischargeable on every host that runs a dashboard. A manual-serve row still needs its
     durable handoff (``defer_manual_serve``), and an unclassified backend stays fail-closed.
     Discharging here strands nobody: the same row is still accounted at update time by
@@ -389,7 +388,7 @@ def _marker_only_restart_obsolete() -> bool:
         return False
     if owed is not None and not owed:
         # A pull that recorded no gateway runtime owes no restart; clearing avoids the
-        # stuck "Fleet restart incomplete" loop on Desktop-hosted (no-service) installs.
+        # stuck "Fleet restart incomplete" loop on installs with no service-managed gateway.
         _clear_fleet_restart_pending_marker()
         logger.debug("Fleet-restart-pending marker discharged: no gateway obligation recorded")
         return True
@@ -682,12 +681,6 @@ def _fleet_restart_skip_reason(plan) -> str | None:
             and _live_fleet_current_rows() is not None):
         return "every running gateway already serves the checkout code"
     return None
-
-
-def _run_pending_fleet_restart() -> bool:
-    """Historical retry hook; new retries use the ordinary completion owner."""
-    from hermes_cli._old_updater import stop_for_relaunch
-    stop_for_relaunch(incomplete=True)
 
 
 def _systemctl(cmd: list, *, timeout: float):

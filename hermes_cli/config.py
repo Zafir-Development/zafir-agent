@@ -1,14 +1,6 @@
 """Configuration management for Hermes Agent: config.yaml / .env loading, saving,
 validation, migration, and the ``hermes config`` command."""
 
-# Stale-module bridge — must run before ANY import below can bind a root-level symbol.
-# A pre-handoff updater purges only package prefixes after the pull, so a root module
-# (``utils``) stays cached from the OLD tree; the first fresh consumer of its new symbols
-# dies with ImportError before any later heal point is reached. See hermes_cli.stale_modules.
-from hermes_cli.stale_modules import drop_stale_root_modules
-
-drop_stale_root_modules()
-
 import copy
 import difflib
 import json
@@ -56,21 +48,6 @@ from hermes_cli.config_read_errors import (
     _yaml_error_location)
 
 logger = logging.getLogger(__name__)
-
-
-def is_uv_tool_install() -> bool:
-    # Shim to stop the old updater doing work until relaunch, not select uv tool.
-    return False
-
-
-def is_unsupported_install_method(method: str) -> bool:
-    # Shim to stop the old updater doing work until relaunch. no legacy detection.
-    return False
-
-
-def format_unsupported_install_warning(method: str) -> str:
-    # Shim to stop the old updater doing work until relaunch. no obsolete advice.
-    return ""
 
 
 class InvalidUserConfigError(RuntimeError):
@@ -2434,17 +2411,6 @@ def _note_policy(setter: str, raw: Any) -> None:
         note(hermes_home_key(), raw)
 
 
-def _parse_env_value(raw_value: str) -> str:
-    """Frozen compat surface name (tests/compat/old_updater_surface.json).
-
-    Pre-PM updaters lazy-import ``hermes_cli.config._parse_env_value`` after the
-    checkout swap. The tokenizer moved to ``agent.secret_scope._parse_env_value``
-    (c849bc383a), so this forwards there — behavior-preserving by construction.
-    """
-    from agent.secret_scope import _parse_env_value as _parse
-
-    return _parse(raw_value)
-
 
 def invalidate_env_cache() -> None:
     """Drop the ``.env`` memo so the next ``load_env()`` sees a write even on coarse-mtime filesystems
@@ -2715,7 +2681,7 @@ def save_env_value(key: str, value: str):
 
 def custom_endpoint_key_env(identity: str) -> str:
     """Env var name holding a custom endpoint's API key.
-    ``identity`` is the endpoint's own id (Desktop endpoint id, or ``host:port`` for CLI setup),
+    ``identity`` is the endpoint's own id (``host:port`` for CLI setup),
     so two endpoints on one host get separate slots. The fixed ``HERMES_CUSTOM_`` prefix keeps the
     name POSIX-valid when the slug starts with a digit (``save_env_value`` rejects those)."""
     slug = re.sub(r"[^A-Z0-9]+", "_", str(identity or "").upper()).strip("_")
@@ -3900,8 +3866,8 @@ def platform_manifest_secret_scan(home: Optional[Path] = None) -> tuple[frozense
 
 def _inject_platform_plugin_env_vars() -> frozenset[str] | None:
     """Populate OPTIONAL_ENV_VARS from platform plugin manifests (bundled AND user-installed) so
-    Teams / IRC / Google Chat and third-party platforms are configurable in the ``hermes config`` /
-    Desktop Gateway form without the core knowing they exist. Failures are swallowed so a
+    Teams / IRC / Google Chat and third-party platforms are configurable in the ``hermes config``
+    form without the core knowing they exist. Failures are swallowed so a
     malformed plugin.yaml can't break CLI import. Returns the bundled manifests' secret names, or
     None when a bundled manifest could not be read (the policy then re-reads strictly).
     """

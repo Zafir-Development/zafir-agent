@@ -6,15 +6,15 @@ name, the settings it already read, its data directory and tool names, so the mi
 
 * ``hermes update`` — for every profile home that shares the venv (primary; runs where the venv was
   just rebuilt anyway).
-* agent init — when the configured provider cannot be found at all, once per process (Desktop
-  users update through the app and never run ``hermes update`` by hand). After a failed attempt,
+* agent init — when the configured provider cannot be found at all, once per process (a launch
+  that never runs ``hermes update`` still migrates). After a failed attempt,
   starts skip it for :data:`STARTUP_RETRY_SECONDS`, doubling with each further failure up to
-  :data:`STARTUP_RETRY_MAX_SECONDS` (``hermes update`` always retries): every ``hermes chat``, cron
-  run and Desktop restart otherwise paid the network round trip again and showed the same failure.
+  :data:`STARTUP_RETRY_MAX_SECONDS` (``hermes update`` always retries): every ``hermes chat`` and cron
+  run otherwise paid the network round trip again and showed the same failure.
 
 Both install the catalog entry at its reviewed pin through the normal plugin install path (kill
 list, dependency constraints, enable), never a custom source. Every outcome — installed, refused,
-failed, absent from the catalog — reaches the user (terminal, Desktop, chat platform), never only
+failed, absent from the catalog — reaches the user (terminal, chat platform), never only
 ``agent.log``: a provider that silently stays missing is lost memory.
 """
 
@@ -143,7 +143,7 @@ def _pending_provider(home: Path, *, say: Callable[[str], None]) -> Optional[str
 def _install_command(name: str, home: Path) -> str:
     """The exact command that installs *name* into *home*. ``-p`` is dropped only for the default
     home while no sticky profile is set: a bare command run from a shell targets the sticky
-    profile, never the home of the agent (Desktop, gateway, ``hermes -p``) that printed it."""
+    profile, never the home of the agent (gateway, ``hermes -p``) that printed it."""
     from hermes_cli.profiles import get_active_profile
     from hermes_constants import profile_name_for_home
     profile = profile_name_for_home(home)
@@ -187,7 +187,7 @@ def _interactive() -> bool:
 
 
 def _unattended_consent() -> bool:
-    """Without a terminal (Desktop, gateway, ``hermes update`` from a script) nobody can answer the
+    """Without a terminal (gateway, ``hermes update`` from a script) nobody can answer the
     dependency prompt, so every provider that declares Python deps would fail to migrate. The
     configured ``memory.provider`` plus ``security.allow_lazy_installs`` (read for the active home,
     i.e. the one being migrated) is the same consent that let the bundled provider install its deps

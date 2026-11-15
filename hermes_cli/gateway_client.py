@@ -23,8 +23,8 @@ RESUME_KEY_MISMATCH = ("--api-key on resume must be the key this session was lau
                        "A session never switches keys: start a new one (without --resume) to use a different key.")
 # Canonical ``/compress`` answers only after the summary call(s) and the commit: a long session's
 # summary routinely takes more than 30 s (``auxiliary.compression.timeout`` defaults to 120 s per
-# request, ``compression.context_total_ceiling_seconds`` to 600 s). Same budget as Desktop's
-# ``SESSION_COMPRESS_TIMEOUT_MS`` so every surface gives up at the same point.
+# request, ``compression.context_total_ceiling_seconds`` to 600 s). Same budget as the TUI's
+# own compress timeout so every surface gives up at the same point.
 COMPRESS_RPC_TIMEOUT = 660
 # A full event queue parks the socket reader; a consumer that takes no event for this long has
 # stalled and is failed. Same bound as the owner's own send deadline (``tui_gateway/ws.py``).

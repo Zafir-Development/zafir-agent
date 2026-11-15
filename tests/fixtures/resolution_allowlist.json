@@ -148,11 +148,6 @@
     "kind": "bare_which"
   },
   {
-    "path": "hermes_cli/doctor_platform.py",
-    "symbol": "_macos_desktop_dr",
-    "kind": "bare_which"
-  },
-  {
     "path": "hermes_cli/doctor_tools.py",
     "symbol": "_safe_which",
     "kind": "bare_which"
@@ -218,16 +213,6 @@
     "kind": "bare_which"
   },
   {
-    "path": "hermes_cli/linux_desktop_entry.py",
-    "symbol": "_refresh_hicolor_cache",
-    "kind": "bare_which"
-  },
-  {
-    "path": "hermes_cli/linux_desktop_entry.py",
-    "symbol": "refresh_desktop_databases",
-    "kind": "bare_which"
-  },
-  {
     "path": "hermes_cli/local_runtime/hardware.py",
     "symbol": "_nvidia_smi_path",
     "kind": "bare_which"
@@ -240,46 +225,6 @@
   {
     "path": "hermes_cli/main_container.py",
     "symbol": "exec_in_container",
-    "kind": "bare_which"
-  },
-  {
-    "path": "hermes_cli/main_desktop.py",
-    "symbol": "_desktop_linux_sandbox_fixup",
-    "kind": "bare_which"
-  },
-  {
-    "path": "hermes_cli/main_desktop.py",
-    "symbol": "_desktop_linux_userns_sandbox_available",
-    "kind": "bare_which"
-  },
-  {
-    "path": "hermes_cli/main_desktop.py",
-    "symbol": "_desktop_macos_has_valid_real_signature",
-    "kind": "bare_which"
-  },
-  {
-    "path": "hermes_cli/main_desktop.py",
-    "symbol": "_desktop_macos_local_codesign",
-    "kind": "bare_which"
-  },
-  {
-    "path": "hermes_cli/main_desktop.py",
-    "symbol": "_desktop_macos_relaunchable_fixup",
-    "kind": "bare_which"
-  },
-  {
-    "path": "hermes_cli/main_desktop_tcc.py",
-    "symbol": "_desktop_macos_setup_tcc_identity",
-    "kind": "bare_which"
-  },
-  {
-    "path": "hermes_cli/main_desktop.py",
-    "symbol": "_install_rebuilt_macos_bundles",
-    "kind": "bare_which"
-  },
-  {
-    "path": "hermes_cli/main_desktop.py",
-    "symbol": "cmd_gui",
     "kind": "bare_which"
   },
   {
@@ -334,13 +279,14 @@
   },
   {
     "path": "hermes_cli/source_build.py",
-    "symbol": "_build_desktop_product",
+    "symbol": "run_source_script",
     "kind": "bare_which"
   },
   {
-    "path": "hermes_cli/source_build.py",
-    "symbol": "run_source_script",
-    "kind": "bare_which"
+    "path": "hermes_cli/source_check.py",
+    "symbol": "_installed_git",
+    "kind": "bare_which",
+    "reason": "only asks whether the caller's bare git is on PATH; when it is not (Desktop on a Windows install whose only git is install.ps1's PM-staged copy) it defers to update_pause_record._git_executable, the updater's own resolution"
   },
   {
     "path": "hermes_cli/stdio.py",
@@ -369,23 +315,14 @@
     "reason": "records, as an absolute path, the git this updater already runs (git_cmd[0] on the PATH expose_pm_git extended) so the launch-time repair can rerun it without importing pm"
   },
   {
+    "path": "hermes_cli/update_pause_record.py",
+    "symbol": "_git_executable",
+    "kind": "bare_which",
+    "reason": "gate reads of the paused gateways' checkout run outside the updater, where install.ps1's PM-staged git is not on PATH; falls back to that staged git (moves to hermes_cli._early_recovery._git_executable when #132361 lands)"
+  },
+  {
     "path": "hermes_cli/update_restart_recovery.py",
     "symbol": "_systemd_verified_active",
-    "kind": "bare_which"
-  },
-  {
-    "path": "hermes_cli/web_git.py",
-    "symbol": "_gh",
-    "kind": "bare_which"
-  },
-  {
-    "path": "hermes_cli/web_routers/audio.py",
-    "symbol": "_ffmpeg_s16le_mono",
-    "kind": "bare_which"
-  },
-  {
-    "path": "hermes_cli/web_routers/git.py",
-    "symbol": "_probe_gh_auth",
     "kind": "bare_which"
   },
   {
@@ -426,6 +363,31 @@
   {
     "path": "pm/workspace.py",
     "symbol": "install_node_sidecar",
+    "kind": "bare_which"
+  },
+  {
+    "path": "tools/bot_desktop/browser.py",
+    "symbol": "_system_executable",
+    "kind": "bare_which"
+  },
+  {
+    "path": "tools/bot_desktop/install.py",
+    "symbol": "_run",
+    "kind": "bare_which"
+  },
+  {
+    "path": "tools/bot_desktop/runtime.py",
+    "symbol": "installable",
+    "kind": "bare_which"
+  },
+  {
+    "path": "tools/bot_desktop/runtime.py",
+    "symbol": "missing_binaries",
+    "kind": "bare_which"
+  },
+  {
+    "path": "tools/bot_desktop/runtime.py",
+    "symbol": "package_manager",
     "kind": "bare_which"
   },
   {
@@ -494,8 +456,8 @@
     "kind": "bare_which"
   },
   {
-    "path": "tools/mcp_tool_config.py",
-    "symbol": "_resolve_stdio_command",
+    "path": "tools/file_operations_lint.py",
+    "symbol": "LintMixin._run_managed_node_linter",
     "kind": "bare_which"
   },
   {
@@ -511,6 +473,11 @@
   {
     "path": "tools/mcp_tool_config.py",
     "symbol": "_packaged_npx_entry",
+    "kind": "bare_which"
+  },
+  {
+    "path": "tools/mcp_tool_config.py",
+    "symbol": "_resolve_stdio_command",
     "kind": "bare_which"
   },
   {
@@ -602,52 +569,5 @@
     "path": "tui_gateway/methods_prompt.py",
     "symbol": "_",
     "kind": "bare_which"
-  },
-  {
-    "path": "agent/anthropic_adapter.py",
-    "symbol": "<module>",
-    "kind": "known_path_table"
-  },
-  {
-    "path": "tools/bot_desktop/browser.py",
-    "symbol": "_system_executable",
-    "kind": "bare_which"
-  },
-  {
-    "path": "tools/bot_desktop/install.py",
-    "symbol": "_run",
-    "kind": "bare_which"
-  },
-  {
-    "path": "tools/bot_desktop/runtime.py",
-    "symbol": "missing_binaries",
-    "kind": "bare_which"
-  },
-  {
-    "path": "tools/bot_desktop/runtime.py",
-    "symbol": "package_manager",
-    "kind": "bare_which"
-  },
-  {
-    "path": "tools/bot_desktop/runtime.py",
-    "symbol": "installable",
-    "kind": "bare_which"
-  },
-  {
-    "path": "tools/file_operations_lint.py",
-    "symbol": "LintMixin._run_managed_node_linter",
-    "kind": "bare_which"
-  },
-  {
-    "path": "hermes_cli/update_pause_record.py",
-    "symbol": "_git_executable",
-    "kind": "bare_which",
-    "reason": "gate reads of the paused gateways' checkout run outside the updater, where install.ps1's PM-staged git is not on PATH; falls back to that staged git (moves to hermes_cli._early_recovery._git_executable when #132361 lands)"
-  },
-  {
-    "path": "hermes_cli/source_check.py",
-    "symbol": "_installed_git",
-    "kind": "bare_which",
-    "reason": "only asks whether the caller's bare git is on PATH; when it is not (Desktop on a Windows install whose only git is install.ps1's PM-staged copy) it defers to update_pause_record._git_executable, the updater's own resolution"
   }
 ]

@@ -1,10 +1,10 @@
 """``hermes model`` → Local models: the managed llama.cpp setup, in the terminal.
 
 The flow drives the Local Models service in-process
-(``hermes_cli/local_models_service.py``) so the terminal and the desktop pane run one code path:
+(``hermes_cli/local_models_service.py``) so every surface runs one code path:
 the catalog priced for this machine, quickstart (pinned engine via PM, model download, server
 start, default assignment) and activate for a model already on disk. Progress renders from the
-same job view the desktop polls; Ctrl+C pauses a download, and the next run resumes from the
+same job view the TUI polls; Ctrl+C pauses a download, and the next run resumes from the
 bytes already on disk.
 """
 

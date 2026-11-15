@@ -69,7 +69,7 @@ def gateway_pid_home(pid: int) -> str | None:
     """The home gateway *pid* runs on: its live environment, else the exact-birth ledger witness;
     ``None`` when neither proves one. Discovery, the Windows pause record and its readiness check
     share it, so the home discovery proved is the home the restart debt keeps."""
-    from hermes_cli.dashboard_procs import _hermes_home_for_pid
+    from hermes_cli.process_inventory import _hermes_home_for_pid
     try:
         home = _hermes_home_for_pid(pid)
     except Exception:  # health: allow BLE001 -- tri-state resolver: any environment-read failure is "unknown" and the ledger witness decides
@@ -98,7 +98,7 @@ def partition_gateway_pids_by_scope(pids, scope: set[Path] | None = None) -> tup
             home = None
             if verdict is False:
                 with suppress(Exception):
-                    from hermes_cli.dashboard_procs import _hermes_home_for_pid
+                    from hermes_cli.process_inventory import _hermes_home_for_pid
                     home = _hermes_home_for_pid(pid)
             foreign.append((pid, home))
     return owned, foreign
@@ -113,7 +113,7 @@ def systemd_unit_hermes_home(scope_cmd: list, svc_name: str) -> str | None:
     pid = _unit_main_pid(scope_cmd, svc_name)
     if pid > 0:
         with suppress(Exception):
-            from hermes_cli.dashboard_procs import _hermes_home_for_pid
+            from hermes_cli.process_inventory import _hermes_home_for_pid
             if (home := _hermes_home_for_pid(pid)) is not None:
                 return home
     try:

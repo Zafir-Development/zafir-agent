@@ -301,9 +301,6 @@ def _command_survives_generation_collection(tmp_path, monkeypatch, surface):
             if surface == "legacy":
                 command = [sys.executable, "-I", str(repo / "scripts/hermes-gateway"), "--help"]
                 args = ["gateway", "--help"]
-            elif surface == "ssh":
-                from hermes_cli.windows_ssh_runtime import _resolve_direct_command
-                command = [*_resolve_direct_command(str(launcher)), *args]
             elif surface == "published":
                 result = subprocess.run([str(launcher), "--print-runtime-command", "--", *args],
                                         capture_output=True, text=True, timeout=30, encoding="utf-8", check=False)
@@ -339,14 +336,14 @@ def _command_survives_generation_collection(tmp_path, monkeypatch, surface):
     assert json.loads(receipt)["argv"] == args
 
 
-@pytest.mark.parametrize("surface", ["published", "systemd", "launchd", "ssh", "legacy"])
+@pytest.mark.parametrize("surface", ["published", "systemd", "launchd", "legacy"])
 @pytest.mark.platforms("posix")
 @pytest.mark.spawns_gateway_lookalike
 def test_posix_commands_survive_generation_collection(tmp_path, monkeypatch, surface):
     _command_survives_generation_collection(tmp_path, monkeypatch, surface)
 
 
-@pytest.mark.parametrize("surface", ["published", "ssh"])
+@pytest.mark.parametrize("surface", ["published"])
 @pytest.mark.platforms("windows")
 def test_windows_commands_survive_generation_collection(tmp_path, monkeypatch, surface):
     _command_survives_generation_collection(tmp_path, monkeypatch, surface)

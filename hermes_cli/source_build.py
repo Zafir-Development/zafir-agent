@@ -138,7 +138,7 @@ def _failure_text(exc: BaseException) -> str:
     return f"{type(exc).__name__}: {exc}" if str(exc) else type(exc).__name__
 
 
-def build_update_products(project_root: Path, *, desktop: bool, after_dependencies=None) -> None:
+def build_update_products(project_root: Path, *, after_dependencies=None) -> None:
     """Prepare the selected union once, attempting every independent product.
 
     A failed product never skips the next one; the failures are raised together at the end as
@@ -146,8 +146,8 @@ def build_update_products(project_root: Path, *, desktop: bool, after_dependenci
     ``after_dependencies`` (it must not raise) runs once the Python and Node dependencies are
     prepared, whether or not they succeeded, and before the first product build.
     """
-    # Both current updates and historical takeover reach this in a fresh target
-    # interpreter, never in the updater's pre-sync import graph.
+    # The update tail reaches this in a fresh target interpreter, never in the
+    # updater's pre-sync import graph.
     from hermes_cli.main_install_repair import _install_configured_features_missing_deps
     from hermes_cli.update_stage import publish_stage
 
@@ -218,6 +218,5 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Build source-install frontends")
     parser.add_argument("--source", type=Path, required=True)
-    parser.add_argument("--desktop", action="store_true")
     args = parser.parse_args()
-    build_update_products(args.source.resolve(), desktop=args.desktop)
+    build_update_products(args.source.resolve())

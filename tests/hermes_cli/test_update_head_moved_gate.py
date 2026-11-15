@@ -73,7 +73,6 @@ def _patch_update_deps(monkeypatch, tmp_path, run_side_effect):
         hermes_main, "_resume_windows_gateways_after_update", lambda *a, **k: None
     )
     # Short-circuit the long tail: dependency install + desktop build.
-    monkeypatch.setattr(hermes_main, "_write_update_incomplete_marker", lambda: None)
     monkeypatch.setattr(hermes_main, "_clear_update_incomplete_marker", lambda: None)
     monkeypatch.setattr(main_install_repair, "_clear_update_incomplete_marker", lambda: None)
     # Gateway restart path (called after a successful update).

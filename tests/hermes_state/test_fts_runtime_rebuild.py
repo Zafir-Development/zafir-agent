@@ -26,7 +26,7 @@ import hermes_state_holders
 import hermes_state_schema
 from hermes_state import SessionDB
 from hermes_state_common import FTS_REBUILD_DEFERRAL_KEY, FTS_STALE_KEY, LEGACY_FTS_SQL, LEGACY_FTS_TRIGRAM_SQL, SCHEMA_SQL, _FTS_TRIGGERS
-from hermes_state_dbfile import _concrete_state_db_holder_pids, _is_inactive_orphan_desktop_holder
+from hermes_state_dbfile import _concrete_state_db_holder_pids
 
 
 @pytest.fixture
@@ -110,29 +110,6 @@ class TestRuntimeFtsRebuild:
                 (222, f"{db_path}-shm (deleted)"),
             ],
         ) == [222]
-
-    def test_inactive_orphan_reap_predicate_preserves_live_or_ambiguous_holders(self):
-        common = {
-            "ppid": 1,
-            "age_seconds": 120.0,
-            "min_age_seconds": 60.0,
-            "ephemeral_backend": True,
-            "connection_statuses": [],
-        }
-        assert _is_inactive_orphan_desktop_holder(**common)
-        assert not _is_inactive_orphan_desktop_holder(**{**common, "ppid": 42})
-        assert not _is_inactive_orphan_desktop_holder(
-            **{**common, "age_seconds": 10.0}
-        )
-        assert not _is_inactive_orphan_desktop_holder(
-            **{**common, "ephemeral_backend": False}
-        )
-        assert not _is_inactive_orphan_desktop_holder(
-            **{
-                **common,
-                "connection_statuses": ["ESTABLISHED"],
-            }
-        )
 
     @pytest.mark.parametrize(
         "argv",
@@ -679,66 +656,13 @@ class TestRuntimeFtsRebuild:
         finally:
             reopened.close()
 
-    def test_repeated_deferrals_reap_inactive_orphan_then_rebuild(
-        self, db, tmp_path, monkeypatch
-    ):
-        if not db._fts_enabled:
-            pytest.skip("FTS5 unavailable in this build")
-        db_path = tmp_path / "state.db"
-        db.create_session("s1", source="test")
-        db.append_message("s1", "user", "seed")
-        _corrupt_fts(db_path)
-        monkeypatch.setattr(
-            db,
-            "rebuild_fts",
-            lambda: (_ for _ in ()).throw(sqlite3.DatabaseError("still corrupt")),
-        )
-        db.append_message("s1", "user", "before restart")
-        db.close()
-
-        raw = sqlite3.connect(str(db_path))
-        raw.execute(
-            "INSERT INTO state_meta (key, value) VALUES (?, ?) "
-            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            (
-                FTS_REBUILD_DEFERRAL_KEY,
-                json.dumps({"first_seen": 1.0, "last_seen": 30.0, "attempts": 2}),
-            ),
-        )
-        raw.commit()
-        raw.close()
-
-        holder_scans = iter(([(4242, str(db_path) + "-wal")], []))
-        reaped = []
-        monkeypatch.setattr(
-            SessionDB,
-            "_foreign_state_db_holders",
-            lambda self: next(holder_scans),
-        )
-        monkeypatch.setattr(
-            SessionDB,
-            "_reap_inactive_orphan_desktop_holders",
-            lambda self, holders, *, min_age_seconds: reaped.extend(holders) or [4242],
-        )
-        monkeypatch.setattr(hermes_state_schema.time, "time", lambda: 120.0)
-
-        reopened = SessionDB(db_path=db_path)
-        try:
-            assert reaped == [(4242, str(db_path) + "-wal")]
-            assert reopened._fts_stale is False
-            assert _meta_value(db_path, FTS_STALE_KEY) is None
-            assert _meta_value(db_path, FTS_REBUILD_DEFERRAL_KEY) is None
-            assert reopened.search_messages("before restart")
-        finally:
-            reopened.close()
-
     def test_same_holder_set_across_futile_window_names_holder_and_gateway_safe_remedy(
         self, db, tmp_path, monkeypatch, caplog
     ):
-        """#106393: a supervised peer never satisfies the orphan reap, so the generic
-        'remains blocked ... with the gateway stopped' escalation repeats forever. Once the SAME
-        PID set has blocked the futile window, the record is marked futile, the escalation names
-        the holder's cmdline and a remedy runnable from inside the gateway, and doctor says so."""
+        """#106393: a live peer holder blocks the rebuild, so the generic 'remains blocked ...
+        with the gateway stopped' escalation would repeat forever. Once the SAME PID set has
+        blocked the futile window, the record is marked futile, the escalation names the holder's
+        cmdline and a remedy runnable from inside the gateway, and doctor says so."""
         if not db._fts_enabled:
             pytest.skip("FTS5 unavailable in this build")
         db_path = tmp_path / "state.db"
@@ -753,9 +677,6 @@ class TestRuntimeFtsRebuild:
 
         monkeypatch.setattr(
             SessionDB, "_foreign_state_db_holders", lambda self: [(4242, str(db_path) + "-wal")],
-        )
-        monkeypatch.setattr(
-            SessionDB, "_reap_inactive_orphan_desktop_holders", lambda self, holders, *, min_age_seconds: [],
         )
         monkeypatch.setattr(
             hermes_state_schema, "_read_proc_argv", lambda pid: ["python", "-m", "hermes_cli.main", "serve"], raising=False,

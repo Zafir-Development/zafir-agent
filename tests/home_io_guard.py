@@ -65,12 +65,8 @@ def _contains(path: str, prefix: str) -> bool:
 
 
 class HomeIOGuard:
-    def __init__(self, roots, installed_apps=lambda: ()):
+    def __init__(self, roots):
         self.roots = roots
-        # The machine's installed desktop app (``packaged_gui_app_paths()`` before any test ran):
-        # deleting, replacing or writing into it is refused. Reads stay allowed: several update
-        # paths only probe it.
-        self.installed_apps = installed_apps
         self.checking = threading.local()
         self.directories: dict[int, Path] = {}
 
@@ -98,7 +94,7 @@ class HomeIOGuard:
             # which is not I/O against the home.
             if metadata and (absolute == "/proc" or absolute.startswith("/proc" + os.sep)):
                 return
-            resolved = self._refuse_installed_app_change(value, absolute) if destructive else None
+            resolved = None
             roots = tuple(_normcase(os.fspath(r)) for r in self.roots())
             # Resolving the root itself (get_default_hermes_root's relative_to
             # probe) reads no state; only its contents are guarded.
@@ -138,22 +134,6 @@ class HomeIOGuard:
                     self.refuse(value)
         finally:
             self.checking.active = False
-
-    def _refuse_installed_app_change(self, value, absolute):
-        """Fail on a change to an installed app (already normalized, literal and resolved);
-        returns the resolved path so check() does not resolve it again, or None."""
-        apps = self.installed_apps()
-        if not apps:
-            return None
-        resolved = _normcase(os.path.realpath(absolute))
-        for app in apps:
-            if _within(absolute, app) or _within(resolved, app):
-                import pytest
-                # pytest.fail, not AssertionError: removal helpers catch Exception and would log
-                # the refusal as a warning while the test passed.
-                pytest.fail(f"TEST BUG: changing the REAL installed Hermes desktop app: {value}\n"
-                            "Stub hermes_cli.gui_uninstall.packaged_gui_app_paths to a temporary path.")
-        return resolved
 
     @staticmethod
     def refuse(value):

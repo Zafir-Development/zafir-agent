@@ -1,9 +1,8 @@
 """Centralized logging setup for Hermes Agent.
 
 Log files: agent.log (INFO+, everything), errors.log (WARNING+), gateway.log (INFO+,
-gateway components; ``mode="gateway"``), gui.log (INFO+, dashboard/TUI-gateway;
-``mode="gui"``). All are rotating files driven through one async queue and formatted
-with ``RedactingFormatter`` so secrets never reach disk.
+gateway components; ``mode="gateway"``). All are rotating files driven through one async
+queue and formatted with ``RedactingFormatter`` so secrets never reach disk.
 """
 
 import atexit
@@ -319,7 +318,6 @@ COMPONENT_PREFIXES = {
     "tools": ("tools",),
     "cli": ("hermes_cli", "cli"),
     "cron": ("cron",),
-    "gui": ("hermes_cli.desktop", "tui_gateway", "uvicorn"),
 }
 
 
@@ -367,7 +365,7 @@ def setup_logging(
 
     Safe to call multiple times; the second call is a no-op unless *force*. Level and
     rotation defaults come from config.yaml ``logging.*``. ``mode="gateway"`` adds
-    ``gateway.log`` and ``mode="gui"`` adds ``gui.log``.
+    ``gateway.log``.
     """
     global _logging_initialized
     global _fallback_warned
@@ -380,9 +378,8 @@ def setup_logging(
     # reaches this function gets it; a no-op once this stdout is line-buffered.
     _line_buffer_piped_stdout()
 
-    # A second Hermes home in a process that already logs for another one — a dashboard or
-    # ``hermes serve`` backend building agents for several profiles, a multiplexed gateway —
-    # gets routed by record home. Stacking another file handler here would hand it EVERY
+    # A second Hermes home in a process that already logs for another one — a multiplexed
+    # gateway building agents for several profiles — gets routed by record home. Stacking another file handler here would hand it EVERY
     # profile's records (the handlers carry no home filter), and a duplicate writer on top of
     # an existing router.
     if _adopt_secondary_home(home):
@@ -403,7 +400,6 @@ def setup_logging(
         ("agent.log", level, max_bytes, backups, None),
         ("errors.log", logging.WARNING, 2 * 1024 * 1024, 2, None),
         ("gateway.log", logging.INFO, 5 * 1024 * 1024, 3, "gateway"),
-        ("gui.log", logging.INFO, 10 * 1024 * 1024, 5, "gui"),
     )
     for filename, lvl, size, count, component in handler_specs:
         if component is not None and mode != component:

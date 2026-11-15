@@ -33,26 +33,10 @@ STALE_AFTER_S = 3600
 # Picker rows that are not a provider (menus, removal) never start a setup flow.
 _NOT_A_PROVIDER = frozenset({"aux-config", "cancel", "reasoning", "remove-custom"})
 _AUTH_ERROR_TYPES = frozenset({"AuthError", "SignInCopyError"})
-_OAUTH_SESSION_KEY = "_metrics_setup_flow"
-_OAUTH_FAILURE_KEY = "_metrics_setup_failure"
 # Ends that are not failures: the user stopped it, or let the sign-in code run out.
 _NOT_FAILURES = frozenset({"cancelled", "expired"})
 # Tokens other tools read too (gh, the Hugging Face Hub): saving one is not connecting that provider.
 _SHARED_TOKENS = frozenset({"GH_TOKEN", "GITHUB_TOKEN", "HF_TOKEN"})
-# OAuth session status (+ reason) at its end -> (event, failure_class).
-_OAUTH_ENDINGS = {
-    "approved": ("completed", "none"),
-    "cancelled": ("abandoned", "none"),
-    "denied": ("failed", "auth"),
-    "expired": ("abandoned", "none"),
-}
-_OAUTH_REASONS = {
-    "user_declined": ("abandoned", "none"),
-    "superseded": ("abandoned", "none"),
-    "timeout": ("abandoned", "none"),
-    "account_retired": ("failed", "auth"),
-    "anon_unreachable": ("failed", "network"),
-}
 
 
 @dataclass
@@ -413,52 +397,3 @@ def cli_provider_setup(provider: Any) -> Iterator[None]:
         finish_provider_setup(flow, "failed", hints["failure"])
     else:
         finish_provider_setup(flow, "abandoned")
-
-
-# ---- dashboard / Desktop OAuth sessions ------------------------------------------------------
-
-def web_setup_surface() -> str:
-    from hermes_cli.process_identity import is_desktop_owned_backend
-
-    return "desktop" if is_desktop_owned_backend() else "dashboard"
-
-
-def begin_oauth_setup(provider: str, hermes_home: Any) -> SetupFlow | None:
-    try:
-        return begin_provider_setup(web_setup_surface(), provider, hermes_home=hermes_home)
-    except Exception:
-        logger.debug("OAuth setup start not recorded", exc_info=True)
-        return None
-
-
-def attach_oauth_setup(sess: dict[str, Any] | None, flow: SetupFlow | None) -> None:
-    if flow is not None and isinstance(sess, dict):
-        sess[_OAUTH_SESSION_KEY] = flow
-
-
-def note_oauth_failure(sess: dict[str, Any] | None, exc: BaseException) -> None:
-    """A sign-in poller died with ``exc``: keep its closed class for the settle (the status alone is
-    ``error`` for a lapsed code, a dropped network and a refusal alike)."""
-    with contextlib.suppress(Exception):
-        if isinstance(sess, dict):
-            sess[_OAUTH_FAILURE_KEY] = setup_failure_class(exc)
-
-
-def settle_oauth_setup(sess: dict[str, Any] | None, *, abandoned: bool = False) -> None:
-    """End an OAuth session's flow from its status (no-op while pending, or when already ended)."""
-    try:
-        if not isinstance(sess, dict) or sess.get(_OAUTH_SESSION_KEY) is None:
-            return
-        status = "cancelled" if sess.get("cancelled") else str(sess.get("status") or "")
-        ending = _OAUTH_REASONS.get(str(sess.get("reason") or "")) if status in {"denied", "error"} else None
-        ending = ending or _OAUTH_ENDINGS.get(status)
-        if ending is None and status == "error":
-            ending = ("failed", sess.get(_OAUTH_FAILURE_KEY) or "other")
-        if ending is None:
-            if not abandoned:
-                return
-            ending = ("abandoned", "none")
-        flow = sess.pop(_OAUTH_SESSION_KEY, None)
-        finish_provider_setup(flow, *ending)
-    except Exception:
-        logger.debug("OAuth setup end not recorded", exc_info=True)

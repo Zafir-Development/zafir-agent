@@ -36,14 +36,13 @@ _ZIP_JOURNAL_TEMP = re.compile(r"\.hermes-update-zip-swap\.[0-9a-f]{12}\.tmp")
 _ZIP_PRESERVED_TOP_LEVEL = {"venv", ".venv", "node_modules", ".git", ".env"}
 
 # Gitignored build outputs the source ZIP never ships, nested under top-level entries the swap replaces
-# (so `_ZIP_PRESERVED_TOP_LEVEL` cannot shield them): the packaged Desktop app, its renderer bundle,
-# the TUI bundle, and the WhatsApp bridge's npm install. The dirty-tree guard admits them
-# and `_stage_entries` grafts the live copies into the staged tree so the swap keeps them (#90495).
+# (so `_ZIP_PRESERVED_TOP_LEVEL` cannot shield them): the TUI bundle and the WhatsApp bridge's npm
+# install. The dirty-tree guard admits them and `_stage_entries` grafts the live copies into the staged
+# tree so the swap keeps them (#90495).
 # Workspace node_modules are not carried: they hold only pnpm's links into the root virtual store, and
 # Windows links are junctions, which the copy turns into real directories that no longer resolve their
 # own dependencies. The next build relinks them from pnpm's store.
 _ZIP_PRESERVED_NESTED = {
-    "apps": ("desktop/release", "desktop/dist", "desktop/dist-webapp", "desktop/build"),
     "scripts": ("whatsapp-bridge/node_modules",),
     "ui-tui": ("dist", "packages/hermes-ink/dist"),
 }
@@ -410,9 +409,9 @@ def _require_staging_space(extracted: str, entries: list[str], project_root: str
 
 
 def _link_or_copy_artifact(source: str, destination: str) -> None:
-    """Hardlink where the filesystem allows (the desktop release dir is hundreds of MB, and a link stays
-    valid after the swap unlinks the old tree; on Windows a link also succeeds on a locked Hermes.exe
-    where copy2 raises); byte copy otherwise."""
+    """Hardlink where the filesystem allows (a TUI bundle is large and a link stays valid after the
+    swap unlinks the old tree; on Windows a link also succeeds on a locked Hermes.exe where copy2
+    raises); byte copy otherwise."""
     try:
         os.link(source, destination)
     except OSError:
@@ -614,8 +613,8 @@ def _download_and_swap_zip(branch: str, zip_url: str, target_sha: str | None = N
 
 
 
-def _update_via_zip(args, *, had_desktop_app_before_update: bool = False,
-                   target_sha: str | None = None, target_repository: str | None = None,
+def _update_via_zip(args, *, target_sha: str | None = None,
+                   target_repository: str | None = None,
                    completion_request=None) -> bool:
     """Update via ZIP when Windows git file I/O fails; dependency/build failures propagate.
 
@@ -636,10 +635,12 @@ def _update_via_zip(args, *, had_desktop_app_before_update: bool = False,
         _record_stop("branch_unsupported")
         _m().sys.exit(1)
     _abort_zip_update_if_dirty_tree()
-    # Older callers lack the snapshot/receipt/lifecycle handoff. Refuse before swap.
+    # No captured snapshot/receipt/lifecycle handoff: refuse before the swap rather than claim an
+    # update whose completion and rollback metadata do not exist.
     if completion_request is None:
-        from hermes_cli._old_updater import stop_for_relaunch
-        stop_for_relaunch(incomplete=True)
+        print("✗ This update has no captured completion worklist; run `hermes update` again.",
+              file=sys.stderr)
+        _m().sys.exit(1)
     if target_sha is not None and not re.fullmatch(r"[0-9a-f]{40}", target_sha):
         raise ValueError("ZIP update requires an exact full commit SHA")
     ref = target_sha if target_sha is not None else f"refs/heads/{branch}"

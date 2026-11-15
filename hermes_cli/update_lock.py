@@ -3,9 +3,7 @@
 Two artifacts, one authority each:
 
 * The update marker ``<root hermes home>/.hermes-update-in-progress`` (contract C1, format v2)
-  is shared with the Tauri updater (``UpdateMarkerGuard`` in
-  ``apps/bootstrap-installer/src-tauri/src/update.rs``), the Electron gate
-  (``electron/update-marker.ts``) and the Desktop hand-off scripts. Body::
+  is shared with launcher/updater wrappers that hand a run off to this CLI. Body::
 
       <pid>\\n<started_at>\\nct:<owner creation time, 3 decimals>\\n[delegate:<pid> ct:<ct>\\n]
 
@@ -433,9 +431,8 @@ def _windows_parent_pid(pid: int) -> int | None:
 def _stdlib_parent_pid(pid: int) -> int | None:
     """The parent of ``pid`` without psutil, or ``None`` when unresolvable.
 
-    The update-takeover child is spawned ``-I -S -B`` (hermes_cli/_old_updater.py) so
-    psutil cannot import there — and that grandchild is exactly the process that most
-    needs the two-hop ancestry walk to adopt the orchestrator's marker. /proc serves
+    A ``-I -S -B`` child makes psutil unimportable there — and that grandchild is exactly the
+    process that most needs the two-hop ancestry walk to adopt the orchestrator's marker. /proc serves
     Linux; macOS keeps /proc absent, so shell out to ps once per hop; Windows has
     neither, so ask the Toolhelp32 snapshot.
     """
@@ -976,7 +973,7 @@ def legacy_profile_claims(root: Path | None = None) -> list[UpdateHolder]:
     Before the marker moved to the profile-tree root, an update under a named profile claimed
     its PROFILE home and never took the checkout lock. During the transition such an update can
     still be running: honor it (v1 rules: pid alive, within the legacy age ceiling, never our own
-    previous incarnation). Read-only: an old updater reclaims its own dead markers.
+    previous incarnation). Read-only: a previous incarnation reclaims its own dead markers.
     """
     root = update_marker_path().parent if root is None else root
     claims = []
@@ -998,7 +995,7 @@ def describe_holder(holder: UpdateHolder | None) -> str:
             f"✗ Cannot lock this install for the update: {holder.reason}.\n"
             "\n"
             "  Updating without the lock could let two updates corrupt the install, or run\n"
-            "  under a Desktop app, gateway or installer that cannot see it. Make that path\n"
+            "  under a gateway or installer that cannot see it. Make that path\n"
             "  writable (fix its owner or permissions, or remount a read-only filesystem\n"
             "  read-write), or run `hermes update` as the user that owns the install."
         )
@@ -1011,8 +1008,8 @@ def describe_holder(holder: UpdateHolder | None) -> str:
         f"✗ Another Hermes update is already running (started {elapsed} ago{who}).\n"
         "\n"
         "  Running two at once would corrupt the install. Wait for it to finish\n"
-        "  (watch `hermes logs`), or close the Desktop/dashboard window that\n"
-        "  started it, then run `hermes update` again."
+        "  (watch `hermes logs`), or stop the process that started it, then run\n"
+        "  `hermes update` again."
     )
 
 
@@ -1489,8 +1486,8 @@ def _publish_exclusive(path: Path, body: bytes) -> bool:
 
 def _marker_unwritable(path: Path, exc: OSError) -> str:
     """Why an unwritable marker location refuses the update, not just that it is unwritable."""
-    return (f"{path} is not writable ({exc}); the update records itself there so the Desktop app, "
-            "gateways, installers and other updaters wait for it")
+    return (f"{path} is not writable ({exc}); the update records itself there so gateways, "
+            "installers and other updaters wait for it")
 
 
 # Per-process claim depth for each marker path: nested UpdateLocks (an update's completion run

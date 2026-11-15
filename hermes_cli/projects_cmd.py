@@ -16,7 +16,7 @@ def build_parser(parent_subparsers: argparse._SubParsersAction) -> argparse.Argu
         help="Manage projects (named, multi-folder workspaces)",
         description=(
             "Projects are human-named workspaces that can span multiple "
-            "folders / repos. They anchor desktop session grouping and, when "
+            "folders / repos. They anchor session grouping and, when "
             "bound to a kanban board, give tasks a deterministic worktree + "
             "branch convention. State is per-profile."
         ),

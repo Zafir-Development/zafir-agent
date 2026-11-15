@@ -204,9 +204,9 @@ def build_stamp(
     #               owned updates, no in-app updater) holds for it too.
     #   runtime   — a self-contained CLI runtime with NO Electron app around
     #               it (the Termux .deb). It is sealed like 'bundled' but
-    #               must not stamp as one: 'bundled' readers locate an
-    #               enclosing desktop app (bundled_app.resolve_bundle_layout)
-    #               and a tree without one is damage to them.
+    #               must not stamp as one: 'bundled' readers expect an
+    #               enclosing app bundle and a tree without one is damage
+    #               to them.
     # Release artifacts pin a tag. Commit builds never enter an update channel.
     variant = os.environ.get("HERMES_DESKTOP_VARIANT", "").strip()
     if variant not in ("", "bootstrap", "bundled", "light", "store", "runtime"):

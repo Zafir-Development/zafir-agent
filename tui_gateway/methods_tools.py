@@ -982,10 +982,10 @@ def _cmd_skills(rid, params, session, name, arg):
     Returns None (falls through to the routing refusal, unchanged behaviour) for anything outside
     the review surface — ``search``/``install``/``browse``/``inspect`` are the CLI skills hub's,
     never a staged-write review. The allowlist mirrors the registry-declared review slice
-    (``CommandDef("skills", desktop_subcommands=...)`` in hermes_cli/commands.py)."""
+    (``CommandDef("skills", review_subcommands=...)`` in hermes_cli/commands.py)."""
     sub = (arg or "").split()
     commands = _tools_mod("hermes_cli.commands")
-    allowed = getattr(commands.resolve_command("skills"), "desktop_subcommands", None) or ()
+    allowed = getattr(commands.resolve_command("skills"), "review_subcommands", None) or ()
     if not sub or sub[0].lower() not in allowed:
         return None
     from tools import write_approval as wa

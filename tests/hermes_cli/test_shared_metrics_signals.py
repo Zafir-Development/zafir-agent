@@ -99,8 +99,10 @@ def test_counter_rows_map_to_features():
     assert signals.features_for(contract.TOOL_USAGE_METRIC, {"tool_name": "mcp", "outcome": "success"}) == ("mcp",)
     assert signals.features_for(contract.TOOL_USAGE_METRIC, {"tool_name": "browser_click", "outcome": "failed"}) == ()
     assert signals.features_for(contract.TOOL_USAGE_METRIC, {"tool_name": "kanban_create", "outcome": "success"}) == ("kanban",)
-    assert set(signals.features_for(contract.TASK_STARTED_METRIC, {"platform": "telegram", "execution_surface": "desktop"})) \
-        == {"gateway_platform", "desktop"}
+    # ``desktop`` is historical vocabulary (rows older releases stored); it no longer proves adoption.
+    assert signals.features_for(
+        contract.TASK_STARTED_METRIC, {"platform": "telegram", "execution_surface": "desktop"}
+    ) == ("gateway_platform",)
     assert signals.features_for(contract.FEATURE_USED_MARK, {"feature": "bot_mode"}) == ("bot_mode",)
 
 
@@ -173,7 +175,7 @@ def test_started_then_completed_once_and_marker_cleared(marks):
 
 
 def test_custom_endpoint_reads_custom_and_no_raw_values(marks):
-    setup_metrics.finish_provider_setup(setup_metrics.begin_provider_setup("desktop", "custom:my-box"), "completed")
+    setup_metrics.finish_provider_setup(setup_metrics.begin_provider_setup("tui", "custom:my-box"), "completed")
     assert {row[1] for row in _setup_rows(marks.rows)} == {"custom"}
 
 
@@ -275,24 +277,6 @@ def test_cli_setup_navigation_esc_cancels_and_back_resumes_one_flow(marks, monke
     ]
 
 
-@pytest.mark.parametrize(("sess", "ending"), [
-    ({"status": "approved"}, ("completed", "none")),
-    ({"status": "expired"}, ("abandoned", "none")),
-    ({"status": "error", "reason": "timeout"}, ("abandoned", "none")),
-    ({"status": "denied"}, ("failed", "auth")),
-    ({"status": "denied", "reason": "user_declined"}, ("abandoned", "none")),
-    ({"status": "pending", "cancelled": True}, ("abandoned", "none")),
-    ({"status": "error", "reason": "anon_unreachable"}, ("failed", "network")),
-])
-def test_oauth_session_endings(marks, monkeypatch, sess, ending):
-    monkeypatch.setattr(setup_metrics, "web_setup_surface", lambda: "desktop")
-    flow = setup_metrics.begin_oauth_setup("nous", None)
-    setup_metrics.attach_oauth_setup(sess, flow)
-    setup_metrics.settle_oauth_setup(sess)
-    setup_metrics.settle_oauth_setup(sess)
-    assert [r[2:] for r in _setup_rows(marks.rows)] == [("started", "none"), ending]
-
-
 def test_cancel_or_lapsed_code_is_never_a_failure(marks, monkeypatch):
     """A user cancel / a sign-in code left to run out is ``abandoned``, never a failure."""
     from hermes_cli.auth_device_flow import _poll_for_token
@@ -340,32 +324,6 @@ def _poll(provider, status, body):
         return _xai_oauth_poll_device_token(
             _wire(status, body), token_endpoint="https://x/token", device_code="d", expires_in=30, poll_interval=1)
     return run
-
-
-@pytest.mark.parametrize("producer, ending", [
-    (_poll("nous", 400, {"error": "authorization_pending"}), ("abandoned", "none")),  # code left unapproved
-    (_poll("nous", 503, "<html>503 unavailable</html>"), ("failed", "network")),  # outage until it ran out
-    (_poll("xai", 400, {"error": "access_denied"}), ("abandoned", "none")),  # consent declined
-    (_poll("xai", 400, {"error": "expired_token"}), ("abandoned", "none")),  # the server let the code lapse
-    (_poll("xai", 400, {"error": "invalid_client"}), ("failed", "auth")),
-], ids=["nous-pending", "nous-503", "xai-denied", "xai-expired", "xai-refused"])
-def test_wire_failures_keep_the_producers_class_to_the_recorded_end(marks, monkeypatch, producer, ending):
-    """Real device-code poll loops against wire responses: a lapse or a decline is a walk-away, an
-    outage or a refusal stays a failure."""
-    monkeypatch.setattr(setup_metrics, "web_setup_surface", lambda: "desktop")
-    flow = setup_metrics.begin_oauth_setup("nous", None)
-    try:
-        producer(monkeypatch)
-    except Exception as exc:
-        setup_metrics.finish_provider_setup(flow, "failed", setup_metrics.setup_failure_class(exc))
-    assert [r[2:] for r in _setup_rows(marks.rows)] == [("started", "none"), ending]
-
-def test_pending_oauth_session_does_not_settle(marks, monkeypatch):
-    monkeypatch.setattr(setup_metrics, "web_setup_surface", lambda: "dashboard")
-    sess = {"status": "pending"}
-    setup_metrics.attach_oauth_setup(sess, setup_metrics.begin_oauth_setup("xai", None))
-    setup_metrics.settle_oauth_setup(sess)
-    assert [r[2] for r in _setup_rows(marks.rows)] == ["started"]
 
 
 def test_api_key_env_maps_to_provider_only():
@@ -446,7 +404,7 @@ def test_store_counts_feature_disabled_once_per_day(tmp_path):
     dims = {"event": "disabled", "kind": "toolset", "name": "memory", "surface": "cli_tools"}
     assert store.record_counter_once_per_day(contract.FEATURE_DISABLED_METRIC, dims, resource) is True
     assert store.record_counter_once_per_day(
-        contract.FEATURE_DISABLED_METRIC, {**dims, "surface": "desktop"}, resource) is False
+        contract.FEATURE_DISABLED_METRIC, {**dims, "surface": "tui"}, resource) is False
     assert store.record_counter_once_per_day(
         contract.FEATURE_DISABLED_METRIC, {**dims, "event": "re_enabled"}, resource) is True
 

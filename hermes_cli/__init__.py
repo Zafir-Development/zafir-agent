@@ -3,17 +3,16 @@
 import sys
 
 __release_date__ = "2026.9.24"
-# Declared for type checkers and the old-updater surface audit; served lazily by __getattr__.
+# Declared for type checkers; served lazily by __getattr__.
 __version__: str
 
 
 def __getattr__(name: str) -> str:
-    """Old-updater compat: shipped updaters import ``__version__`` after the checkout swap.
+    """Public package version for out-of-tree callers (tools, plugin hosts, the ACP adapter).
 
-    tests/compat/old_updater_surface.json freezes that import. In-tree code resolves
-    identity through hermes_cli.version_info.get_version_info(); this reads only the
-    install stamp -- never git -- and keeps the pre-stamp placeholder when a checkout
-    has no stamp.
+    In-tree code resolves identity through hermes_cli.version_info.get_version_info(); this
+    reads only the install stamp -- never git -- and keeps the pre-stamp placeholder when a
+    checkout has no stamp.
 
     Lazy because ``pm`` is not importable when this package loads: a venv
     editable-installed from a pre-PM tree maps only the top-level packages it knew

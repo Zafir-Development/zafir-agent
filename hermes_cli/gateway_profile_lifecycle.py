@@ -39,7 +39,7 @@ def host_scope_for_all_verb(owner):
     ``--all`` names the ONE host gateway, whichever profile invoked the CLI — but the active home
     decides the service name, the Windows task/launcher and the detached child's ``--profile``, so
     with the host DOWN ``-p X gateway start|restart --all`` re-launched X's own gateway, which the
-    named-profile guard then refused (exit 78): the host stayed down after a Desktop update.
+    named-profile guard then refused (exit 78): the host stayed down after an update.
     """
     from hermes_cli.gateway_migrate import _home_env
     return _home_env(owner.home if owner is not None else get_default_hermes_root())
@@ -180,7 +180,7 @@ def _pid_owned_by_home(pid: int, home) -> bool:
     """
     from gateway import host_attach, host_rendezvous as hr
     from gateway.status import _same_hermes_home
-    from hermes_cli.dashboard_procs import _hermes_home_for_pid
+    from hermes_cli.process_inventory import _hermes_home_for_pid
 
     record = hr.read_record(hr.ROLE_GATEWAY)
     is_host = record is not None and record.pid == pid and hr.record_names_live_owner(record)

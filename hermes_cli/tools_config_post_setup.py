@@ -203,7 +203,7 @@ def _post_setup_openai_codex() -> None:
         return
 
     if is_noninteractive():
-        # Dashboard/Desktop spawn this hook with stdin=DEVNULL: nobody can finish a device-code
+        # A non-interactive supervisor spawns this hook with stdin=DEVNULL: nobody can finish a device-code
         # login here, and the panel already shows the needs_auth pill.
         _info_lines(f"No terminal to sign in from. Run: {relogin}")
         return

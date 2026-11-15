@@ -21,7 +21,7 @@ from hermes_cli.observability import shared_metrics_contract as contract
 
 
 def test_acp_sessions_are_interactive():
-    """An editor session is a human at a keyboard, like cli/tui/desktop."""
+    """An editor session is a human at a keyboard, like cli/tui."""
     fields = contract.task_start_fields({"platform": "acp"})
     assert fields["entrypoint"] == "interactive"
     assert fields["execution_surface"] == "acp"
@@ -31,7 +31,7 @@ def test_acp_sessions_are_interactive():
 
 @pytest.mark.parametrize(
     "platform",
-    ["cli", "tui", "desktop", "batch", "acp", "api_server", "cron", "telegram"],
+    ["cli", "tui", "batch", "acp", "api_server", "cron", "telegram"],
 )
 def test_declared_platforms_resolve_to_a_named_surface(platform):
     """No production construction path should resolve to unknown/other.

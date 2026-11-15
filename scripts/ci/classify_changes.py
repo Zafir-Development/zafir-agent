@@ -195,11 +195,10 @@ _PY_TEST_HARNESS = (
 # install + update journey, including its crash cells) must run on the PR.
 _UPDATE_PIPELINE = (
     "hermes_cli/main.py",  # cmd_update: lock, pre-update backup, receipt boundary
-    "hermes_cli/main_dashboard.py",  # hangup protection + update.log mirror
+    "hermes_cli/update_output.py",  # hangup protection + update.log mirror
+    "hermes_cli/process_inventory.py",  # runtime discovery: profile/home ownership of live pids
+    "hermes_cli/service_restart_helpers.py",  # systemd/launchd restart commands the tail prints
     "hermes_cli/update_bytecode.py",  # completion's bytecode sweep and dropped-folder prune
-    # Prefix: main_desktop.py (staged Desktop swap / rebuild in the tail) and the
-    # main_desktop_* siblings it imports (macOS signing identity).
-    "hermes_cli/main_desktop",
     # Prefix: _early_recovery.py and its _early_recovery_* siblings (ZIP swap journal).
     "hermes_cli/_early_recovery",  # interrupted pull / shim restore at launch
     "hermes_cli/venv_sync.py",  # completion obligation + launch-time tail
@@ -211,11 +210,6 @@ _UPDATE_PIPELINE = (
     "hermes_cli/process_identity.py",  # marker owner liveness
     "hermes_cli/runtime_state.py",
     "hermes_cli/relaunch.py",
-    "hermes_cli/managed_uv.py",
-    "hermes_cli/npm_engine.py",
-    "hermes_cli/_scan_venv_blockers.py",
-    "hermes_cli/dashboard_procs.py",
-    "hermes_cli/desktop_update",  # desktop_update_verify
     "hermes_cli/gateway.py",  # fleet restart / verify
     "hermes_cli/gateway_windows",  # Windows pause / resume
     "hermes_cli/gateway_launchd.py",
@@ -242,16 +236,10 @@ _UPDATE_PIPELINE = (
 # one is routed to the suite below or is a _SHARED_HUBS entry.
 _UPDATE_ENTRY_POINTS = (
     "hermes_cli/update_",
-    "hermes_cli/_update_",
     "hermes_cli/source_",
-    "hermes_cli/old_updater",
-    "hermes_cli/_old_updater",
     "hermes_cli/post_update",
     "hermes_cli/venv_sync.py",
     "hermes_cli/_early_recovery",
-    "hermes_cli/main_desktop.py",
-    "hermes_cli/desktop_update_verify.py",
-    "hermes_cli/desktop_build_lock.py",
     "hermes_cli/subcommands/update",
 )
 # What the entry points import, outside the update_* family and the pipeline above.
@@ -268,16 +256,9 @@ _UPDATE_DEPENDENCIES = (
     "pm/install.py",  # also sealed()/lazy_installs_allowed(): every update's default-tool install
     "pm/packages.py",  # source_build's pnpm environment (pnpm_env)
     "pm/index_config.py",  # source_build's npmrc bridge (read_npmrc, user_npmrc, hermes_npmrc)
-    "hermes_cli/desktop_build_lock.py",
-    "hermes_cli/desktop_build_reuse.py",  # source_build keeps the packaged app when no input changed
-    "hermes_cli/desktop_release_holders.py",  # main_desktop names/closes a holder of release/ on a failed swap
     "hermes_cli/memory_provider_migration.py",
     "hermes_cli/left_core_migration.py",  # source_build migrates plugins that left core
     "hermes_cli/config_version_stamp.py",  # post_update converts legacy AGENT_BROWSER_* before stamping
-    "hermes_cli/desktop_console.py",
-    "hermes_cli/bundled_app.py",
-    "hermes_cli/gui_uninstall.py",
-    "hermes_cli/linux_desktop_entry.py",
     "hermes_cli/github_api.py",  # source_check's release lookup
     "hermes_cli/build_info.py",
     "hermes_cli/image_provenance.py",
@@ -288,7 +269,6 @@ _UPDATE_DEPENDENCIES = (
     "hermes_cli/env_loader.py",  # update_proxy_env keeps proxy keys a .env load wrote
     "agent/proxy_bypass.py",  # update_proxy_env reads NO_PROXY entries with it
     "hermes_cli/relay_plugin_migrate.py",
-    "hermes_cli/macos_tcc_anchor.py",
     "hermes_cli/model_catalog.py",
     "hermes_cli/sqlite_runtime.py",
     "hermes_cli/sqlite_safe_read.py",
@@ -360,18 +340,14 @@ _E2E_LANES: dict[str, tuple[str, ...]] = {
         *_DEP_MANIFESTS,
         "tests/e2e/core/upgrade/",
         "tests/e2e/core/windows_update/",
-        "tests/compat/",
         "pm/",
         "scripts/install.",
         "setup-hermes.sh",
         "hermes_cli/update_",
-        "hermes_cli/_update_",
-        "hermes_cli/old_updater",
         # The downgrade refusal (hermes_cli/update_downgrade_guard.py) reads state.db through it.
         "hermes_state_holders.py",
         # The search-index notice (hermes_cli/update_cmd_maint.py) reads the stored FTS layout through it.
         "hermes_state_fts.py",
-        "hermes_cli/_old_updater",
         "hermes_cli/post_update",
         "hermes_cli/config_migrations",
         "hermes_cli/subcommands/update",

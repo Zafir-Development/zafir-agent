@@ -105,7 +105,6 @@ def test_disabled_collection_records_no_update_rows(marks, monkeypatch):
     update_receipt.begin_update_receipt()
     update_receipt.record_stage("plan", "success")
     update_receipt.finalize_update_receipt("success")
-    update_metrics.record_desktop_update(outcome="success", failed_stage=None, duration_ms=1, mechanism="app-installer")
     assert marks.rows == []
 
 
@@ -172,8 +171,8 @@ def test_begin_process_marks_then_stamps_clean_and_crash(marks, monkeypatch):
 def test_opted_out_start_purges_markers_left_while_opted_in(marks, monkeypatch):
     from hermes_cli.observability import shared_metrics_setup as setup_metrics
 
-    left = [process_metrics.markers_dir(marks.home) / "cli-1.json", setup_metrics.markers_dir(marks.home) / "tui-1-1.json",
-            marks.home / "telemetry" / "shared_metrics" / "desktop_onboarding" / "provider.completed"]  # CLI opt-out
+    left = [process_metrics.markers_dir(marks.home) / "cli-1.json",
+            setup_metrics.markers_dir(marks.home) / "tui-1-1.json"]  # CLI opt-out
     for marker in left:
         marker.parent.mkdir(parents=True)
         marker.write_text(json.dumps({"pid": 1, "started_at": 0, "surface": "tui", "provider": "xai", "state": "running"}))

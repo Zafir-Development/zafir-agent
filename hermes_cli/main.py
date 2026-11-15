@@ -287,7 +287,6 @@ from hermes_cli.subcommands.skin import build_skin_parser
 from hermes_cli.subcommands.console import build_console_parser
 from hermes_cli.subcommands.update import build_update_parser
 from hermes_cli.subcommands.uninstall import build_uninstall_parser
-from hermes_cli.subcommands.gui import build_gui_parser
 from hermes_cli.subcommands.logs import build_logs_parser
 from hermes_cli.subcommands.prompt_size import build_prompt_size_parser
 from hermes_cli.subcommands.memory import build_memory_parser
@@ -343,7 +342,7 @@ _startup_fast.ensure_project_root_on_path()
 # to ~/.hermes/active_profile for the sticky default.
 _PROFILE_NAME_RE = r"^[a-z0-9][a-z0-9_-]{0,63}$"  # mirrors hermes_cli.profiles._PROFILE_ID_RE
 # Set only when -p/--profile was on argv. Sticky active_profile must not count:
-# `hermes desktop` with no flag must not overwrite Desktop's stored profile.
+# an inherited launch with no flag must not overwrite the stored profile.
 _explicit_cli_profile: str | None = None
 
 
@@ -497,8 +496,8 @@ def _s6_supervised_gateway_run(argv: list) -> bool:
 def explicit_cli_profile() -> str | None:
     """Profile named by a consumed ``-p``/``--profile`` flag, else None.
 
-    Sticky ``active_profile`` is not explicit. Desktop launch must not overwrite
-    its stored profile when the user omitted the flag.
+    Sticky ``active_profile`` is not explicit. An inherited launch must not
+    overwrite its stored profile when the user omitted the flag.
     """
     return _explicit_cli_profile
 
@@ -521,7 +520,6 @@ def _apply_profile_override() -> None:
         return
 
     if (profile_name is None and not _under_gateway_supervisor(argv)
-            and not _startup_fast.is_desktop_ssh_backend_argv(argv)
             and not _s6_supervised_gateway_run(argv)):
         try:
             from hermes_constants import get_default_hermes_root
@@ -597,13 +595,13 @@ if sys.argv[1:2] == ["pm"]:
 
 # Windows launcher self-heal: the ``hermes`` command is a COPY of the venv console script staged into
 # the managed bin dir, outside the checkout because ``hermes update``'s autostash (``git stash push
-# --include-untracked``) once swept ``<checkout>\bin`` copies off disk, the desktop updater's
-# ``--keep-stash`` never restored them, and ``hermes`` stopped resolving (venv\Scripts must stay off
-# PATH: it shadows the user's ``python``, #83797). Re-staging at process start reaches already-broken
-# installs via the desktop app's ``python -m hermes_cli.main`` spawn. Sits AFTER the profile override
-# on purpose (no hermes module may import before profiles resolve); the helper anchors on the DEFAULT
-# root, so profile sessions heal the same shared dir. A few stat calls when healthy; gates fail toward
-# inaction so source checkouts are untouched.
+# --include-untracked``) once swept ``<checkout>\bin`` copies off disk and a ``--keep-stash`` flag
+# never restored them, so ``hermes`` stopped resolving (venv\Scripts must stay off PATH: it shadows
+# the user's ``python``, #83797). Re-staging at process start reaches already-broken installs via
+# ``python -m hermes_cli.main``. Sits AFTER the profile override on purpose (no hermes module may
+# import before profiles resolve); the helper anchors on the DEFAULT root, so profile sessions heal
+# the same shared dir. A few stat calls when healthy; gates fail toward inaction so source checkouts
+# are untouched.
 if sys.platform == "win32":
     try:
         from hermes_cli import _install_repair as _install_repair_mod
@@ -657,18 +655,10 @@ if server_process_argv(sys.argv[1:]):
     apply_malloc_arena_max()
 
 # Centralized file logging for every subcommand (agent.log + errors.log).
-# GUI entrypoints use GUI mode so gui.log captures pre-dispatch failures.
 try:
     from hermes_logging import setup_logging as _setup_logging
 
-    _setup_logging(
-        mode=(
-            "gui"
-            if next((arg for arg in sys.argv[1:] if not arg.startswith("-")), "")
-            in {"gui", "desktop"}
-            else "cli"
-        )
-    )
+    _setup_logging(mode="cli")
 except Exception:
     pass  # best-effort — don't crash the CLI if logging setup fails
 
@@ -722,11 +712,7 @@ from hermes_cli.main_platform_setup import (
     cmd_whatsapp,
     cmd_whatsapp_cloud,
 )
-from hermes_cli.process_identity import is_desktop_owned_backend as _is_desktop_owned_backend
-from hermes_cli.main_dashboard import (  # legacy serve-backend support; frozen updater surface
-    _finalize_update_output,
-    _install_hangup_protection,
-)
+from hermes_cli.update_output import _finalize_update_output, _install_hangup_protection
 from hermes_cli.main_provider_setup import (
     _GENERIC_API_KEY_PROVIDERS,
     _aux_config_menu,
@@ -741,8 +727,7 @@ from hermes_cli.main_provider_setup import (
     _remove_custom_provider,
 )
 from hermes_cli.main_install_repair import _cleanup_quarantined_exes, _recover_update_debts_on_startup
-from hermes_cli.main_install_repair import (  # frozen updater surface: update_cmd*.py resolve these via _m()
-    _UPDATE_REEXEC_ENV,
+from hermes_cli.main_install_repair import (  # update_cmd*.py resolve these lazily via _m()
     _clear_lazy_refresh_incomplete_marker,
     _clear_marker_file,
     _clear_update_incomplete_marker,
@@ -751,22 +736,10 @@ from hermes_cli.main_install_repair import (  # frozen updater surface: update_c
     _is_windows_npm_path,
     _lazy_refresh_marker_path,
     _pytest_owns_live_checkout,
-    _reexec_dependency_sync_off_windows_shim,
     _resolve_node_runtime_npm,
     _resolve_update_branch,
     _update_marker_path,
     _venv_scripts_dir,
-)
-from hermes_cli.main_desktop import (
-    cmd_gui,
-)
-from hermes_cli.main_desktop import (  # frozen updater surface: update_cmd*.py resolve these via _m()
-    _desktop_build_needed,
-    _desktop_dist_exists,
-    _desktop_macos_relaunchable_fixup,
-    _desktop_packaged_executable,
-    _install_rebuilt_desktop_app,
-    _installed_desktop_apps,
 )
 from hermes_cli.update_bytecode import (  # update_cmd_maint resolves _record_bytecode_fingerprint via _m()
     _record_bytecode_fingerprint,
@@ -1011,7 +984,7 @@ def _has_any_provider_configured(*, strict_profile_scope: bool = False) -> bool:
 
     # Cheap on-disk checks (auth.json, config.yaml) first: the PROVIDER_REGISTRY
     # sweep below spawns subprocesses (gh) and can take 15-20s — long enough
-    # that desktop setup.status calls time out.
+    # that setup.status calls time out.
     if _auth_store_logged_in(get_hermes_home() / "auth.json", PROVIDER_REGISTRY, strict_profile_scope):
         return True
 
@@ -1587,7 +1560,7 @@ def cmd_chat(args):
     # --source: tag session source for filtering (e.g. 'tool' for integrations)
     if getattr(args, "source", None):
         os.environ["HERMES_SESSION_SOURCE"] = args.source
-        # Explicit flag, not a label inherited from a parent TUI/Desktop session — one-shot
+        # Explicit flag, not a label inherited from a parent TUI session — one-shot
         # runs must keep it (see agent.session_source.session_source_for).
         os.environ["HERMES_SESSION_SOURCE_EXPLICIT"] = "1"
 
@@ -1940,24 +1913,15 @@ def select_provider_and_model(args=None):
         _clear_stale_openai_base_url()
 
 
-def _detect_venv_python_processes(*, exclude_pids: set[int] | None = None) -> list[tuple[int, str, str]]:
-    # Shim to stop the old updater doing work until relaunch. Do not scan or kill.
-    # Current Windows checks use the real detector in update_cmd_windows instead.
-    return []
-
-
-# Retired hooks must bypass update_cmd: its current dispatcher captures PM helpers
-# before swapping code, but a historical caller may first resolve these afterward.
-# Frozen updater surface (PEP 562 ``__getattr__`` below): the frozen
-# ``hermes_cli/update_cmd*.py`` files resolve these names via ``_m().<name>``
-# on hermes_cli.main; importing update_cmd eagerly would cost every ``hermes``
-# invocation ~50-100ms, so they resolve on first read. Nothing else may be
-# added here — internal import paths are not a stable API.
-_FROZEN_UPDATER_SURFACE: dict[str, tuple[str, ...]] = {
+# Update-side helpers resolve through PEP 562 ``__getattr__`` below: importing
+# ``hermes_cli.update_cmd`` eagerly would cost every ``hermes`` invocation
+# ~50-100ms, so its lazy dispatcher reaches these names on first read. Nothing
+# else may be added here — internal import paths are not a stable API.
+_LAZY_UPDATER_NAMES: dict[str, tuple[str, ...]] = {
     "hermes_cli.update_cmd": (
         "_assess_parked_branch_switch",
         "_cold_start_windows_gateway_after_update", "_discard_stashed_changes",
-        "_filter_non_gateway_concurrent_instances", "_fleet_probe_expected_runtimes",
+        "_fleet_probe_expected_runtimes",
         "_get_origin_url", "_park_stashed_changes",
         "_pause_windows_gateways_for_update", "_print_parked_branch_kept_notice",
         "_print_parked_branch_skip_warning",
@@ -1968,37 +1932,20 @@ _FROZEN_UPDATER_SURFACE: dict[str, tuple[str, ...]] = {
         "_venv_launcher_ancestors",
         "_wait_for_windows_update_gateway_exit", "_warn_orphaned_update_autostashes",
     ),
-    "hermes_cli.old_updater_deps": (
-        "_capture_active_lazy_features", "_handoff_reapable_backend_pids",
-        "_ledger_manual_serve_holders", "_ledger_reapable_backend_pids",
-        "_leftover_pausable_gateway_pids", "_npm_lockfile_changed",
-        "_orphaned_desktop_backend_pids", "_refresh_active_lazy_features",
-        "_refresh_active_memory_provider_dependencies",
-        "_stop_process_trees",
-    ),
-    "hermes_cli.update_cmd_maint": (
-        "_purge_stale_hermes_modules", "_reload_updated_runtime_modules",
-    ),
-    "hermes_cli.dashboard_procs": (
-        "_detect_concurrent_hermes_instances",
-    ),
 }
-_FROZEN_ATTR_SOURCES: dict[str, str] = {
-    attr: module for module, attrs in _FROZEN_UPDATER_SURFACE.items() for attr in attrs
+_LAZY_UPDATER_SOURCES: dict[str, str] = {
+    attr: module for module, attrs in _LAZY_UPDATER_NAMES.items() for attr in attrs
 }
 
 
 def __getattr__(name):
-    """Resolve the frozen updater surface on first read (see _FROZEN_UPDATER_SURFACE)."""
-    if name == "_write_update_incomplete_marker":
-        from hermes_cli._old_updater import stop_for_relaunch as value
-    else:
-        module = _FROZEN_ATTR_SOURCES.get(name)
-        if module is None:
-            raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-        import importlib
+    """Resolve a lazy updater name on first read (see _LAZY_UPDATER_NAMES)."""
+    module = _LAZY_UPDATER_SOURCES.get(name)
+    if module is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    import importlib
 
-        value = getattr(importlib.import_module(module), name)
+    value = getattr(importlib.import_module(module), name)
     globals()[name] = value  # cache: later accesses skip __getattr__
     return value
 
@@ -2067,32 +2014,17 @@ def cmd_version(args):
 
 
 def cmd_uninstall(args):
-    """Uninstall Hermes Agent (or just the Chat GUI with --gui).
+    """Uninstall Hermes Agent.
 
-    ``--yes`` paths run from the desktop app's non-interactive cleanup scripts,
-    so the TTY gate applies only when we actually need to prompt.
+    ``--yes`` skips the confirmation prompts; ``--data`` removes only this
+    home's user data and leaves the installed code intact.
     """
-    # Machine-readable snapshot for the desktop uninstall UI; before any TTY gate.
-    if getattr(args, "gui_summary", False):
-        from hermes_cli.gui_uninstall import gui_install_summary
-
-        print(json.dumps(gui_install_summary()))
-        return
-
     if getattr(args, "data", False):
         if not getattr(args, "yes", False) and not getattr(args, "dry_run", False):
             _require_tty("uninstall --data")
         from hermes_cli.uninstall import run_data_uninstall
 
         run_data_uninstall(args)
-        return
-
-    if getattr(args, "gui", False):
-        if not getattr(args, "yes", False) and not getattr(args, "dry_run", False):
-            _require_tty("uninstall --gui")
-        from hermes_cli.uninstall import run_gui_uninstall
-
-        run_gui_uninstall(args)
         return
 
     if not getattr(args, "yes", False) and not getattr(args, "dry_run", False):
@@ -2214,10 +2146,6 @@ from hermes_cli.update_receipt import update_receipt_scope
 @update_receipt_scope()
 def cmd_update(args):
     """Update Hermes Agent: hangup protection + update lock around ``_cmd_update_impl``."""
-    # Marks this frame as the CURRENT updater for
-    # _old_updater.in_historical_update(); historical on-disk updaters do not
-    # declare this local, so only they hand off through retired shims.
-    _hermes_current_updater_frame = True
     from hermes_cli.update_owning_install import retarget_to_owning_install
 
     retarget_to_owning_install(PROJECT_ROOT)
@@ -2303,7 +2231,7 @@ def _coalesce_session_name_args(argv: list) -> list:
         "chat", "model", "gateway", "setup", "whatsapp", "whatsapp-cloud", "login", "logout",
         "auth", "status", "cron", "doctor", "config", "pairing", "skills", "tools", "mcp",
         "sessions", "insights", "update", "uninstall", "profile",
-        "desktop", "gui", "honcho", "claw", "plugins", "security", "acp", "webhook", "peer",
+        "honcho", "claw", "plugins", "security", "acp", "webhook", "peer",
         "memory", "dump", "debug", "backup", "import", "completion", "logs", "usage",
     }
     _SESSION_FLAGS = {"-c", "--continue", "-r", "--resume"}
@@ -2384,7 +2312,7 @@ _BUILTIN_SUBCOMMANDS = frozenset(
         "clipboard", "computer-use", "connectors",
         "config", "console", "cron", "curator", "debug", "doctor",
         "dump", "egress", "fallback", "gateway", "hooks", "import", "insights",
-        "gui", "desktop", "kanban", "login", "logout", "logs", "lsp", "mcp", "memory", "migrate", "moa",
+        "kanban", "login", "logout", "logs", "lsp", "mcp", "memory", "migrate", "moa",
         "journey", "memory-graph", "learning",
         "model", "monitoring", "pairing", "pause", "peer", "pets", "plugins", "portal", "profile",
         "project", "proxy", "prompt-size", "resume", "send", "sessions", "setup",
@@ -2529,8 +2457,8 @@ def _prepare_agent_startup(args) -> None:
                 exc_info=True,
             )
     # -t/--toolsets narrows which configured MCP servers get spawned, on
-    # every discovery path (background thread, TUI/desktop
-    # deferred start). Built-in toolset names never match a server key, so
+    # every discovery path (background thread, TUI deferred start).
+    # Built-in toolset names never match a server key, so
     # `-t terminal` simply spawns nothing; `-t all` keeps the full set.
     try:
         from hermes_cli.mcp_startup import set_mcp_server_filter
@@ -2676,7 +2604,7 @@ def _try_fast_chat_launch() -> bool:
     uses. Bails out (False) whenever the invocation is not certainly a chat
     launch — subcommand positional, ``--help``, unknown flags. Mirrors
     ``_try_termux_fast_cli_launch`` minus the Termux deferred startup; kept
-    separate so phone-tuned behavior doesn't leak to desktops.
+    separate so phone-tuned behavior does not leak into the general fast path.
     """
     if os.environ.get("HERMES_DISABLE_FAST_CHAT_LAUNCH") == "1":
         return False
@@ -2973,9 +2901,6 @@ def _build_cli_parser():
     build_acp_parser(subparsers, cmd_acp=cmd_acp)
     build_profile_parser(subparsers, cmd_profile=cmd_profile)
     build_completion_parser(subparsers, cmd_completion=cmd_completion, parser=parser)
-    # "desktop" is canonical (Hermes-Setup.exe tells users to run it, so it
-    # must be the name --help shows); "gui" is a deprecated alias.
-    build_gui_parser(subparsers, cmd_gui=cmd_gui)
     build_logs_parser(subparsers, cmd_logs=cmd_logs)
     build_prompt_size_parser(subparsers, cmd_prompt_size=cmd_prompt_size)
     return parser, subparsers

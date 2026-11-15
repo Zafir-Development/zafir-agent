@@ -12,7 +12,7 @@ from hermes_constants import hermes_home_key
 
 _mcp_discovery_lock = threading.Lock()
 # Discovery slot per profile home (``hermes_home_key()`` follows the context-local HERMES_HOME
-# override): a shared Desktop/dashboard backend serving several profiles runs one discovery per
+# override): a shared gateway backend serving several profiles runs one discovery per
 # profile instead of the first profile to build an agent claiming the slot for everybody (#67605).
 # A single-profile process has exactly one key, so behaviour is the old single-slot form.
 _mcp_discovery_started: set[str] = set()
@@ -96,7 +96,7 @@ def start_background_mcp_discovery(*, logger, thread_name: str) -> None:
     If the first run exits without connecting any server (e.g. startup cancellation / OOM restart),
     later calls may retry instead of pinning the profile in "already started" with zero MCP tools.
     Likewise a server added to ``mcp_servers`` after that run (``hermes mcp add`` against a running
-    Desktop backend) is connected by the next call, which every agent build makes, so a new session
+    gateway backend) is connected by the next call, which every agent build makes, so a new session
     gets its tools without a reload (#76954). Discovery is additive: live servers are untouched.
     """
     home_key = hermes_home_key()
@@ -127,7 +127,7 @@ def start_background_mcp_discovery(*, logger, thread_name: str) -> None:
             return
 
         # Bare threads start from an empty context: run discovery under a copy of the caller's, so
-        # the context-local HERMES_HOME override (multi-profile dashboard/desktop backends, #67605)
+        # the context-local HERMES_HOME override (multi-profile gateway backends, #67605)
         # AND the profile's secret scope reach it. Without the scope a session switched to profile
         # X would discover the LAUNCH profile's mcp_servers, and ``${TOKEN}`` interpolation / the
         # stdio child env would fail closed (multiplex) or resolve the launch profile's value.
@@ -217,13 +217,12 @@ def _discover_mcp_tools_without_interactive_oauth() -> None:
 def defer_background_mcp_discovery(*, logger, thread_name: str, delay: float | None) -> None:
     """Arm ``start_background_mcp_discovery`` to run ``delay`` seconds from now.
 
-    Used by the Desktop ``serve`` backend after its socket is announced: the thread's first act is
-    the ~350ms ``mcp`` SDK import, which would hold the GIL against the renderer's connect + first
-    hydration reads (or the web_server import) if started earlier.
+    The timer keeps the thread's first act — the ~350ms ``mcp`` SDK import — from
+    holding the GIL against a client's connect + first hydration reads.
 
-    ``delay=None`` arms without a clock: the standalone dashboard fires it from the first ``/api/ws``
-    client (``start_deferred_mcp_discovery_now``) or the first agent build (``wait_for_mcp_discovery``),
-    so an idle, unvisited dashboard never spawns the configured stdio MCP servers (#58733).
+    ``delay=None`` arms without a clock: ``start_deferred_mcp_discovery_now`` or the
+    first agent build (``wait_for_mcp_discovery``) fires it later, so an idle process
+    never spawns the configured stdio MCP servers (#58733).
     """
     global _mcp_discovery_deferred
     with _mcp_discovery_lock:
@@ -279,8 +278,9 @@ def _current_home_thread() -> Optional[threading.Thread]:
 def mcp_discovery_in_flight() -> bool:
     """True if THIS module's discovery thread (for the current profile home) is still running.
 
-    Mirrors ``tui_gateway.entry.mcp_discovery_in_flight``; surfaces that start discovery here
-    (desktop, dashboard sidecar) populate this thread, so the late-refresh scheduler consults both.
+    Mirrors ``tui_gateway.entry.mcp_discovery_in_flight``; processes that start discovery through
+    this module (CLI startup, the TUI entry, the slash worker) populate this thread, so the
+    late-refresh scheduler consults both.
 
     Those processes populate THIS module's ``_mcp_discovery_thread``, not ``tui_gateway.entry``'s, so the
     late-refresh scheduler must consult both to decide whether a slow server's tools are still pending (see

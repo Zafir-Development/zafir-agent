@@ -26,12 +26,6 @@ def presented(monkeypatch):
     return seen
 
 
-def _desktop_backend(monkeypatch):
-    """The backend Desktop spawned: the inherited flag plus the per-spawn credential."""
-    monkeypatch.setenv("HERMES_DESKTOP", "1")
-    monkeypatch.setenv("HERMES_DASHBOARD_SESSION_TOKEN", "spawn-token")
-
-
 def _resolve(monkeypatch):
     """A free-model call: only a guest that claimed the welcome trial on the desktop's local backend
     mints an inference token."""
@@ -252,20 +246,6 @@ class TestWhoWaits:
         assert _resolve(monkeypatch)["api_key"]
         assert len(presented) == 1                       # the 429 did not skip presenting
 
-    def test_an_inherited_desktop_flag_is_not_the_desktop_surface(self, nas, monkeypatch, capsys):
-        """A ``hermes`` run in the desktop's terminal pane inherits HERMES_DESKTOP but not the spawn
-        credential: it reports ``cli`` to the service and prints the link where its user is."""
-        import webbrowser
-        monkeypatch.setenv("HERMES_DESKTOP", "1")
-        monkeypatch.delenv("HERMES_DASHBOARD_SESSION_TOKEN", raising=False)
-        monkeypatch.setenv("SSH_TTY", "/dev/pts/0")
-        monkeypatch.setattr(webbrowser, "open", lambda _url: False)
-        _connectors_token()
-        assert nas.token_requests[-1]["body"]["client"]["surface"] == "cli"
-        anon_challenge.present(anon_challenge.BrowserChallenge(f"{PORTAL}/challenge?code=t", True, 600, 2, "m"))
-        assert f"{PORTAL}/challenge?code=t" in capsys.readouterr().err
-
-
 class TestOtherEndpointsAreUnchanged:
     def test_a_428_on_sign_up_is_still_the_proof_of_work_verdict(self, nas):
         nas.create_response = httpx.Response(428, json={"error": "challenge_required", "challenges": []})
@@ -350,15 +330,6 @@ class TestOptionalChallenge:
         assert _connectors_token()
         assert presented == [] and announced == []
 
-    def test_the_desktop_backend_announces_it_and_waits_on_nothing(self, nas, presented, monkeypatch):
-        announced = []
-        monkeypatch.setattr(anon_challenge, "_announce", announced.append)
-        nas.optional_challenge = True
-        assert _resolve(monkeypatch)["api_key"]
-        assert [c.required for c in announced] == [False]
-        assert "/api/anonymous/challenge/status" not in [p for _, p in nas.calls]
-        assert anon_challenge.pending_challenge()["url"] == nas.challenge_url
-
     def test_replayed_offers_keep_the_original_expiry_and_old_results_cannot_end_a_retry(self, nas, monkeypatch):
         clock = [100.0]
         monkeypatch.setattr(anon_challenge.time, "monotonic", lambda: clock[0])
@@ -375,15 +346,6 @@ class TestOptionalChallenge:
 
 
 class TestPresenting:
-    def test_the_desktop_backend_announces_and_never_opens_a_browser(self, monkeypatch):
-        announced, opened = [], []
-        _desktop_backend(monkeypatch)
-        monkeypatch.setattr(anon_challenge, "_announce", lambda c: announced.append(c) or True)
-        monkeypatch.setattr(anon_challenge, "_present_in_terminal", opened.append)
-        challenge = anon_challenge.BrowserChallenge(f"{PORTAL}/challenge?code=t", True, 600, 2, "m")
-        anon_challenge.present(challenge)
-        assert announced == [challenge] and opened == []
-
     def test_the_stdio_tui_gateway_hands_the_link_to_its_client(self, monkeypatch, capsys):
         """The TUI keeps its gateway's stderr as a log the user never sees: the challenge goes to the
         client over the JSON-RPC channel instead of being printed there."""

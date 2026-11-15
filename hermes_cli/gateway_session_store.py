@@ -130,7 +130,7 @@ class GatewaySessionStore:
     def attach(self, session_id, *, typed=False):
         """``session.resume`` once per session id this viewer uses (idempotent), carrying this CLI's launch
         key as the thin client does (``GatewayConnection.resume``, the reconnect's too). A session that does
-        not take the key (a keyed startup alias resuming a Desktop/TUI session) attaches as is. ``typed``
+        not take the key (a keyed startup alias resuming a TUI session) attaches as is. ``typed``
         (only :meth:`open_session`'s startup resume, where the user typed ``--api-key`` for that session)
         refuses it instead, as the thin client does."""
         if session_id in self.snapshots:
@@ -533,8 +533,7 @@ def _check_resume_launch(launch, snapshot):
 
 def move_cli_workspace(cli, wt_info):
     """``/worktree new``: the session's tools run in the gateway under the cwd frozen in its policy, so
-    move that first (``session.mutate workspace``, Desktop's Move to project; a refusal raises before
-    anything moved). The moved session resumes in the tree, so it is recorded as a ``--tui -w`` tree is:
+    move that first (``session.mutate workspace``; a refusal raises before anything moved). The moved session resumes in the tree, so it is recorded as a ``--tui -w`` tree is:
     quit removes it when clean and a resume recreates it (N8). Then this process's cwd and TERMINAL_CWD
     follow, so a later /new creates its session from the tree; a chdir OSError leaves both where they
     were (the gateway session has moved by then)."""

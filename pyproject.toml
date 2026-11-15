@@ -158,7 +158,7 @@ dependencies = [
   # Python 3.14 requires pywinpty 3.x. Version 3.0.5 includes the native
   # binaries missing from 3.0.4 wheels on both Windows architectures.
   "pywinpty>=3.0.5,<4; sys_platform == 'win32' and python_version >= '3.14'",
-  # Desktop SSH's Windows remote runtime (hermes_cli/windows_ssh_runtime.py)
+  # hermes_cli/private_file.py (credential files with an owner-only DACL)
   # imports win32security/win32file/etc. directly — declare pywin32 rather than
   # relying on the concurrent-log-handler → portalocker transitive chain.
   "pywin32>=306,<312; sys_platform == 'win32' and python_version >= '3.14'",
@@ -608,7 +608,7 @@ opt-in-extras = ["kittentts"]
 update-startup-files = [
   "hermes_bootstrap.py", "hermes_cli/_parser.py", "hermes_cli/_launchers.py",
   "hermes_cli/_early_recovery.py", "hermes_cli/update_lock.py", "hermes_cli/update_custody.py",
-  "hermes_cli/update_handoff.py", "hermes_cli/venv_sync.py", "pm/__init__.py", "pm/environments.py",
+  "hermes_cli/venv_sync.py", "pm/__init__.py", "pm/environments.py",
   "hermes_cli/main.py", "hermes_cli/config.py", "hermes_cli/__init__.py",
   "cli.py", "run_agent.py", "model_tools.py", "toolsets.py",
   "hermes_constants.py",
@@ -765,7 +765,6 @@ testpaths = ["tests"]
 markers = [
   "integration: marks tests requiring external services (API keys, Modal, etc.)",
   "live: secrets-gated canaries against REAL LLM provider APIs (spends money; select with -m live)",
-  "real_concurrent_gate: opt out of the autouse stub that disables _detect_concurrent_hermes_instances",
   "real_agent_prewarm: opt out of the autouse stub that disables the tui_gateway deferred agent pre-warm timer",
   "real_retry_backoff: opt out of the tests/agent autouse stub that zeroes jittered_backoff",
   "requires_wal: needs the runtime to actually enable SQLite WAL mode (skipped where Hermes falls back to journal_mode=DELETE)",

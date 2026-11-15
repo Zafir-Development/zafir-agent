@@ -120,7 +120,7 @@ def resolve_store_python(repo_root: Path, *, publication: bool = False) -> Path 
     Callers that PERSIST the result in a launcher (``stage_launcher`` and the
     publication gates below) pass ``publication=True``: the tree's own store
     wins over an inherited ``HERMES_RUNTIME_DIR``. The override names a store
-    for the running process (an e2e fixture, a desktop toolchain) that a later
+    for the running process (an e2e fixture, an editor toolchain) that a later
     scratch cleanup may delete, leaving the launcher to exit 127 forever
     (#131745). It still supplies the store when the tree records none.
     """
@@ -172,8 +172,8 @@ def _store_script_maker(python_exe: Path):
 
     A launch activates only the dependency environment, which carries no
     distlib and drops the store's site-packages, so the update that repins
-    Python could only publish a .cmd and retire hermes.exe -- which Desktop's
-    backend sweep, shortcuts and terminal profiles name. python-build-standalone
+    Python could only publish a .cmd and retire hermes.exe -- which user
+    shortcuts and terminal profiles name. python-build-standalone
     ships pip (the installer mints the first hermes.exe through it), and its
     vendored distlib is self-contained. It loads under a private name so the
     store's pip never answers an ``import pip`` in this process."""
@@ -553,7 +553,7 @@ def _owns_launcher(target: Path, root: Path) -> bool:
     bootstrap = f"sys.path.insert(0, {str(root)!r})"
     if paths.intersection(tokens) or any(bootstrap in token for token in tokens):
         return True
-    # The historical updater wrote ACP as a sibling-hermes forwarder. Adopt
+    # Older installers wrote ACP as a sibling-hermes forwarder. Adopt
     # it only when that sibling demonstrably belongs to this installation.
     if target.name == "hermes-acp":
         sibling = target.with_name("hermes")
@@ -866,10 +866,9 @@ def ensure_install_launchers(repo_root: Path, out_dir: Path) -> list[str]:
 def expose_cli(project_root: Path | None = None, *, create: bool = True) -> dict:
     """Repair PATH conveniences without taking over another installation's files.
 
-    macOS CLI-first launches link the bundle's signed shims directly; Electron
-    need not have run. Source installs converge on the store launcher owner.
-    POSIX shell rc registration remains installer-owned. On Windows the User
-    PATH entry is repaired only for the home new consoles use (owns_user_path).
+    Source installs converge on the store launcher owner. POSIX shell rc
+    registration remains installer-owned. On Windows the User PATH entry is
+    repaired only for the home new consoles use (owns_user_path).
 
     Before dependency sync succeeds, create=False maintains only commands we
     already own, without loading application config or enabling new exposure.
@@ -896,10 +895,6 @@ def expose_cli(project_root: Path | None = None, *, create: bool = True) -> dict
             return {"ok": True, "skipped": "config-disabled"}
     from hermes_cli.steward import read_install_stamp
 
-    if _is_bundled_payload(root):
-        if create and sys.platform == "darwin":
-            return _symlink_sealed_launchers(root.parent / "bin")
-        return {"ok": True, "skipped": "bundle-owns-launchers"}
     if read_install_stamp(root).get("updateMechanism") == "external":
         return {"ok": True, "skipped": "externally-owned"}
     if resolve_store_python(root, publication=True) is None:
@@ -1097,64 +1092,6 @@ def _expose_windows_user_bin(root: Path, *, create: bool) -> dict:
         return {"ok": True, "path": _register_windows_user_path(directory), "written": names}
     except OSError as exc:
         return {"ok": False, "error": str(exc)}
-
-
-def _is_bundled_payload(root: Path) -> bool:
-    """Is ``root`` a desktop bundle's agent payload? The stamp is the
-    authority (payload marker / desktop-app distribution), never a
-    sibling-directory sniff; a .git tree is a dev checkout regardless."""
-    if (root / ".git").exists():
-        return False
-    from hermes_cli.steward import STEWARD_DESKTOP, read_install_stamp
-
-    stamp = read_install_stamp(root)
-    if not stamp:
-        return False
-    return bool(stamp.get("payload")) or stamp.get("distribution") == STEWARD_DESKTOP
-
-
-def _symlink_sealed_launchers(payload_bin) -> dict:
-    """Link ~/.local/bin/{hermes,hermes-agent,hermes-acp} at a sealed
-    bundle's own prebuilt shims (macOS only).
-
-    Symlinks, not copies: the shims are signed as part of the app bundle,
-    and a copy would both orphan the signature's context and go stale on
-    every app update — a symlink into the .app follows the bundle's
-    content wherever Squirrel.Mac swaps it.
-
-    Ownership guard mirrors expose_cli's wrapper logic: an existing
-    entry is replaced only when it is ours — a symlink into THIS app
-    bundle's payload — or missing/broken. A user's own `hermes` (pipx,
-    another checkout's wrapper) is never touched.
-    """
-    link_dir = Path.home() / ".local" / "bin"
-    payload_root = payload_bin.parent
-    written: list[str] = []
-    try:
-        link_dir.mkdir(parents=True, exist_ok=True)
-        for name in ("hermes", "hermes-agent", "hermes-acp"):
-            source = payload_bin / name
-            if not source.is_file():
-                continue
-            target = link_dir / name
-            if target.is_symlink():
-                current = os.readlink(target)
-                if current == str(source):
-                    continue  # already ours and current
-                # Ours if it points into this payload (stale app path from
-                # a previous version counts — resolve() of a dangling link
-                # still yields the old path text) — or dangling entirely.
-                points_into_payload = str(Path(current)).startswith(str(payload_root) + os.sep)
-                if not points_into_payload and target.exists():
-                    continue  # a live foreign link — user's arrangement
-            elif target.exists():
-                continue  # a real file we did not write — never clobber
-            target.unlink(missing_ok=True)
-            target.symlink_to(source)
-            written.append(name)
-    except OSError as exc:
-        return {"ok": False, "error": str(exc)}
-    return {"ok": True, "written": written, "mode": "sealed-symlinks"}
 
 
 if __name__ == "__main__":

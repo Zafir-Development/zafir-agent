@@ -39,10 +39,10 @@ LEDGER_FILENAME = "spawn-ledger.json"
 
 #: Purposes a reaper may treat as "safe to kill when the owner is gone".
 #: Interactive processes (chat, REPLs) are deliberately NOT in this set.
-REAPABLE_PURPOSES = frozenset({"serve", "dashboard", "gateway", "mcp-helper"})
+REAPABLE_PURPOSES = frozenset({"gateway", "mcp-helper"})
 
-#: Host-role owners a fresh backend may reap on a HELD_BY_OTHER conflict (#121964): the
-#: serve/dashboard/gateway subset. The mcp-helper rung stays owned by reap_orphaned_mcp_helpers.
+#: Host-role owners a fresh backend may reap on a HELD_BY_OTHER conflict (#121964): the gateway
+#: role. The mcp-helper rung stays owned by reap_orphaned_mcp_helpers.
 _BACKEND_OWNER_PURPOSES = REAPABLE_PURPOSES - {"mcp-helper"}
 
 _IS_WINDOWS = platform.system() == "Windows"
@@ -357,7 +357,7 @@ def register_self(purpose: str, *, project_root: Optional[Path] = None, detail: 
     from hermes_constants import hermes_home_key
 
     tag = parse_spawn_tag(os.environ.get(SPAWN_ENV_VAR))
-    spawner_pid, spawner_create = (tag.spawner_pid, tag.spawner_create) if tag else _desktop_spawner_identity()
+    spawner_pid, spawner_create = (tag.spawner_pid, tag.spawner_create) if tag else (None, None)
     entry = _new_entry(os.getpid(), _process_create_time(), purpose, project_root, spawner_pid, spawner_create)
     entry.spawner_boot = _verified_boot_start(spawner_pid, spawner_create)
     entry.hermes_home = hermes_home_key()
@@ -380,71 +380,33 @@ def register_self(purpose: str, *, project_root: Optional[Path] = None, detail: 
     return _append_entry(entry)
 
 
-def is_desktop_owned_backend(argv: Optional[Sequence[str]] = None) -> bool:
-    """Whether this process is the backend Desktop spawned and owns.
-
-    ``HERMES_DESKTOP=1`` is inherited by every shell and agent child the app launches, so the
-    flag alone is not ownership proof (same class as #116107). Desktop hands its backend a
-    per-spawn credential the terminal pane never receives (and the terminal tool's env policy
-    strips from agent children): the local pool spawn mints ``HERMES_DASHBOARD_SESSION_TOKEN``,
-    the SSH spawn passes a 0600 token FILE on argv and deliberately sets no token env var.
-    ``argv`` defaults to this process's own.
-    """
-    if os.environ.get("HERMES_DESKTOP") != "1":
-        return False
-    if os.environ.get("HERMES_DASHBOARD_SESSION_TOKEN"):
-        return True
-    from hermes_cli._startup_fast import is_desktop_ssh_backend_argv
-
-    return is_desktop_ssh_backend_argv(list(sys.argv[1:] if argv is None else argv))
-
-
-# Set while this process works for the Desktop app on its own machine: one request from, or one turn of
-# a chat created by, a client ``local_desktop_client`` accepted. The gateway serves the Desktop, the CLI,
-# the TUI and bots from one process, so this is a property of the activity, never of the process.
-_SERVING_LOCAL_DESKTOP: ContextVar[bool] = ContextVar("hermes_serving_local_desktop", default=False)
+# Set while this process serves a client connected to this machine: one request from, or one turn of
+# a chat created by, a connection ``local_host_client`` accepted. The gateway serves the CLI, the TUI
+# and bots from one process, so this is a property of the activity, never of the process.
+_SERVING_LOCAL_HOST: ContextVar[bool] = ContextVar("hermes_serving_local_host", default=False)
 
 
 @contextmanager
-def serving_local_desktop(active: bool) -> Iterator[None]:
-    """Mark the enclosed activity (and threads it hands its context to) as work for the local Desktop."""
-    token = _SERVING_LOCAL_DESKTOP.set(bool(active) or _SERVING_LOCAL_DESKTOP.get())
+def serving_local_host(active: bool) -> Iterator[None]:
+    """Mark the enclosed activity (and threads it hands its context to) as work for a local client."""
+    token = _SERVING_LOCAL_HOST.set(bool(active) or _SERVING_LOCAL_HOST.get())
     try:
         yield
     finally:
-        _SERVING_LOCAL_DESKTOP.reset(token)
+        _SERVING_LOCAL_HOST.reset(token)
 
 
-def serves_local_desktop_now() -> bool:
-    return _SERVING_LOCAL_DESKTOP.get()
+def serves_local_host_now() -> bool:
+    return _SERVING_LOCAL_HOST.get()
 
 
-def local_desktop_client(identity: Optional[dict], declared: object) -> bool:
-    """A connected client is the Desktop app on this machine when it says so (it knows its connection
-    mode) AND it redeemed a native ticket, which only this machine's private control socket mints, for
-    this OS user. Neither alone: the CLI and TUI hold native tickets too, and the claim is the client's
-    word. A remote Desktop reaches a backend through SSH, URL or Cloud credentials, never a native ticket."""
+def local_host_client(identity: Optional[dict], declared: object) -> bool:
+    """A connected client is on this machine when it says so AND it redeemed a native ticket, which
+    only this machine's private control socket mints, for this OS user. Neither alone: the claim is
+    the client's word, and a remote client reaches a backend through SSH, URL or Cloud credentials,
+    never a native ticket."""
     return (declared is True and isinstance(identity, dict) and identity.get("provider") == "local"
             and identity.get("native_bootstrap") is True)
-
-
-def _desktop_spawner_identity() -> tuple[Optional[int], Optional[float]]:
-    """Spawner ``(pid, create_time)`` from the Electron app's HERMES_PARENT_PID (+ optional
-    ``winms:<ms>`` start marker) parent-death watchdog vars, so ledger lineage works with every
-    Desktop version without a TS change. ``(None, None)`` when absent/malformed."""
-    try:
-        spawner_pid = int(os.environ.get("HERMES_PARENT_PID", ""))
-    except (TypeError, ValueError):
-        spawner_pid = 0
-    if spawner_pid <= 0:
-        return None, None
-    marker = os.environ.get("HERMES_PARENT_START_MARKER", "")
-    if not marker.startswith("winms:"):
-        return spawner_pid, None
-    try:
-        return spawner_pid, float(marker.split(":", 1)[1]) / 1000.0
-    except (ValueError, IndexError):
-        return spawner_pid, None
 
 
 def _new_entry(
@@ -601,25 +563,26 @@ def _terminate_then_kill(pid: int, create_time: Optional[float], boot: Optional[
         return False
 
 
+#: An orphan must have outlived the startup window before a reaper may touch it.
+_REAP_MIN_AGE_SECONDS = 180.0
+
+
 def _reparented_orphan(pid: int) -> bool:
-    """Null-spawner owner with no live supervisor: reparented to init, old, lock-unclaimed.
+    """Null-spawner owner with no live supervisor: reparented to init and old.
 
-    Mirrors ``_reap_orphaned_desktop_local_serves``: operator-managed remote backends legitimately
-    sit at ppid 1 (systemd, an exited sshd), so ppid alone is never proof — the SSH-lock claim
-    and the 180 s lock-write grace exclude live-supervised backends. Windows: the ppid probe is
-    unavailable there, so this rung never fires (desktop tree-kill reaps instead).
+    Operator-managed backends legitimately sit at ppid 1 (systemd, an exited sshd), so ppid alone
+    is never proof — the age floor and the ledger's boot-epoch match keep a live-supervised
+    backend out of this rung. Windows: the ppid probe is skipped there, so this rung never fires.
     """
+    if _IS_WINDOWS:
+        return False
     try:
-        from hermes_cli.dashboard_procs import (
-            _REAP_MIN_AGE_SECONDS, _lock_owned_serve_pids, _process_ppid)
-        if _process_ppid(pid) not in (0, 1):
-            return False
-        if pid in (_lock_owned_serve_pids() or ()):
-            return False
-        import time as _time
-
         import psutil
-        return max(0.0, _time.time() - psutil.Process(pid).create_time()) >= _REAP_MIN_AGE_SECONDS
+
+        proc = psutil.Process(pid)
+        if proc.ppid() not in (0, 1):
+            return False
+        return max(0.0, time.time() - proc.create_time()) >= _REAP_MIN_AGE_SECONDS
     except Exception:
         return False  # unprovable → never touch
 
@@ -630,14 +593,10 @@ def reap_orphaned_backend_owner(
 
     HELD_BY_OTHER rung for #121964: the owner PID is alive (re-parented to init), so
     ``record_is_stale()`` never fires and a fresh backend would loop observe-only against the
-    same orphan forever. Reaped only with a live ``serve``/``dashboard``/``gateway`` entry for
-    THIS install whose spawner is provably dead — or whose spawner was never recorded and which
-    is reparented to init, old, and claimed by no Desktop SSH lock. Live-spawned, lock-claimed,
-    young, interactive, self, or unprovable owners are never touched. Returns the reaped pid,
-    else ``None``; never raises.
-
-    # ponytail: a dead session's surviving backend.lock.json still shields its orphan (the lock
-    # has no session liveness); clearing stale locks is a Desktop-side lifecycle job, not this rung.
+    same orphan forever. Reaped only with a live ``gateway`` entry for THIS install whose spawner
+    is provably dead — or whose spawner was never recorded and which is reparented to init and
+    old. Live-spawned, young, interactive, self, or unprovable owners are never touched. Returns
+    the reaped pid, else ``None``; never raises.
     """
     try:
         pid = int(pid)

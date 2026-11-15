@@ -151,10 +151,10 @@ def _parent_is_live(proc) -> bool:
 def _detect_venv_python_processes(*, exclude_pids: set[int] | None = None) -> list[tuple[int, str, str]]:
     """Live processes running from the project venv's interpreter as ``(pid, name, cmdline)``; never raises.
 
-    The hermes.exe shim guard misses the Desktop backend and anything off ``venv\\Scripts\\python(w).exe``;
+    The hermes.exe shim guard misses a backend and anything off ``venv\\Scripts\\python(w).exe``;
     they keep ``.pyd`` files mapped so a mid-update dependency sync dies half-way. Empty off-Windows / without
     psutil; self + non-gateway ancestors excluded. cmdline/cwd are expensive per process on Windows (500+
-    procs can blow the Desktop preflight watchdog), so they are fetched lazily for plausible candidates only.
+    procs can blow an update preflight watchdog), so they are fetched lazily for plausible candidates only.
     The FULL cmdline is kept: callers parse it (the pausable-gateway exemption looks for ``gateway run``).
     """
     from hermes_cli.update_cmd import _m
@@ -183,7 +183,7 @@ def _detect_venv_python_processes(*, exclude_pids: set[int] | None = None) -> li
             exe_norm = str(Path(exe).resolve()).lower()
         except (OSError, ValueError):
             exe_norm = str(exe).lower()
-        # Primary match: exe lives under this venv (desktop backend / gateway case).
+        # Primary match: exe lives under this venv (legacy backend / gateway case).
         in_venv = exe_norm.startswith(venv_prefix)
         name = str(info.get("name") or Path(exe).name)
         name_low = name.lower()
@@ -315,12 +315,12 @@ def _venv_launcher_ancestors(pids: list[int]) -> list[int]:
 def _venv_holder_kind(cmdline: str) -> str:
     """Machine-readable class of one venv holder for ``--list-venv-holders``.
 
-    ``gateway`` (the pausable gateway matcher), ``backend`` (``serve``/``dashboard`` -- the Desktop
-    app's backend shape), ``hermes:<subcommand>`` for any other Hermes entry, else ``python``.
+    ``gateway`` (the pausable gateway matcher), ``backend`` (a legacy ``serve``/``dashboard``
+    backend shape), ``hermes:<subcommand>`` for any other Hermes entry, else ``python``.
     Derived from the same classifiers the refusal path uses so automation stops exactly what the
     guard would refuse on."""
-    from hermes_cli._scan_venv_blockers import _is_pausable_gateway
-    if _is_pausable_gateway(cmdline):
+    from gateway.status import looks_like_gateway_command_line
+    if looks_like_gateway_command_line(cmdline):
         return "gateway"
     subcommand = _hermes_holder_subcommand(cmdline)
     if subcommand in _BACKEND_PURPOSES:
@@ -338,10 +338,9 @@ def list_venv_holders() -> list[dict]:
 
     Off Windows (or without psutil) the guard never fires, so the list is empty. ``exe``/``argv`` are the
     live psutil values when readable (the scan may carry only a cmdline prefix)."""
-    from hermes_cli.update_cmd import _m
     psutil = _psutil()
     holders: list[dict] = []
-    for pid, name, cmdline in _m()._detect_venv_python_processes():
+    for pid, name, cmdline in _detect_venv_python_processes():
         exe, argv = name, cmdline
         if psutil is not None:
             with suppress(Exception):
@@ -350,26 +349,6 @@ def list_venv_holders() -> list[dict]:
                 argv = " ".join(proc.cmdline()) or cmdline
         holders.append({"pid": int(pid), "exe": exe, "argv": argv, "kind": _venv_holder_kind(argv)})
     return holders
-
-
-def _leftover_pausable_gateway_pids(matches: list[tuple[int, str, str]]) -> list[int] | None:
-    """PIDs from *matches* when EVERY remaining venv holder is a pausable gateway, else ``None`` (keep refusing).
-
-    A gateway respawned inside the pause->guard window (or via an unmapped spawn path) still holds ``.pyd`` files.
-    Uses the Desktop preflight's ``_is_pausable_gateway`` so exemption and tolerance cannot drift; live argv is
-    re-read via psutil when possible since the scan may hold only a cmdline prefix."""
-    from hermes_cli._scan_venv_blockers import _is_pausable_gateway
-    psutil = _psutil()
-    pids: list[int] = []
-    for pid, _name, cmdline in matches:
-        argv = cmdline
-        if psutil is not None:
-            with suppress(Exception):
-                argv = " ".join(psutil.Process(int(pid)).cmdline()) or cmdline
-        if not _is_pausable_gateway(argv):
-            return None
-        pids.append(int(pid))
-    return pids
 
 
 def _refuse_gateway_ancestor_tree_kill(pids: list[int], *, gateway_mode: bool) -> bool:
@@ -396,225 +375,6 @@ def _refuse_gateway_ancestor_tree_kill(pids: list[int], *, gateway_mode: bool) -
         "  From a chat platform, use `/update` instead.\n  Otherwise, run `hermes update` from a separate terminal."
     )
     return True
-
-
-def _ledger_manual_serve_holders(matches: list[tuple[int, str, str]]) -> list[dict]:
-    """Full ledger entries for venv holders that are MANUAL serve/dashboard backends.
-
-    Positive identity only: self-registered purpose serve/dashboard, live (pid, create_time), recorded spawner
-    NOT alive (a Desktop-owned backend keeps its live Electron spawner and must keep the refusal — the app would
-    respawn what we kill). Full entries let the relauncher rebuild from host/port/profile, not argv."""
-    try:
-        from hermes_cli.process_identity import ledger_entries, spawner_is_dead
-    except Exception:
-        return []
-    holder_pids = {int(pid) for pid, _name, _cmd in matches}
-    return [
-        entry for entry in ledger_entries()
-        if entry.get("purpose") in _BACKEND_PURPOSES and isinstance(entry.get("pid"), int) and entry["pid"] in holder_pids
-        and spawner_is_dead(entry) is not False  # False = live Desktop supervisor owns it; keep refusing
-    ]
-
-
-def _is_backend_argv(argv_low: str) -> bool:
-    """Whether an argv is a DESKTOP backend — feeds ``taskkill /T`` via ``_orphaned_desktop_backend_pids``.
-
-    Same predicate as ``_looks_like_desktop_control_plane``: ``-m hermes_cli.main`` entry shape (the
-    Desktop's only spawn shape) AND the canonical holder classifier says ``serve``/``dashboard``. A user-launched ``hermes.exe serve`` / ``hermes dashboard`` is NOT the
-    Desktop's: the guard refuses on it, never reaps it.
-    """
-    return _looks_like_desktop_control_plane(argv_low)
-
-
-def _live_argv_low(psutil, pid, cmdline: str) -> str | None:
-    """Current lower-cased argv of *pid* (falls back to the scanned *cmdline*); ``None`` if it exited."""
-    argv = cmdline
-    try:
-        argv = " ".join(psutil.Process(int(pid)).cmdline()) or cmdline
-    except psutil.NoSuchProcess:
-        return None
-    except Exception:
-        pass
-    return argv.lower()
-
-
-def _orphaned_desktop_backend_pids(matches: list[tuple[int, str, str]]) -> list[tuple[int, int]] | None:
-    """``(pid, start_time)`` roots from *matches* when every remaining holder is an ORPHANED backend, else ``None``.
-
-    Killing a Desktop-owned ``serve`` is futile (the app respawns it), but a straggler whose Desktop is gone
-    would dead-end the update with "Hermes is still running" and zero open windows. Qualifies only if cmdline
-    is a Hermes backend AND the parent is demonstrably gone (PID missing or reused). Tree-aware: holders inside
-    an accepted root's tree fold into it; only roots are returned (``taskkill /T`` reaps descendants). Any
-    live-parent backend, unjustified non-backend, unprovable case, or no psutil -> ``None``. Never raises.
-
-    The venv-holder guard refuses on the Desktop app's ``serve`` backend by design: while the Desktop is
-    open, killing its backend is futile (the app supervises and respawns it within seconds), so the user
-    must close the app. But in the GUI-updater handoff path the Desktop has *already exited* — by contract
-    it tree-kills its backends and waits for the venv shim before spawning hermes-setup, and the
-    update-in-progress marker parks any relaunched Desktop from spawning a fresh backend (#50238). A
-    ``serve`` backend still holding the venv at that point is a straggler whose supervisor is gone: SIGTERM
-    raced its spawn, or it belongs to a crashed window. Nothing will respawn it, and refusing on it
-    dead-ends the update with "Hermes is still running" while the user stares at zero open windows (ryanc's
-    2026-08-09 01:59/02:17 failures).
-    """
-    psutil = _psutil()
-    if psutil is None:
-        return None
-    # Pass 1: find orphaned backend ROOTS among the holders.
-    roots: list[tuple[int, int]] = []
-    remaining: list[int] = []  # holders still to justify
-    for pid, _name, cmdline in matches:
-        low = _live_argv_low(psutil, pid, cmdline)
-        if low is None:
-            continue  # exited between scan and classification — nothing to reap
-        if not _is_backend_argv(low):
-            remaining.append(int(pid))
-            continue
-        try:
-            proc = psutil.Process(int(pid))
-            # Fingerprint from the SAME psutil handle, centisecond-quantized like
-            # gateway.status.get_process_start_time so pid_is_hermes round-trips at kill time.
-            process_start_time = round(proc.create_time() * 100)
-        except psutil.NoSuchProcess:
-            continue  # exited during classification — nothing to reap
-        except Exception:
-            return None
-        try:
-            ppid = proc.ppid()
-            parent = psutil.Process(ppid) if ppid else None
-            # PID-reuse check: a "parent" created after its child is a recycled PID. A live parent is
-            # not a root but may be an orphan root's descendant (the venv trampoline re-execs uv
-            # python with the SAME argv) — defer to pass 2.
-            if parent is not None and parent.is_running() and parent.create_time() <= proc.create_time():
-                remaining.append(int(pid))
-                continue
-        except psutil.NoSuchProcess:
-            pass  # parent gone → orphan
-        except Exception:
-            return None
-        roots.append((int(pid), process_start_time))
-    # Pass 2: every non-backend holder must descend from an accepted orphan root
-    # (dies with the tree reap); anything else keeps the refusal.
-    root_set = {pid for pid, _start_time in roots}
-    for pid in remaining:
-        try:
-            if not root_set or not root_set & {int(a.pid) for a in psutil.Process(pid).parents()}:
-                return None
-        except psutil.NoSuchProcess:
-            continue  # exited already
-        except Exception:
-            return None
-    return roots
-
-
-def _ledger_reapable_backend_pids(matches: list[tuple[int, str, str]]) -> list[int]:
-    """PIDs the spawn ledger positively identifies as orphaned backends; never raises.
-
-    Strongest rung (no PPID/cmdline inference): qualifies when ``(pid, create_time)`` matches a live ledger entry
-    (PID reuse can't forge it), purpose is a REAPABLE kind (never interactive), and the recorded SPAWNER is
-    provably dead. Safe in ANY context. Unlisted holders fall to later rungs and never disqualify identified ones."""
-    try:
-        from hermes_cli.process_identity import REAPABLE_PURPOSES, ledger_entries, spawner_is_dead
-        entries = ledger_entries()
-    except Exception:
-        return []
-    by_pid = {e.get("pid"): e for e in entries if isinstance(e.get("pid"), int)}
-    return [
-        int(pid) for pid, _name, _cmdline in matches
-        if (entry := by_pid.get(int(pid))) and entry.get("purpose") in REAPABLE_PURPOSES and spawner_is_dead(entry) is True
-    ]
-
-
-def _handoff_reapable_backend_pids(matches: list[tuple[int, str, str]]) -> list[int] | None:
-    """Backend PIDs safe to tree-reap during a GUI-updater hand-off, INCLUDING ones with a live parent; never raises.
-
-    The orphan-only rung bails on ANY live parent (mid-teardown Electron, launcher->worker chain) and hung a
-    hand-off. Inside the hand-off gate (marker + ``--gateway`` + no live ``hermes.exe`` shim) nothing legitimate
-    supervises a ``serve`` from this venv, so survivors are leaks. Any non-backend holder or no psutil ->
-    ``None``. The CALLER must have confirmed the gate; outside it the stricter orphan-only path stands.
-
-    Any ``serve`` backend still holding the venv here is therefore a leak, live parent or not, and reaping
-    its tree is correct rather than a race. See #50238.
-    """
-    psutil = _psutil()
-    if psutil is None:
-        return None
-    roots: list[int] = []
-    for pid, _name, cmdline in matches:
-        low = _live_argv_low(psutil, pid, cmdline)
-        if low is None:
-            continue  # exited — nothing to reap
-        if not _is_backend_argv(low):
-            return None  # unexpected non-backend holder: refuse the whole set
-        roots.append(int(pid))
-    return roots or None
-
-
-def _stop_process_trees(pids: list[int] | list[tuple[int, int]]) -> None:
-    """Force-stop each PID with its full child tree (Windows); best effort, never raises.
-
-    ``taskkill /T /F``: stopping only the parent can leave a ``.hermes-runtime`` child holding the install open.
-
-    See #70026.
-    """
-    from gateway.status import get_process_start_time
-    from hermes_cli._subprocess_compat import pid_is_hermes, windows_hide_flags
-    for entry in pids:
-        pid, expected_start_time = entry if isinstance(entry, tuple) else (int(entry), get_process_start_time(int(entry)))
-        try:
-            if expected_start_time is None:
-                logger.debug("Skipping taskkill of PID %s: process identity unavailable", pid)
-                continue
-            if not pid_is_hermes(pid, expected_start_time=expected_start_time):
-                logger.debug("Skipping taskkill of non-Hermes or changed PID %s", pid)
-                continue
-            subprocess.run(
-                ["taskkill", "/PID", str(pid), "/T", "/F"], check=False,
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL,
-                creationflags=windows_hide_flags(),
-            )
-        except Exception as exc:
-            logger.debug("Could not stop process tree %s: %s", pid, exc)
-
-
-def _looks_like_desktop_control_plane(cmdline: str) -> bool:
-    """True for this-install ``hermes serve`` / ``hermes dashboard`` argv (Desktop control plane).
-
-    Not the messaging gateway — don't feed into ``looks_like_gateway_command_line``. Token-based via the
-    parser-derived classifier, never substring (``kanban --preserve-cache``, ``-m dashboard chat``).
-    Undeterminable subcommand is NOT a control plane.
-
-    See #92091.
-    A cmdline whose subcommand cannot be determined is NOT a control plane — callers must not guess
-    ownership. See #90778, #91869.
-    """
-    return "hermes_cli.main" in (cmdline or "").lower() and _hermes_holder_subcommand(cmdline) in _BACKEND_PURPOSES
-
-
-def _desktop_owns_gateway_lifecycle() -> bool:
-    """True when Desktop currently supervises this install's control plane (updater must not steal gateway start).
-
-    Not proof messaging is served: serve is the control plane, the gateway a detached sibling. Prefer the spawn
-    ledger; fall back to the venv-holder scan. An orphaned control plane (supervisor gone) does not count;
-    without psutil orphanhood is unprovable and a live control plane suffices.
-
-    See #76129, #92091.
-    """
-    from hermes_cli.update_cmd import _m
-    with _best_effort('Desktop-lifecycle ledger probe failed: %s'):
-        from hermes_cli.process_identity import ledger_entries, spawner_is_dead
-        if any(e.get("purpose") in _BACKEND_PURPOSES and spawner_is_dead(e) is False for e in ledger_entries()):
-            return True
-    psutil = _psutil()
-    for pid, _name, cmdline in _try_call(_detect_venv_python_processes, "Desktop-lifecycle holder scan failed: %s") or []:
-        if not _looks_like_desktop_control_plane(cmdline):
-            continue
-        if psutil is None:
-            return True
-        with suppress(Exception):
-            if _parent_is_live(psutil.Process(int(pid))):
-                return True
-    return False
 
 
 def _win_service(name: str):
@@ -726,31 +486,13 @@ def _windows_cold_start_plan() -> dict | None:
     """Pause token for the no-running-gateway case: cold-start after update when an autostart entry exists.
 
     An installed autostart entry is an explicit "I want a gateway" signal; a gateway that died between
-    updates would otherwise stay down until next login (resume only relaunches what was running).
-    Desktop-owned lifecycle -> ``None`` (spawning ``gateway run`` beside Desktop races ports/state);
-    the skip is ownership, not liveness — except when the start attestation reports a vouched-for
-    gateway that died without a clean exit. The Desktop hand-off exits the app before the updater starts
-    and can kill the running gateway in those same seconds, so discovery finds no live PID to pause
-    (#109538) — the dead attestation is the only surviving "a gateway was up" evidence, and the Desktop
-    only restarts gateways it stopped itself (its hand-off script, after the update verifies; #119809).
-    Keep the plan, and record the attestation
-    *generation* that authorized it on the token: the marker is a mutable one-shot that any concurrent
-    ``hermes gateway status``/``start`` consumes, so execution authorizes the spawn from the token and
-    consumes only that generation (#110020 review)."""
-    from hermes_cli.update_cmd import _desktop_owns_gateway_lifecycle
+    updates would otherwise stay down until next login (resume only relaunches what was running)."""
     from hermes_cli import gateway_windows
     with _best_effort('Could not check Windows gateway autostart state before update: %s'):
         if not gateway_windows.is_installed():
             return None
-        token = {"resume_needed": True, "profiles": {}, "unmapped_pids": [], "unmapped": [], "cold_start_if_installed": True}
-        with _best_effort('Could not check Desktop gateway-lifecycle ownership before update: %s'):
-            if _desktop_owns_gateway_lifecycle():
-                generation = gateway_windows.attested_death_generation(current_pids=[])
-                if generation is None:
-                    logger.debug("Skipping Windows gateway cold-start plan: Desktop owns gateway lifecycle")
-                    return None
-                token["attested_generation"] = generation
-        return token
+        return {"resume_needed": True, "profiles": {}, "unmapped_pids": [], "unmapped": [],
+                "cold_start_if_installed": True}
     return None
 
 
@@ -942,8 +684,6 @@ def _pause_windows_gateways_for_update() -> dict | None:
     token = {"resume_needed": True, "profiles": profiles, "unmapped_pids": unmapped_pids, "unmapped": unmapped}
     # Every profile with ANY live gateway at discovery counts as running: service-supervised ones skip the
     # socket pause (absent from ``profiles``) but the SCM restart brings them back, not a cold-start.
-    running_profiles = set(profiles) | {str(p.profile) for p in profile_processes.values()} | {str(s.profile) for s in service_gateways}
-    _record_attested_cold_start_profiles(token, running_profiles)
     try:
         token = _pause_windows_gateway_services(service_gateways, token, profiles, unmapped)
     except ServicePauseFailed as exc:
@@ -957,11 +697,6 @@ def _cold_start_pause_token(adopted: dict | None, claims: list) -> dict | None:
     """No gateway runs: the cold-start plan, plus any orphaned set adopted from a killed update."""
     from hermes_cli import update_pause_record as pause_record
     token = _windows_cold_start_plan()
-    # Other profiles may hold a dead attestation even when the active profile owes nothing
-    # (clean exit, autostart not installed): give them a token to ride on.
-    probe = token if token is not None else {"resume_needed": True, "profiles": {}, "unmapped_pids": [], "unmapped": []}
-    _record_attested_cold_start_profiles(probe, set())
-    token = probe if probe.get("cold_start_profiles") else token
     if adopted is None:
         return pause_record.stamp_tree(token) if token is not None else None
     token = token if token is not None else {"resume_needed": True, "profiles": {}, "unmapped_pids": [], "unmapped": []}
@@ -1010,64 +745,6 @@ def _stop_windows_gateways(running_pids, profile_processes, service_gateway_pids
     return profiles
 
 
-def _record_attested_cold_start_profiles(token: dict, running_profiles: set) -> None:
-    """Record ``token["cold_start_profiles"] = {name: generation}`` for every known profile that is not
-    running yet holds a start attestation for a gateway that died without a clean exit (#110959).
-
-    The all-or-nothing plan only ever probed the ACTIVE profile and only when NO gateway ran at all, so a
-    dead-but-attested default beside a still-running ``beta`` never got a cold-start obligation. Only
-    Desktop-owned installs need this (elsewhere autostart brings the profile back); the active profile is
-    left to the existing plan so it is never spawned twice. Best-effort: never blocks the pause."""
-    from hermes_cli.update_cmd import _desktop_owns_gateway_lifecycle
-    from hermes_cli import gateway_windows
-    with _best_effort("Could not evaluate per-profile attested cold-starts before update: %s"):
-        if not _desktop_owns_gateway_lifecycle():
-            return
-        from hermes_cli.profiles import get_active_profile_name, profiles_to_serve
-        active = get_active_profile_name() or "default"
-        cold: dict[str, str] = {}
-        # An activation list, not inventory: parked profiles stay offline.
-        for name, home in profiles_to_serve(multiplex=True, include_standalone=True):
-            if name in running_profiles or (name == active and token.get("cold_start_if_installed")):
-                continue
-            generation = gateway_windows.attested_death_generation([], home=Path(home))
-            if generation:
-                cold[name] = generation
-        if cold:
-            token["cold_start_profiles"] = cold
-
-
-def _cold_start_attested_profiles(token: dict) -> None:
-    """Spawn each ``cold_start_profiles`` entry under its own HERMES_HOME and consume exactly the
-    generation that authorized it; one profile's failure never aborts the others (#110959)."""
-    from hermes_cli import gateway_windows
-    from hermes_cli.profiles import get_profile_dir
-    pending = dict(token.get("cold_start_profiles") or {})
-    if not pending:
-        return
-    for name, generation in sorted(pending.items()):
-        home = Path(get_profile_dir(name))
-        with _best_effort(f"Could not cold-start Windows gateway profile {name} after update: %s"):
-            if not gateway_windows._live_gateway_pids(home=home):  # a concurrent autostart must not be doubled
-                pid = gateway_windows._spawn_detached(home=home)
-                if not pid:
-                    raise RuntimeError("cold-start did not return a process ID")
-            ready_pids = gateway_windows._wait_for_gateway_ready(home=home)
-            if not ready_pids:
-                raise RuntimeError(f"gateway profile {name} did not become ready")
-            gateway_windows._consume_start_attestation(generation, home=home)
-            # Keep the attestation chain: a death after this CLI exits must be visible to the next update.
-            gateway_windows._write_start_attestation(ready_pids, f"cold-start after update (profile {name})", home=home)
-            print(f"\n✓ Gateway profile {name} started via cold-start after update (PID: {ready_pids[0]})")
-            token["cold_start_profiles"].pop(name, None)
-    if token["cold_start_profiles"]:
-        # Surface the miss like the active-profile cold-start does: the merged outcome marks the update
-        # incomplete instead of reporting success with a profile still down.
-        raise RuntimeError("Windows gateway cold-start was not verified for profile(s): "
-                           + ", ".join(sorted(token["cold_start_profiles"])))
-    token.pop("cold_start_profiles", None)
-
-
 def _cold_start_windows_gateway_after_update(token: dict | None = None) -> bool:
     """Direct-spawn a detached gateway after update for the ``cold_start_if_installed`` case (installed but down).
 
@@ -1080,15 +757,8 @@ def _cold_start_windows_gateway_after_update(token: dict | None = None) -> bool:
     same post-spawn liveness poll every other ``_spawn_detached`` caller uses
     (``gateway_windows._report_gateway_start``), instead of being printed unconditionally from the returned
     PID.
-
-    Desktop-owned lifecycle suppresses the spawn only while nothing attests a gateway is expected: an
-    attested gateway that died without a clean exit is restored even then (#109538) — the Desktop does
-    not restart the messaging gateway itself. That authority is the ``attested_generation`` the plan
-    recorded on ``token``, not the marker on disk: the marker is a mutable one-shot a concurrent
-    ``hermes gateway status``/``start`` consumes, which would otherwise skip this spawn and clear the
-    token (#110020 review). Only that generation is consumed afterwards — never a newer marker.
     """
-    from hermes_cli.update_cmd import _desktop_owns_gateway_lifecycle, _m
+    from hermes_cli.update_cmd import _m
     if not _m()._is_windows():
         return True
     with _abort_on_error("Could not load Windows gateway cold-start helpers"):
@@ -1098,16 +768,6 @@ def _cold_start_windows_gateway_after_update(token: dict | None = None) -> bool:
         # Another install's live gateway must not suppress this install's cold start (#124659).
         if _owned_gateway_pids(find_gateway_pids(all_profiles=True)):
             return True
-    token = token or {}
-    generation = token.get("attested_generation")
-    if generation is None and "attested_generation" not in token:
-        # Token written by pre-generation code and resumed across this very update: probe the marker.
-        with _abort_on_error("Could not re-read the start attestation before cold-start"):
-            generation = gateway_windows.attested_death_generation(current_pids=[])
-    with _abort_on_error("Could not re-check Desktop gateway-lifecycle ownership before cold-start"):
-        if _desktop_owns_gateway_lifecycle() and not generation:
-            logger.debug("Skipping Windows gateway cold-start: Desktop owns gateway lifecycle")
-            return True
     with _abort_on_error("Could not cold-start Windows gateway after update"):
         pid = gateway_windows._spawn_detached()
     if not pid:
@@ -1115,12 +775,6 @@ def _cold_start_windows_gateway_after_update(token: dict | None = None) -> bool:
     ready_pids = gateway_windows._wait_for_gateway_ready()
     if not ready_pids:
         raise RuntimeError(f"Windows gateway cold-start PID {pid} did not become ready")
-    # The dead attestation has done its job (it authorized this spawn under Desktop ownership). Consume
-    # it only now: a spawn that never became ready leaves it in place, so the registered retry still
-    # holds its recovery obligation instead of seeing Desktop ownership with no marker and returning
-    # success without a gateway (#110020 review).
-    if generation:
-        gateway_windows._consume_start_attestation(generation)
     print(f"\n✓ Gateway started via cold-start after update (PID: {', '.join(map(str, ready_pids))})")
     with suppress(Exception):
         gateway_windows._write_start_attestation(ready_pids, "cold-start after update")
@@ -1590,9 +1244,6 @@ def _resume_paused_set(token: dict) -> None:
                 raise RuntimeError("Windows gateway cold-start was not verified")
             token["cold_start_if_installed"] = False
         attempt(cold_start)
-    # After the paused profiles are back: a dead-attested sibling that fails to cold-start must not
-    # keep the profiles that WERE running from being relaunched.
-    attempt(lambda: _cold_start_attested_profiles(token))
     if failures:
         raise RuntimeError("; ".join(failures))
     token["resume_needed"] = False

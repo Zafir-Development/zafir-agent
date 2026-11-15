@@ -21,12 +21,6 @@ from datetime import UTC
 logger = logging.getLogger("hermes_cli.update_cmd")
 
 
-def _prepare_updated_checkout(project_root: Path, *, desktop: bool) -> None:
-    """Historical updater hook: never complete inside the pre-swap interpreter."""
-    from hermes_cli._old_updater import stop_for_relaunch
-    stop_for_relaunch(incomplete=True)
-
-
 _PRE_UPDATE_SNAPSHOT_KEEP = 1
 
 # Per-file cap for the quick snapshot (larger files skipped with a warning): it protects
@@ -60,19 +54,6 @@ def _load_updates_cfg() -> dict:
     cfg = load_config() or {}
     updates = cfg.get("updates", {}) if isinstance(cfg, dict) else {}
     return updates if isinstance(updates, dict) else {}
-
-
-def _purge_stale_hermes_modules() -> None:
-    """Historical updater hook; module-graph surgery cannot complete an update."""
-    from hermes_cli._old_updater import stop_for_relaunch
-    stop_for_relaunch(incomplete=True)
-
-
-def _reload_updated_runtime_modules() -> None:
-    # Historical updater hook: dependency activation belongs to the next process.
-    from hermes_cli._old_updater import stop_for_relaunch
-
-    stop_for_relaunch()
 
 
 def _print_curator_first_run_notice() -> None:
@@ -260,15 +241,9 @@ def _format_time_ago(iso_ts: str) -> str:
         return "recently"
 
 
-def _reload_process_scan_modules() -> None:
-    """Historical updater hook; scans now run only in fresh completion Python."""
-    from hermes_cli._old_updater import stop_for_relaunch
-    stop_for_relaunch(incomplete=True)
-
-
 def _print_update_completion(message: str) -> None:
-    """Print the outcome (with branch @ sha so drift is visible) plus, when launched by the
-    dashboard with an action id, a receipt line the Desktop matches after restart.
+    """Print the outcome (with branch @ sha so drift is visible) plus, for an update launched with
+    an action id, the receipt line an orchestrating updater matches after restart.
 
     See #47359, #58764.
     """
@@ -350,13 +325,6 @@ def _print_verified_update_completion(message: str) -> bool:
     for line in _sqlite_partial_completion_lines(sqlite_info.sqlite_version_string):
         print(line)
     return False
-
-
-def _print_update_summary(*, node_failures: list, desktop_build_ok: bool, pre_update_version: str | None) -> bool:
-    """Historical updater hook; old soft-build results cannot establish completion."""
-    from hermes_cli._old_updater import stop_for_relaunch
-
-    stop_for_relaunch()
 
 
 def _restore_state_db_from_snapshot(state_path: Path, snap_state: Path) -> bool:
@@ -922,7 +890,7 @@ def _migrate_relay_exporter_env() -> None:
 
 
 def _run_post_update_maintenance(
-    *, assume_yes, gateway_mode, pre_update_snapshot_id, had_desktop_app_before_update,
+    *, assume_yes, gateway_mode, pre_update_snapshot_id,
     pre_update_version, completion_message=None, followups=None,
 ) -> bool:
     """Post-build housekeeping and completion, returning the SQLite runtime verdict.
@@ -948,29 +916,6 @@ def _run_post_update_maintenance(
     from hermes_cli.update_cmd import _check_and_apply_config_migration, _m
     from hermes_cli.update_windows_acl import repair_windows_home_acl
     owed_step("windows_home_acl", repair_windows_home_acl)
-    # macOS TCC: Desktop bundles are re-signed each update, so old grants can go stale
-    # (toggle ON, yet macOS re-prompts with no Allow button). Tell users how to re-grant.
-    # With the post-#73681 identifier-pinned DR, new grants survive rebuilds — but a grant made to a pre-fix
-    # binary stays stale: the System Settings toggle shows ON while macOS re-prompts on every capture, and
-    # the modern prompt has no Allow button, so users loop. One line of guidance after update tells affected
-    # users how to complete the one-time re-grant.
-    if sys.platform == "darwin" and had_desktop_app_before_update:
-        print()
-        print(
-            "  ℹ macOS: if Hermes re-prompts for permissions you already "
-            "granted (toggle shows ON), the stored grant is stale — run "
-            "`tccutil reset ScreenCapture com.nousresearch.hermes` (repeat "
-            "per affected service), toggle it ON in System Settings, then "
-            "fully quit & relaunch once."
-        )
-
-    # macOS TCC interpreter anchor; boot-gated — a failed probe leaves the venv untouched.
-    try:
-        # See #95596.
-        from hermes_cli.macos_tcc_anchor import ensure_tcc_anchor
-        ensure_tcc_anchor()
-    except Exception:
-        logger.debug("macOS TCC anchor refresh skipped", exc_info=True)
 
     # state.db integrity guard for root home AND every profile; restore from own snapshot.
     with _best_effort('Post-update state.db integrity check failed: %s'):

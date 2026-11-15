@@ -139,9 +139,10 @@ The stage-by-stage contract: `website/docs/developer-guide/cli-internals.md` § 
   (`update_fleet_scope.py`); another install's runtime is never restarted.
 - Post-commit failures are owed follow-ups, exit 0 (stash left 1, Ctrl-C 130);
   receipts in ROOT `logs/update_receipts/`.
-- Nothing runs pulled code in the pre-pull interpreter. `update_handoff.py` and
-  `update_serve_obligations.py` are a FROZEN compat surface (`tests/compat/old_updater_surface.json`):
-  removing a name bricks releases mid-update.
+- Nothing runs pulled code in the pre-pull interpreter. The completion tail keeps its helpers in
+  `update_output.py` (stdio/hangup + update.log) and `process_inventory.py`/`service_restart_helpers.py`
+  (runtime discovery and restart commands); `update_serve_obligations.py` still discharges legacy
+  service ownership. There is no frozen old-updater surface any more (D9).
 - Read #92091 (gateway-owned control socket) before adding any process-scan heuristic.
 
 ## Profiles (multi-instance)

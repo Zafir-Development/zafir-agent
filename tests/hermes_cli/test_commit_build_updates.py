@@ -50,17 +50,3 @@ def test_commit_build_never_checks_upstream_or_reuses_source_cache(commit_build,
     monkeypatch.setattr(source_check, "_branch_tip", check)
     assert source_check.check_for_updates(passive=passive)["behind"] is None
     check.assert_not_called()
-
-
-def test_commit_version_banner_uses_stamp_not_shared_checkout(commit_build, monkeypatch):
-    from hermes_cli import banner, source_check
-    from hermes_cli.version_info import get_version_info
-
-    git = Mock(side_effect=AssertionError("version must not inspect another checkout"))
-    monkeypatch.setattr(banner, "get_git_banner_state", git)
-    label = banner.format_banner_version_label()
-    assert "1.2.3+gabcdef12" in label
-    assert "commit-build" in label
-    assert get_version_info().source == "commit-build"
-    git.assert_not_called()
-

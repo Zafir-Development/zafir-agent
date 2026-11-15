@@ -60,20 +60,6 @@ def test_failed_publication_preserves_selection_and_imports(plugin_world, monkey
     assert receipt.latest()["outcome"] == "failed"
 
 
-def test_historical_writer_hands_off_without_mutating_config(plugin_world, monkeypatch):
-    from hermes_cli.plugins_cmd import _save_enabled_set
-
-    config = plugin_world.home / "config.yaml"
-    before = config.read_bytes()
-    def takeover():
-        raise SystemExit(73)
-    monkeypatch.setattr("hermes_cli._old_updater.stop_for_relaunch", takeover)
-    with pytest.raises(SystemExit) as exc:
-        _save_enabled_set({"must-not-be-saved"})
-    assert exc.value.code == 73
-    assert config.read_bytes() == before
-
-
 @pytest.mark.parametrize("surface", ["dashboard", "composite"])
 def test_ui_conflict_is_reported_without_changing_selection(plugin_world, surface):
     from hermes_cli import plugins_cmd

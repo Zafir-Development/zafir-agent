@@ -1,4 +1,4 @@
-"""The desktop's boot question, answered once: is onboarding due, and can something carry it.
+"""The boot question, answered once: is onboarding due, and can something carry it.
 
 ``onboarding.state`` asks it on every launch, and a cold first boot answering it live competes
 with every other boot thread for the same provider reads. The serve boot works it out on its own
@@ -18,7 +18,7 @@ from __future__ import annotations
 import threading
 from collections.abc import Callable, Hashable
 
-# The desktop's first question waits this long for the boot computation before answering live.
+# The first question waits this long for the boot computation before answering live.
 BOOT_WAIT_SECONDS = 8.0
 # The boot's first computation can write a config skeleton itself, so its files move once.
 _BOOT_ATTEMPTS = 2

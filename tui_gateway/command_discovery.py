@@ -123,7 +123,7 @@ def _details_completions(text: str) -> list[dict] | None:
 
 class _Catalog:
     """Accumulator for commands.catalog: ``pairs`` (every [key, desc]), ``canon`` (lowercase
-    key/alias → canonical key), ``commands`` (key → desktop meta) and ordered categories."""
+    key/alias → canonical key), ``commands`` (key → catalog meta) and ordered categories."""
 
     def __init__(self) -> None:
         self.pairs: list[list[str]] = []
@@ -141,7 +141,7 @@ class _Catalog:
 def _catalog_registry(cat: _Catalog, module_loader) -> None:
     commands = module_loader("hermes_cli.commands")
     for cmd in commands.COMMAND_REGISTRY:
-        meta = commands.command_desktop_meta(cmd)
+        meta = commands.command_catalog_meta(cmd)
         cat.commands.update({f"/{key}": dict(meta) for key in (cmd.name, *cmd.aliases)})
         if cmd.name in _TUI_HIDDEN or cmd.gateway_only:
             continue
@@ -183,7 +183,7 @@ def _catalog_plugin_commands(cat: _Catalog, module_loader) -> None:
         mode = info.get("argument_mode")
         if mode not in {"options", "text", "mixed"}:
             mode = "text" if str(info.get("args_hint") or "").strip() else None
-        cat.commands[key] = {"argument_mode": mode, "desktop": None}
+        cat.commands[key] = {"argument_mode": mode}
 
 
 def _catalog_skills(cat: _Catalog, skills: dict[str, dict], module_loader) -> str:

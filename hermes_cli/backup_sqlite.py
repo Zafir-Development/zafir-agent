@@ -1,6 +1,6 @@
 """WAL-safe SQLite snapshots. Direct execution needs only the standard library.
 
-Desktop invokes this file before stopping its backend, even when application
+A pre-flight invokes this file before stopping the gateway, even when application
 imports cannot load. Full and quick backups use the same SQLite copy operation.
 """
 import json
@@ -115,11 +115,11 @@ class _OffThreadCopy:
     """One long sqlite3 call run off the main thread. Python runs signal handlers only on the main
     thread and only between bytecodes, so a one-step backup (a single C ``sqlite3_backup_step``,
     GIL released) would hold a SIGTERM until the whole copy finished; the main thread waits here in
-    short joins instead, so the Desktop's pre-flight deadline interrupts the snapshot promptly."""
+    short joins instead, so the pre-flight's own deadline interrupts the snapshot promptly."""
 
     def __init__(self, copy) -> None:
         self._copy, self._error = copy, None
-        # health: allow HX012 -- stdlib-only file (the Desktop runs it when app imports cannot load); the copy reads no profile state
+        # health: allow HX012 -- stdlib-only file (a pre-flight runs it when app imports cannot load); the copy reads no profile state
         self.thread = threading.Thread(target=self._run, name="sqlite-snapshot", daemon=True)
 
     def _run(self) -> None:
@@ -205,7 +205,7 @@ def _safe_copy_db(src: Path, dst: Path, *, timeout_seconds: float = 10.0) -> boo
             _close_quietly(conn)
 
 
-# Longer than the Desktop's 30-minute pre-flight cap: a staging file this old
+# Longer than the 30-minute pre-flight cap: a staging file this old
 # has no live writer. A hard-killed pre-flight (Windows TerminateProcess)
 # cannot unlink its own staging copy, and each one is a full-size database.
 _ABANDONED_STAGING_SECONDS = 2 * 3600
@@ -256,7 +256,7 @@ def preflight_state_db(home: Path) -> dict:
 
 
 if __name__ == "__main__":
-    # The Desktop stops a pre-flight past its deadline with SIGTERM; exit through
+    # A pre-flight supervisor stops it past its deadline with SIGTERM; exit through
     # the staging cleanup instead of dying with a full-size .partial left behind.
     signal.signal(signal.SIGTERM, lambda signum, _frame: sys.exit(128 + signum))
     print(json.dumps(preflight_state_db(Path(sys.argv[1]))))

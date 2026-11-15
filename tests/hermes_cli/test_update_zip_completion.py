@@ -46,8 +46,7 @@ def zip_update(tmp_path, monkeypatch, isolated_source_completion):
     root.mkdir()
     (root / "pyproject.toml").write_text('[project]\nversion="1.0"\n', encoding="utf-8")
     (root / "payload.txt").write_text("old", encoding="utf-8")
-    for name in ("tools/code.py", "apps/desktop/source.js", "apps/desktop/release/Hermes.exe",
-                 "venv/keep", "node_modules/keep", ".env"):
+    for name in ("tools/code.py", "venv/keep", "node_modules/keep", ".env"):
         path = root / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("retained", encoding="utf-8")
@@ -55,8 +54,7 @@ def zip_update(tmp_path, monkeypatch, isolated_source_completion):
     with zipfile.ZipFile(archive, "w") as out:
         out.writestr("hermes-agent-main/pyproject.toml", '[project]\nversion="2.0"\n')
         out.writestr("hermes-agent-main/payload.txt", "new")
-        for name in ("new-entry/data", "tools/code.py", "apps/desktop/source.js",
-                     "venv/keep", "node_modules/keep", ".env"):
+        for name in ("new-entry/data", "tools/code.py", "venv/keep", "node_modules/keep", ".env"):
             out.writestr("hermes-agent-main/" + name, "new")
         out.comment = b"8192da90e0afb20010a1c2f5da83db305d05ac5a"  # git archive's commit identity
     # Only redirect transport: extraction, staging, dirty recheck and swap run.
@@ -70,13 +68,11 @@ def zip_update(tmp_path, monkeypatch, isolated_source_completion):
     monkeypatch.setattr("hermes_cli.update_inventory.collect_runtime_inventory", lambda: plan)
     monkeypatch.setattr(main, "_pause_windows_gateways_for_update", lambda: token)
     monkeypatch.setattr("atexit.register", lambda *args: None)
-    monkeypatch.setattr(main, "_desktop_packaged_executable", lambda root: None)
-    monkeypatch.setattr(main, "_desktop_dist_exists", lambda root: False)
     monkeypatch.setattr(update_cmd, "_source_update_channel", lambda args: "main")
     monkeypatch.setattr(update_cmd, "_sweep_bytecode_after_update", lambda branch: None)
 
-    def prepare(selected, *, desktop, after_dependencies=None):
-        assert selected == root and desktop is False
+    def prepare(selected, *, after_dependencies=None):
+        assert selected == root
         assert (root / "payload.txt").read_text() == "new"
         events.append("prepare")
         # The pre-update snapshot must reach the real cron-loss safety net.
@@ -84,14 +80,10 @@ def zip_update(tmp_path, monkeypatch, isolated_source_completion):
     monkeypatch.setattr("hermes_cli.source_build.build_update_products", prepare)
     # PM/builds and machine-level repair are independently covered. Keep real
     # config migration, profile env backfill, snapshot recovery and receipts.
-    monkeypatch.setattr("hermes_cli.macos_tcc_anchor.ensure_tcc_anchor", lambda: None)
     monkeypatch.setattr(maint, "_print_post_update_notices_and_self_heals", lambda: None)
     monkeypatch.setattr(maint, "_print_bundled_skills_sync_report", lambda: None)
     monkeypatch.setattr("hermes_cli.profiles.seed_profile_skills", lambda *a, **kw: {})
-    monkeypatch.setattr(update_cmd, "_reload_config_modules", lambda: None)
-    monkeypatch.setattr(update_cmd, "_post_update_sqlite_runtime_status", lambda: (True, None))
     monkeypatch.setattr(fleet_verify, "_print_legacy_units_warning", lambda: None)
-    monkeypatch.setattr(update_cmd, "_surviving_pre_update_serve_runtimes", lambda plan: [])
     monkeypatch.setattr(fleet_verify, "_collect_fleet_snapshot", lambda *args: [])
     monkeypatch.setattr("hermes_cli.gateway_migrate.maybe_auto_migrate_after_update", lambda: None)
 
@@ -146,9 +138,9 @@ def test_zip_command_migrates_profiles_recovers_snapshot_and_verifies_fleet(
     assert b"EXAMPLE_TOKEN" not in (state.sibling / ".env").read_bytes()
     assert json.loads(state.jobs.read_text()) == state.original_jobs
     assert (state.root / "payload.txt").read_text() == "new"
-    for name in ("tools/code.py", "apps/desktop/source.js", "new-entry/data"):
+    for name in ("tools/code.py", "new-entry/data"):
         assert (state.root / name).read_text(encoding="utf-8") == "new"
-    for name in ("apps/desktop/release/Hermes.exe", "venv/keep", "node_modules/keep", ".env"):
+    for name in ("venv/keep", "node_modules/keep", ".env"):
         assert (state.root / name).read_text(encoding="utf-8") == "retained"
     assert state.events == ["prepare", *([("marker", True)] if gateway_mode else []),
                             "restart", "resume", "finalize"]
@@ -173,7 +165,7 @@ def test_zip_helper_propagates_completion_status_after_real_verification(zip_upd
         monkeypatch.setattr(update_cmd, "_surviving_pre_update_serve_runtimes", lambda plan: [
             {"pid": plan.runtimes[0].pid, "profile": "default"}])
     request = update_cmd._source_completion_request(
-        update_cmd._resolve_update_options(args, True), plan, snapshot, state.token, False, True)
+        update_cmd._resolve_update_options(args, True), plan, snapshot, state.token, True)
     # Contract C3: the swapped code is committed, so neither verdict fails the update (was SystemExit(1)).
     assert update_cmd_zip._update_via_zip(args, completion_request=request) is True
     # The gateway watcher hears success for every verdict (was False for unsafe SQLite).
@@ -212,7 +204,7 @@ def test_zip_failure_recovers_pause_without_completion_mutations(zip_update, mon
             def fail_second_swap(src, dst):
                 if str(src).endswith(".hermes-update-staging"):
                     installed.append(dst)
-                    if len(installed) == (5 if failure == "late-swap" else 2):
+                    if len(installed) == (4 if failure == "late-swap" else 2):
                         raise OSError("locked replacement")
                 return move(src, dst)
             return fail_second_swap
@@ -234,7 +226,7 @@ def test_zip_failure_recovers_pause_without_completion_mutations(zip_update, mon
         update_cmd._cmd_update_impl(SimpleNamespace(branch="main", yes=True), gateway_mode=True)
     if failure in {"swap", "late-swap"}:
         assert raised.value.code == 1
-        assert len(installed) == (5 if failure == "late-swap" else 2)
+        assert len(installed) == (4 if failure == "late-swap" else 2)
         assert (state.root / "pyproject.toml").read_bytes() == old_project
         assert (state.root / "payload.txt").read_text() == "old"
     if failure != "preparation":
@@ -415,31 +407,6 @@ def test_venv_layout_explicit_and_native(tmp_path, windows, folder, executable):
     assert venv_python(str(tmp_path), windows=windows) == tmp_path / folder / executable
     if windows == (os.name == "nt"):
         assert venv_python(tmp_path) == tmp_path / folder / executable
-
-
-@pytest.mark.platforms("macos")
-@pytest.mark.parametrize(("mechanism", "rebuilt"), [("self", True), ("electron-updater", False)])
-def test_installed_app_without_a_checkout_build_is_still_rebuilt(zip_update, monkeypatch, tmp_path, mechanism, rebuilt):
-    """#52339: an installed Hermes.app only ``hermes update`` refreshes needs a Desktop build even
-    when release/ is gone, or it never gets newer. A self-updating release is not ours to rebuild."""
-    installed = tmp_path / "Applications" / "Hermes.app"
-    (installed / "Contents" / "Resources").mkdir(parents=True)
-    (installed / "Contents" / "Resources" / "install-stamp.json").write_text(
-        json.dumps({"updateMechanism": mechanism}), encoding="utf-8")
-    monkeypatch.setattr("hermes_cli.gui_uninstall.packaged_gui_app_paths", lambda: [installed])
-    # The checkout under the default Hermes home is the one an installed app runs.
-    (tmp_path / "default-home").mkdir()
-    (tmp_path / "default-home" / "hermes-agent").symlink_to(zip_update.root)
-    monkeypatch.setattr("hermes_constants.get_default_hermes_root", lambda **kw: tmp_path / "default-home")
-    built = []
-    monkeypatch.setattr("hermes_cli.source_build.build_update_products",
-                        lambda selected, *, desktop, after_dependencies=None: built.append(desktop))
-    monkeypatch.setattr(update_cmd, "_prepare_git_command", lambda **_: (True, ["git"], False))
-    monkeypatch.setattr(main, "_warn_orphaned_update_autostashes", lambda *args: None)
-
-    update_cmd._cmd_update_impl(SimpleNamespace(branch="main", yes=True), False)
-
-    assert built == [rebuilt]
 
 
 def test_unpinned_zip_update_owes_the_restart_for_the_archive_commit(tmp_path, monkeypatch):

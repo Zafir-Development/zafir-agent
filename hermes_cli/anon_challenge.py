@@ -5,13 +5,10 @@ challenges. Hermes implements exactly one primitive, ``browser-v1``: *open this 
 until it clears, exchange again*. Everything the page does (bot detection, an in-browser proof of
 work, an interactive fallback, its copy) belongs to the portal and changes without a Hermes release.
 
-Who opens the URL depends on the surface:
-
-* **desktop** (``HERMES_DESKTOP=1``): this process never opens anything. It publishes the challenge
-  (``free_tier.challenge`` global event, and ``free_tier.status``'s ``challenge`` field for a client
-  that connects later); the renderer hands it to the Electron main process, which loads it in a
-  HIDDEN window and reveals that window only if the page asks for the human.
-* **terminal**: print the URL, and open the system browser when there is a graphical one to open.
+A terminal surface prints the URL and opens the system browser when there is a graphical one to
+open; the stdio TUI gateway hands a required challenge to its client (``free_tier.challenge`` global
+event, and ``free_tier.status``'s ``challenge`` field for a client that connects later) instead of
+opening a browser where nobody can see it.
 
 The wait runs OUTSIDE the auth-store and shared-store locks: the exchange that hit the 428 has
 already unwound (the exception left the ``with`` blocks), so a slow page never stalls a sibling
@@ -20,13 +17,10 @@ same 428 waits for the first and then simply exchanges again (NAS hands a retrie
 ticket, and a cleared credential a token).
 
 Only a caller someone is waiting on waits for a challenge. A background reader (the keepalive tick,
-a status paint) runs inside :func:`background_caller`: it still gets the challenge in front of a
-desktop client (so the hidden window can clear it before anyone needs a token) but never blocks,
-prints, or opens a browser.
+a status paint) runs inside :func:`background_caller`: it never blocks, prints, or opens a browser.
 
 An *optional* challenge (``required: false`` on a successful exchange: the service is measuring, not
-enforcing) is only ever announced to a desktop client, never opened in a user's browser, and
-nothing waits on it.
+enforcing) is never opened in a user's browser and nothing waits on it.
 """
 
 from __future__ import annotations
@@ -118,16 +112,11 @@ def server_message(value: Any) -> str:
 
 def client_surface() -> str:
     """``gateway`` in the process that holds the messaging gateway's runtime lock (nobody is at its
-    console) unless it is serving the local Desktop app, ``desktop`` for that and for the backend the
-    desktop app spawned, else ``cli``. ``HERMES_DESKTOP``
-    alone is inherited by every terminal-pane shell, so desktop ownership needs the spawn credential."""
-    from hermes_cli.process_identity import is_desktop_owned_backend, serves_local_desktop_now
-    if serves_local_desktop_now():
-        return "desktop"
+    console), else ``cli``."""
     status = sys.modules.get("gateway.status")
     if status is not None and status.owns_gateway_runtime_lock():
         return "gateway"
-    return "desktop" if is_desktop_owned_backend() else "cli"
+    return "cli"
 
 
 def client_info() -> dict[str, Any]:
@@ -223,7 +212,7 @@ _background: contextvars.ContextVar[bool] = contextvars.ContextVar("anon_challen
 @contextlib.contextmanager
 def background_caller():
     """Mark the enclosed token reads as background work (a keepalive tick, a status paint): a
-    challenge is announced to a desktop client but never waited on, printed, or opened."""
+    challenge is never waited on, printed, or opened."""
     token = _background.set(True)
     try:
         yield
@@ -321,9 +310,9 @@ def reset_for_tests() -> None:
 
 
 def _announce(challenge: BrowserChallenge) -> bool:
-    """Broadcast to connected desktop clients. False when this process is not a gateway at all
-    (``HERMES_DESKTOP`` is an env var, and a CLI the desktop spawned inherits it): importing the
-    gateway here just to find nobody listening would also write an event frame to stdout."""
+    """Broadcast to connected TUI clients. False when this process is not a gateway at all:
+    importing the gateway here just to find nobody listening would also write an event frame to
+    stdout."""
     server = sys.modules.get("tui_gateway.server")
     if server is None:
         return False
@@ -361,11 +350,9 @@ def _present_in_terminal(challenge: BrowserChallenge) -> None:
 def present(challenge: BrowserChallenge) -> None:
     """Get the URL in front of something that can load it.
 
-    The desktop backend hands every challenge to its hidden window. The stdio TUI gateway (whose
-    stderr the TUI keeps as a log, never shows) hands its client a required one a foreground caller
-    is waiting on: a background read there must not pop a browser any more than in a terminal."""
-    if client_surface() == "desktop" and _announce(challenge):
-        return
+    The stdio TUI gateway (whose stderr the TUI keeps as a log, never shows) hands its client a
+    required challenge a foreground caller is waiting on: a background read there must not pop a
+    browser any more than in a terminal."""
     if not challenge.required or _background.get():
         return
     server = sys.modules.get("tui_gateway.server")
@@ -432,8 +419,7 @@ def wait_for_challenge(exc: AnonChallengeRequired) -> bool:
                 return True
             if status == "needs_interaction" and not told_interactive:
                 told_interactive = True
-                if client_surface() != "desktop":
-                    print("  Finish the quick check in your browser to continue.", file=sys.stderr)
+                print("  Finish the quick check in your browser to continue.", file=sys.stderr)
     _give_up()
     return False
 
@@ -450,8 +436,8 @@ def run_with_challenge(exchange: Callable[[], T]) -> T:
     """Run *exchange*; if the service asks for a browser challenge, work it (outside every lock:
     the exception has already unwound them) and run *exchange* once more.
 
-    A background caller (:func:`background_caller`) never waits: the challenge is announced so a
-    desktop client can start clearing it, and the retryable error goes straight back.
+    A background caller (:func:`background_caller`) never waits: the retryable error goes straight
+    back.
 
     A second ``challenge_required`` is not looped on: it surfaces as a retryable error whose copy
     says what the user can do, the callers queued behind it fail fast for a while, and the next
@@ -485,10 +471,8 @@ def run_with_challenge(exchange: Callable[[], T]) -> T:
 
 def note_optional_challenges(payload: dict[str, Any], portal_base_url: str) -> None:
     """A successful exchange may advertise a challenge nobody has to pass (the service is measuring
-    before it enforces). Only a desktop client runs it, hidden; a terminal never opens a browser
-    for something optional. Fire and forget."""
+    before it enforces). No remaining surface runs one in the background, so only a cleared state
+    matters here."""
     challenge = parse_browser_challenge(payload, portal_base_url)
     if challenge is None:
         _clear_pending()
-    elif not challenge.required and client_surface() == "desktop":
-        _announce(_record(challenge, new_attempt=False))

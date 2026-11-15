@@ -290,7 +290,7 @@ def _ctrl_c_ladder(tmp_path: Path, child_exit: int) -> tuple[int, str, list[dict
     script = INSTALL_SH.read_text(encoding="utf-8-sig")
     assert script.count(_MAIN_GUARD) == 1
     stubs = "".join(f"stage_{name}() {{ echo 'stage {name} ok'; }}\n" for name in (
-        "prerequisites", "repository", "venv", "config", "products", "setup", "gateway", "desktop", "complete"))
+        "prerequisites", "repository", "venv", "config", "products", "setup", "gateway", "complete"))
     stubs += ('stage_python_deps() { "$STUB_PY" -c "$STUB_CHILD" "$STUB_READY" "$STUB_EXIT" '
               '|| fail "pm install failed" deps_install_failed; }\nprint_banner() { :; }\n')
     harness = tmp_path / "install-harness.sh"
