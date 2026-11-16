@@ -66,27 +66,27 @@ class _Socket:
 
 
 def test_a_pinned_request_goes_to_and_is_settled_only_by_the_socket_that_asked(wire):
+    """An RPC handler calling back into its own caller's window pins the frame to that socket."""
+    from tests.waiting import wait_until
+
     asker, bystander = _Socket(), _Socket()
-    params = {"action": "vault", "vault": {"operation": "close", "target": "t"}}
+    params = {"questions": [{"qid": "q0", "question": "Continue?"}]}
     out: list = []
     worker = threading.Thread(target=lambda: out.append(
-        server_requests.send("preview.act", "", params, timeout=10, transport=asker)))
+        server_requests.send("clarify", "", params, timeout=10, transport=asker)))
     worker.start()
-    for _ in range(1000):
-        if asker.frames:
-            break
-        threading.Event().wait(0.01)
+    wait_until(lambda: asker.frames, timeout=5)
     rid = asker.frames[0]["id"]
     assert wire == [] and bystander.frames == []  # never broadcast
 
-    forged = {"id": rid, "result": {"value": "from another window"}}
+    forged = {"id": rid, "result": {"answers": {"q0": "from another window"}}}
     assert not server_requests.resolve_response(forged, bystander)
     assert not server_requests.resolve_pinned_response(forged, bystander)
     assert server_requests.open_request_count() == 1
 
-    assert server_requests.resolve_pinned_response({"id": rid, "result": {"value": "ok"}}, asker)
+    assert server_requests.resolve_pinned_response({"id": rid, "result": {"answers": {"q0": "yes"}}}, asker)
     worker.join(timeout=10)
-    assert out == [{"value": "ok"}]
+    assert out == [{"answers": {"q0": "yes"}}]
 
 
 def _answer_with_error(code, message):

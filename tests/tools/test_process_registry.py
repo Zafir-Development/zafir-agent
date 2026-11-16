@@ -225,27 +225,10 @@ class TestGetAndPoll:
         assert result["exit_code"] == 0
 
 
-def test_request_close_terminal_invokes_sink_without_killing(registry):
-    """With a sink wired, close routes (session, process_id) to the UI and leaves
-    the process running — close is a view drop, not a kill."""
-    s = _make_session(sid="proc_close_live")
-    registry._running[s.id] = s
-    calls = []
-    registry.on_close = lambda session, pid: calls.append((session, pid))
-
-    result = registry.request_close_terminal(s.id)
-
-    assert result["status"] == "ok"
-    assert result["closed"] == "proc_close_live"
-    assert calls == [(s, "proc_close_live")]
-    # Still tracked as running — closing the tab must not reap the process.
-    assert s.id in registry._running
-
-
 def test_reader_loop_streams_incremental_chunks_from_read1(registry, monkeypatch):
     """Local reader must emit live chunks, not one EOF burst.
 
-    Regression for desktop agent terminals: ``stdout.read(4096)`` can buffer
+    Regression for live background output: ``stdout.read(4096)`` can buffer
     until process exit for small periodic output. ``buffer.read1(4096)`` should
     surface each chunk as it arrives.
     """
@@ -273,16 +256,21 @@ def test_reader_loop_streams_incremental_chunks_from_read1(registry, monkeypatch
 
     session = _make_session(sid="proc_reader_live")
     session.process = _FakeProcess([b"tick 1\n", b"tick 2\n", b"tick 3\n", b""])
-    emitted = []
+    chunks = []
     moved = []
+    real_ingest = registry._ingest_output
+
+    def ingest(session_, text, **kwargs):
+        chunks.append(text)
+        return real_ingest(session_, text, **kwargs)
 
     monkeypatch.setattr(registry, "_check_watch_patterns", lambda _s, _c: None)
-    monkeypatch.setattr(registry, "_emit_output", lambda _s, chunk: emitted.append(chunk))
+    monkeypatch.setattr(registry, "_ingest_output", ingest)
     monkeypatch.setattr(registry, "_move_to_finished", lambda _s: moved.append(_s.id))
 
     registry._reader_loop(session)
 
-    assert emitted == ["tick 1\n", "tick 2\n", "tick 3\n"]
+    assert chunks == ["tick 1\n", "tick 2\n", "tick 3\n"]
     assert session.output_buffer == "tick 1\ntick 2\ntick 3\n"
     assert session.exited is True
     assert session.exit_code == 0
@@ -390,7 +378,6 @@ def _run_reader(registry, monkeypatch, chunks, sid="proc_utf8"):
     session = _make_session(sid=sid)
     session.process = _FakeChunkProcess(chunks)
     monkeypatch.setattr(registry, "_check_watch_patterns", lambda _s, _c: None)
-    monkeypatch.setattr(registry, "_emit_output", lambda _s, _c: None)
     monkeypatch.setattr(registry, "_move_to_finished", lambda _s: None)
     registry._reader_loop(session)
     return session
@@ -457,7 +444,6 @@ def test_pty_reader_loop_reassembles_multibyte_char_split_across_chunks(registry
     session = _make_session(sid="proc_pty_utf8")
     session._pty = _FakePty([b"caf\xc3", b"\xa9\n"])
     monkeypatch.setattr(registry, "_check_watch_patterns", lambda _s, _c: None)
-    monkeypatch.setattr(registry, "_emit_output", lambda _s, _c: None)
     monkeypatch.setattr(registry, "_move_to_finished", lambda _s: None)
 
     registry._pty_reader_loop(session)

@@ -69,21 +69,6 @@ def _resolve_platform_hint(agent: Any, platform_key: str, default_hint: str) -> 
     return f"{base}\n\n{append_text}".strip() if append_text else base
 
 
-_TUI_EMBEDDED_PANE_CLARIFIER = (
-    " You're in its embedded terminal pane, beside the GUI chat — the user can "
-    "select your output (Option-drag on macOS, Shift-drag elsewhere) and press "
-    "Cmd/Ctrl+L to send it to the chat composer."
-)
-
-
-def _tui_embedded_pane_clarifier(hint: str) -> str:
-    """Append the desktop embedded-terminal clarifier when ``HERMES_DESKTOP_TERMINAL``
-    is set (only the desktop's TUI PTY, never the chat backend). Idempotent."""
-    if not hint or _TUI_EMBEDDED_PANE_CLARIFIER in hint or not is_truthy_value(os.getenv("HERMES_DESKTOP_TERMINAL")):
-        return hint
-    return hint + _TUI_EMBEDDED_PANE_CLARIFIER
-
-
 def _plugin_session_info(agent: Any) -> dict[str, str]:
     """Return immutable-at-render-time metadata exposed to prompt sections."""
     try:
@@ -456,11 +441,9 @@ def _cron_delivery_hint(agent: Any) -> str:
 
 def platform_hint(agent: Any) -> str:
     """Built-in/plugin platform hint + Telegram rich-messages opt-in + config
-    override + desktop TUI clarifier; cron agents also carry their delivery channel's hint."""
+    override; cron agents also carry their delivery channel's hint."""
     platform_key = (agent.platform or "").lower().strip()
     _effective_hint = _resolve_platform_hint(agent, platform_key, _default_platform_hint(platform_key))
-    if platform_key == "tui" and _effective_hint:
-        _effective_hint = _tui_embedded_pane_clarifier(_effective_hint)
     if platform_key == "cron":
         _delivery = _cron_delivery_hint(agent)
         if _delivery:

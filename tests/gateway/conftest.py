@@ -721,7 +721,7 @@ def hosted_owner(tmp_path, monkeypatch):
     def restore(data):
         from dataclasses import replace
         if data['source'] == 'bot_room':
-            return replace(original({**data, 'source': 'gui', 'platform': 'desktop'}), source='bot_room', platform='bot_room')
+            return replace(original({**data, 'source': 'tui', 'platform': 'tui'}), source='bot_room', platform='bot_room')
         return original(data)
     monkeypatch.setattr(session_policy, 'restore_policy', restore)
     store = SessionStore(tmp_path / 'sessions', GatewayConfig())

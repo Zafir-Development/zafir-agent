@@ -66,6 +66,7 @@ def _seen(result: subprocess.CompletedProcess) -> tuple[int, str, str]:
         ("trap 'echo T' ERR; false", 1, "T\n"),
     ],
 )
+@pytest.mark.platforms("linux")  # malformed-quote parsing differs on macOS bash 3.2
 def test_capturing_pipestatus_changes_nothing_the_model_sees(command, exit_code, stdout):
     """The capture is side data: the shell's own ``$?`` and output, no wrapper text."""
     seen_code, seen_stdout, seen_stderr = _seen(_run_result(command))

@@ -39,7 +39,7 @@ async def test_session_create_with_the_entrys_bare_pick_freezes_its_custom_route
     try:
         # What desktopSessionCreateParams() sends for a manual pick of the endpoint's row.
         reply = await connection.dispatch({'id': 1, 'method': 'session.create', 'params': {
-            'request_id': 'desktop-pick', 'source': 'gui', 'cwd': str(tmp_path),
+            'request_id': 'desktop-pick', 'source': 'tui', 'cwd': str(tmp_path),
             'model': 'deepseek-flash', 'provider': pick}})
         assert 'error' not in reply, reply
         policy = local_receipt(authority.db, reply['result']['session_id'])['policy']
@@ -85,7 +85,7 @@ async def test_only_the_held_entrys_own_key_keeps_its_route(tmp_path, monkeypatc
     connection = AuthorityConnection(authority, object(), {'user_id': 'owner'})
     try:
         reply = await connection.dispatch({'id': 1, 'method': 'session.create', 'params': {
-            'request_id': 'desktop-pick', 'source': 'gui', 'cwd': str(tmp_path),
+            'request_id': 'desktop-pick', 'source': 'tui', 'cwd': str(tmp_path),
             'model': 'picked-model', 'provider': pick}})
         assert 'error' not in reply, reply
         policy = local_receipt(authority.db, reply['result']['session_id'])['policy']

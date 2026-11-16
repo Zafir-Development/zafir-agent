@@ -89,17 +89,17 @@ def test_compute_host_withdraws_its_open_request_when_the_parent_relays_a_cancel
     server._sessions[sid] = {"history_lock": threading.Lock()}
     events = []
     monkeypatch.setattr(server_requests, "_emit", lambda kind, _sid, payload: events.append((kind, _sid, payload)))
-    beat = server_requests.ServerRequest(sid, "setup_beat", {"beat": "theme"})
-    other = server_requests.ServerRequest(sid, "clarify", {"question": "?"})
+    beat = server_requests.ServerRequest(sid, "clarify", {"questions": [{"qid": "q0", "question": "?"}]})
+    other = server_requests.ServerRequest(sid, "sudo", {"command": "ls"})
     with server_requests._lock:
         server_requests._open.update({beat.id: beat, other.id: other})
 
     try:
         host._handle_respond({"sid": sid, "request_id": "relay-cancel",
-                              "params": {"cancel": {"method": "setup_beat", "reason": "resolved"}}})
+                              "params": {"cancel": {"method": "clarify", "reason": "resolved"}}})
         assert beat.event.is_set() and not beat.answered
         assert not other.event.is_set()
-        assert events == [("request.cancel", sid, {"id": beat.id, "method": "setup_beat", "reason": "resolved"})]
+        assert events == [("request.cancel", sid, {"id": beat.id, "method": "clarify", "reason": "resolved"})]
         frame = _json_lines(out)[-1]
         assert frame["type"] == "respond.ack" and frame["response"]["result"] == {"cancelled": 1}
     finally:

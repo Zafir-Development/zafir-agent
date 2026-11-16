@@ -1,5 +1,5 @@
 """Agent callback wiring: child-session live mirror, per-session agent callbacks, personality
-overlay, background/preview agent kwargs, agent reset. Bodies are rebound onto server.py's
+overlay, background agent kwargs, agent reset. Bodies are rebound onto server.py's
 globals at install time (method_ctx.bind_module), so they reference server.py globals bare."""
 
 from __future__ import annotations
@@ -139,16 +139,6 @@ def _emit_reasoning_delta(sid: str, text: str) -> None:
 
 
 def _agent_cbs(sid: str) -> dict:
-    # Late import: bind_module rebinds this function to server.py's globals and skips plain imports.
-    from tui_gateway.theme_bridge import theme_request
-
-    def _read_block(method: str, timeout: int):
-        # read_terminal / read_preview (desktop GUI): server request like clarify; the preview
-        # read gets longer since a URL tab extracts text from a live page.
-        return lambda start=None, count=None: _ask(
-            method, sid, {k: v for k, v in (("start", start), ("count", count)) if v is not None},
-            timeout=timeout)
-
     callbacks = {
         "tool_start_callback": lambda tc_id, name, args: _on_tool_start(sid, tc_id, name, args),
         "tool_complete_callback": lambda tc_id, name, args, result: _on_tool_complete(sid, tc_id, name, args, result),
@@ -158,7 +148,7 @@ def _agent_cbs(sid: str) -> dict:
             sid, event_type, name, preview, args, **kwargs),
         "tool_gen_callback": lambda name: _tool_progress_enabled(sid) and _emit("tool.generating", sid, {"name": name}),
         "thinking_callback": lambda text: _agent_thinking_update(sid, text),
-        # Affection reaction (ily / <3 / good bot) → hearts; core-detected so TUI/desktop share it.
+        # Affection reaction (ily / <3 / good bot) → hearts; core-detected so every client shows it.
         "reaction_callback": lambda kind: _emit("reaction", sid, {"kind": kind}),
         "reasoning_callback": lambda text: _emit_reasoning_delta(sid, text),
         "status_callback": lambda kind, text=None: _agent_status_update(sid, kind, text),
@@ -166,22 +156,10 @@ def _agent_cbs(sid: str) -> dict:
         "notice_callback": lambda n: _agent_notice_update(sid, n),
         "notice_clear_callback": lambda key: _emit("notification.clear", sid, {"key": key}),
         "clarify_callback": lambda questions: _clarify_block(sid, questions),
-        "read_terminal_callback": _read_block("terminal.read", 30),
-        "read_preview_callback": _read_block("preview.read", 45),
-        # drive_preview / annotate_preview (desktop GUI): same budget as the preview read it ends with.
-        # The probe ladder lives in server.py (_preview_action_request) so an
-        # absent renderer fails fast instead of burning 45s per action (#94272).
-        "drive_preview_callback": lambda payload: _preview_action_request(sid, dict(payload)),
-        # read_window_below (desktop GUI): main process enumerates native windows.
-        "read_window_below_callback": lambda: _ask("window.read", sid, {}, timeout=30),
         # manage_connections card. Fire-and-forget: the tool thread waits on its own operation
         # (tools/connectors/run.py), and the card drives it through connection.respond by op_id.
         "connection_callback": lambda payload: _emit("connection.request", sid, dict(payload)) and None,
-        # tour (desktop GUI): renderer drives driver.js and answers the ``tour`` request.
-        "tour_callback": lambda payload: _tour_request(sid, payload),
-        # set_theme (desktop GUI): theme.apply with the tour probe ladder, or a theme.pick card.
-        "theme_callback": lambda payload: theme_request(sid, payload),
-        "setup_beat_callback": lambda payload: _setup_beat_request(sid, payload)}
+    }
 
     # Interim assistant commentary (text alongside tool calls), gated on display.interim_assistant_
     # messages; _run_prompt_submit overwrites it per turn and clears it so a stale closure can't fire.
@@ -196,7 +174,7 @@ def _apply_project_workspace(task_id: str, path: str, _name: str = "") -> None:
     and push session.info. The ONLY auto-cwd path — an explicit tool call, never a `cd`."""
     if not path:
         return
-    # task_id is the durable session_key; _sessions (and desktop event routing) key by sid.
+    # task_id is the durable session_key; _sessions (and event routing) key by sid.
     key = str(task_id or "")
     with _sessions_lock:
         sid, session = (key, _sessions[key]) if key in _sessions else next(
@@ -237,7 +215,7 @@ def _wire_callbacks(sid: str):
 
         owner_sid = get_session_env("HERMES_UI_SESSION_ID")
         # Credential admission is fenced to a live runtime. owner_sid is a ContextVar copied onto
-        # the worker's thread at spawn: a background/btw/preview worker outlives its session, and
+        # the worker's thread at spawn: a background/btw worker outlives its session, and
         # the close path's `_clear_pending` cancels only requests ALREADY open — it cannot fence
         # one created afterward. Without a session here the request would register, wait 300s for
         # a client that never reconnects, and any late answer would settle into the saver with no
@@ -360,7 +338,7 @@ def _load_fallback_model():
 
 def _load_prefill_messages() -> list:
     """Configured prefill messages, resolved like the CLI (env > ``prefill_messages_file`` > legacy
-    ``agent.*``). Desktop/TUI agents never run the CLI bootstrap, so without this the setting was
+    ``agent.*``). TUI agents never run the CLI bootstrap, so without this the setting was
     ignored there (#60456). Relative paths resolve against the active profile home, per call."""
     from hermes_cli.cli_config_load import _load_prefill_messages as _load, _resolve_prefill_messages_file
     from hermes_constants import get_hermes_home
@@ -370,7 +348,7 @@ def _load_prefill_messages() -> list:
 def _sync_agent_fallback_with_config(sid: str, session: dict) -> None:
     """Adopt ``fallback_providers`` edits into the cached agent at turn start.
 
-    Desktop/TUI chats keep one agent across turns, and ``_make_agent`` reads the chain once: a chat
+    TUI chats keep one agent across turns, and ``_make_agent`` reads the chain once: a chat
     opened before ``hermes fallback add`` kept an empty chain forever and a provider-quota 429 ended in
     a provider error with a healthy fallback configured (#95066). Same per-turn contract the messaging
     gateway applies to its cached agents (``GatewayRunner._refresh_fallback_model``): the config is
@@ -404,7 +382,7 @@ def _background_agent_kwargs(agent, task_id: str) -> dict:
         fallback = (agent._fallback_model if hasattr(agent, "_fallback_model")
                     else _load_fallback_model())
     # Detached tasks declare platform="tui" (no UI sid for renderer-routed events), so resolve
-    # toolsets against it — never GUI schema they can't use.
+    # toolsets against it — never another surface's schema they can't use.
     return {
         **{k: g(k) or None for k in ("base_url", "api_key", "provider", "api_mode", "acp_command",
                                      "acp_args", "ephemeral_system_prompt")},
@@ -424,10 +402,6 @@ def _background_agent_kwargs(agent, task_id: str) -> dict:
         "side_agent": True}
 
 
-def _ephemeral_preview_agent_kwargs(agent, task_id: str) -> dict:
-    return {**_background_agent_kwargs(agent, task_id),
-            "enabled_toolsets": ["terminal", "file"], "session_db": None, "skip_memory": True}
-
 
 @contextlib.contextmanager
 def _side_agent_session_db(parent_db):
@@ -446,89 +420,6 @@ def _side_agent_session_db(parent_db):
         yield db
     finally:
         release_or_close(db)
-
-
-def _preview_restart_history(messages: list[dict] | None, max_messages: int = 24,
-                             max_tool_chars: int = 1200) -> list[dict]:
-    """Distill recent parent history for the ephemeral preview-restart agent (else it guesses
-    app/cwd/port from the bare URL): last ``max_messages`` back to the last user turn, tool
-    results truncated to ``max_tool_chars``. ``messages`` is a snapshot the caller owns (the
-    legacy session's history taken under its ``history_lock``, or the owner's stored transcript)."""
-    history = list(messages or [])
-    if not history:
-        return []
-    last_user = next((i for i in range(len(history) - 1, -1, -1) if history[i].get("role") == "user"), None)
-    start = max(0, len(history) - max_messages)
-    if last_user is not None:
-        start = min(start, last_user)
-    trimmed: list[dict] = []
-    for msg in history[start:]:
-        if not isinstance(msg, dict) or msg.get("role") not in ("user", "assistant", "tool", "system"):
-            continue
-        copy = {k: v for k, v in msg.items() if k != "reasoning"}
-        content = copy.get("content")
-        if msg.get("role") == "tool" and isinstance(content, str) and len(content) > max_tool_chars:
-            copy["content"] = content[:max_tool_chars] + f"\n... (truncated, original {len(content)} chars)"
-        trimmed.append(copy)
-    return trimmed
-
-
-def _preview_tool_result_preview(name: str, result: str) -> str:
-    try:
-        data = json.loads(result)
-    except Exception:
-        data = None
-    if not isinstance(data, dict):
-        return ""
-    if name == "terminal":
-        if output := str(data.get("output") or "").strip():
-            return output[-1200:]
-        if data.get("session_id"):
-            return f"Background process started: {data.get('session_id')}"
-        if data.get("exit_code") is not None:
-            return f"terminal exited with code {data.get('exit_code')}"
-    return str(data.get("error") or "").strip()[:1200]
-
-
-def _preview_restart_callbacks(parent: str, task_id: str) -> dict:
-    started_at: dict[str, float] = {}
-
-    def progress(message: str, level: str = "info") -> None:
-        if text := str(message or "").strip():
-            _emit("preview.restart.progress", parent, {"task_id": task_id, "level": level, "text": text})
-
-    def tool_start(tool_call_id: str, name: str, args: dict) -> None:
-        started_at[tool_call_id] = time.time()
-        ctx = _tool_ctx(name, args)
-        progress(f"Running {name}{f': {ctx}' if ctx else ''}")
-
-    def tool_complete(tool_call_id: str, name: str, _args: dict, result: str) -> None:
-        duration_s = time.time() - started_at.get(tool_call_id, time.time())
-        summary = _tool_summary(name, result, duration_s) or f"Finished {name}{f' in {_fmt_tool_duration(duration_s)}' if duration_s else ''}"
-        output = _preview_tool_result_preview(name, result)
-        progress(summary + (f"\n{output}" if output else ""))
-
-    def tool_progress(event_type: str, name: str | None = None, preview: str | None = None, **_kwargs) -> None:
-        if preview or name:
-            progress(str(preview) if preview else f"{event_type.replace('.', ' ')}: {name}")
-
-    _restart_status = _restart_status_factory(parent, progress)
-    return {
-        "tool_start_callback": tool_start, "tool_complete_callback": tool_complete,
-        "tool_progress_callback": tool_progress,
-        "tool_gen_callback": lambda name: progress(f"Preparing {name}"),
-        "status_callback": _restart_status}
-
-
-def _restart_status_factory(parent: str, progress):
-    """Restart-panel status rows: automatic warnings honor the TUI policy like the main agent's sink."""
-    def _restart_status(kind, text=None):
-        from gateway.warning_notifications import is_warning_status
-        message = text if text is not None else kind
-        if is_warning_status(kind, message) and not _agent_presentation_enabled(parent, diagnostic=True):
-            return
-        progress(message)
-    return _restart_status
 
 
 def _rebuild_session_agent(sid: str, session: dict, **kwargs):

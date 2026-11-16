@@ -30,7 +30,7 @@ def _owner(tmp_path, monkeypatch, handle):
     authority = SessionAuthority(runner, profile_id='owned', instance_id='owner', db=db,
                                  epoch=rt.begin_runtime_epoch(db, instance_id='owner'))
     owner = AuthorityConnection(authority, object(), {'user_id': 'human'})
-    ref = create_local_session(authority, owner.actor, dict(request_id='m', source='gui', cwd=str(tmp_path),
+    ref = create_local_session(authority, owner.actor, dict(request_id='m', source='tui', cwd=str(tmp_path),
                                                             model='frozen', toolsets=[]))
     return store, db, authority, owner, ref
 

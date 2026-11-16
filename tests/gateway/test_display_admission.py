@@ -87,7 +87,7 @@ def test_real_daemon_persists_hidden_rows_and_the_paste_title_preview(tmp_path, 
             sids = {}
             for name, extra in (('paste', {'title_preview': 'Quarterly revenue notes PREVIEW_ONLY'}),
                                 ('hidden', {'display_kind': 'hidden'})):
-                created = await rpc(ws, 'session.create', request_id='display-' + name, source='gui', cwd=str(home), toolsets=[])
+                created = await rpc(ws, 'session.create', request_id='display-' + name, source='tui', cwd=str(home), toolsets=[])
                 assert 'result' in created, created
                 sids[name] = created['result']['session_id']
                 reply = await rpc(ws, 'prompt.submit', session_id=sids[name], submission_id=name,

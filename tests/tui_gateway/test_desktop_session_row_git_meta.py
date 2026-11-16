@@ -32,7 +32,7 @@ def _desktop_session(monkeypatch, tmp_path, cwd):
     monkeypatch.setattr(server, "_resolve_model", lambda: "test-model")
     monkeypatch.setattr(server, "_start_agent_build", lambda *a, **k: None)
     resp = server.handle_request({
-        "id": "1", "method": "session.create", "params": {"cols": 80, "source": "desktop", "cwd": str(cwd)},
+        "id": "1", "method": "session.create", "params": {"cols": 80, "source": 'tui', "cwd": str(cwd)},
     })
     sid = resp["result"]["session_id"]
     # Patched only after create: session.create starts real Timers (Thread subclasses).

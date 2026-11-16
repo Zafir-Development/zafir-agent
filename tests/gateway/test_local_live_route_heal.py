@@ -13,7 +13,7 @@ async def test_live_session_rebuilds_a_route_entry_missing_from_the_store(tmp_pa
 
     served, db, secondary = await _served_authority(tmp_path, monkeypatch, 'first')
     actor = SessionActor('owner', str(secondary), frozenset({'session:create', 'session:read'}), 'socket')
-    ref = create_local_session(served, actor, {'request_id': 'live', 'source': 'gui',
+    ref = create_local_session(served, actor, {'request_id': 'live', 'source': 'tui',
                                                'cwd': str(tmp_path), 'model': 'frozen', 'toolsets': []})
     route = served.sessions[ref.session_id].route
     store = served.runner.session_store

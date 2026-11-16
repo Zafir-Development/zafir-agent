@@ -51,7 +51,7 @@ async def _attach(authority, sid):
 def _create(authority, text='earlier turn'):
     from gateway.session_local import create_local_session
     ref = create_local_session(authority, _viewer(authority).actor, {
-        'request_id': text, 'source': 'gui', 'cwd': str(Path(authority.db.db_path).parent), 'model': 'm',
+        'request_id': text, 'source': 'tui', 'cwd': str(Path(authority.db.db_path).parent), 'model': 'm',
         'toolsets': []})
     authority.db.append_message(ref.session_id, 'user', text)
     return ref

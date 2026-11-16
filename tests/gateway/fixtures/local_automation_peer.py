@@ -16,7 +16,7 @@ from tests.waiting import async_wait_until
 def probe(base, source):
     restart = source == 'restart'
     watch = source == 'watch'
-    source = 'gui' if restart or watch else source
+    source = 'tui' if restart or watch else source
     root = Path(__file__).resolve().parents[3]
     home, user = base / 'state', base / 'user'
     home.mkdir(); user.mkdir()

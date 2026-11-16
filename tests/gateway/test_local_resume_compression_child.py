@@ -49,7 +49,7 @@ async def _compressed(tmp_path, monkeypatch):
     monkeypatch.setenv('HERMES_HOME', str(tmp_path))
     authority = await initialize_session_authority(_runner(tmp_path), profile_id='fixture', instance_id='first')
     actor = SessionActor('owner', 'fixture', frozenset({'session:create', 'session:read'}), 'socket')
-    ref = create_local_session(authority, actor, dict(request_id='lc12', source='gui', cwd=str(tmp_path),
+    ref = create_local_session(authority, actor, dict(request_id='lc12', source='tui', cwd=str(tmp_path),
                                                       model='frozen', toolsets=[]))
     live = authority.sessions[ref.session_id]
     store = authority.runner.session_store

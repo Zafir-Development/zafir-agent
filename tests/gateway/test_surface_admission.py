@@ -117,7 +117,8 @@ def _wait_for(predicate):
     pytest.fail('Timed out waiting for the admitted turn')
 
 
-def test_real_daemon_accepts_hud_and_voice_live_submits_and_notes_the_model(tmp_path, monkeypatch):
+def test_real_daemon_accepts_a_window_and_live_voice_submit_and_refuses_a_retired_surface(
+        tmp_path, monkeypatch):
     from tools.voice_live import VOICE_LIVE_TURN_NOTE
 
     root = Path(__file__).resolve().parents[2]
@@ -137,26 +138,28 @@ def test_real_daemon_accepts_hud_and_voice_live_submits_and_notes_the_model(tmp_
         'gateway': {'multiplex_profiles': False},
         'model': {'provider': 'custom', 'default': 'local-wire-stub', 'base_url': base},
         'auxiliary': {'title_generation': {'enabled': False}},
-        'platform_toolsets': {'gui': []}, 'terminal': {'cwd': str(home)},
+        'platform_toolsets': {'cli': []}, 'terminal': {'cwd': str(home)},
     }))
     env = child_env() | dict(HOME=str(user), USERPROFILE=str(user), HERMES_HOME=str(home),
         PYTHONPATH=str(root), OPENAI_API_KEY='loopback-only', OPENAI_BASE_URL=base, PYTHONUNBUFFERED='1')
 
     async def drive(desc):
         async with websocket(home, desc) as ws:
-            created = await rpc(ws, 'session.create', request_id='surface-target', source='gui', cwd=str(home), toolsets=[])
+            created = await rpc(ws, 'session.create', request_id='surface-target', source='tui', cwd=str(home), toolsets=[])
             assert 'result' in created, created
             sid = created['result']['session_id']
             replies = {}
-            for name, extra in (('window', {}), ('hud', {'surface': 'hud'}),
+            for name, extra in (('window', {}),
                                 ('voice', {'surface': 'voice-live', 'voice_context': 'User: earlier words'})):
                 replies[name] = await rpc(ws, 'prompt.submit', session_id=sid, submission_id=name, text=name.upper() + '_TURN', **extra)
                 await asyncio.to_thread(_wait_for, lambda: _admissions(home).get(name) == 'terminal')
-            return replies
+            # The floating HUD surface is gone with the desktop renderer: its submit is refused.
+            retired = await rpc(ws, 'prompt.submit', session_id=sid, submission_id='hud', text='HUD_TURN', surface='hud')
+            return replies, retired
 
     try:
         with daemon(root, home, env, barrier=False) as (_proc, desc):
-            replies = asyncio.run(drive(desc))
+            replies, retired = asyncio.run(drive(desc))
     finally:
         model.release.set()
         model.shutdown()
@@ -164,19 +167,18 @@ def test_real_daemon_accepts_hud_and_voice_live_submits_and_notes_the_model(tmp_
         thread.join(timeout=5)
 
     assert all(reply.get('result', {}).get('status') == 'queued' for reply in replies.values()), replies
+    assert retired.get('error', {}).get('message') == 'invalid_params', retired
     users = {}
     for request in model.requests:
         content = next(m['content'] for m in reversed(request['messages']) if m['role'] == 'user')
         text = content if isinstance(content, str) else ''.join(p.get('text', '') for p in content)
-        for name in ('window', 'hud', 'voice'):
+        for name in ('window', 'voice'):
             if name.upper() + '_TURN' in text:
                 users[name] = text
-    assert set(users) == {'window', 'hud', 'voice'}, users
+    assert set(users) == {'window', 'voice'}, users
     # Live voice: the delegation contract + the spoken context ride the model input, never the row.
     assert VOICE_LIVE_TURN_NOTE in users['voice'] and 'User: earlier words' in users['voice']
-    assert VOICE_LIVE_TURN_NOTE not in users['window'] and VOICE_LIVE_TURN_NOTE not in users['hud']
-    # HUD without read_window_below (toolsets=[]) is accepted and withholds the tool-gated note.
-    assert 'HUD mode' not in users['hud'] and 'HUD mode' not in users['window']
+    assert VOICE_LIVE_TURN_NOTE not in users['window']
     assert all(request['messages'][0]['role'] == 'system' for request in model.requests)
     assert len({request['messages'][0]['content'] for request in model.requests}) == 1, 'frozen system prefix must not vary per surface'
 

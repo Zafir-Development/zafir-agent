@@ -37,7 +37,7 @@ def _owner(home):
 
 async def _create(owner, authority, home, request_id, **extra):
     response = await owner.dispatch({'id': request_id, 'method': 'session.create', 'params': dict(
-        request_id=request_id, source='gui', cwd=str(home), toolsets=[],
+        request_id=request_id, source='tui', cwd=str(home), toolsets=[],
         follow_profile_config=True, **extra)})
     assert 'result' in response, response
     return authority.sessions[response['result']['session_id']]

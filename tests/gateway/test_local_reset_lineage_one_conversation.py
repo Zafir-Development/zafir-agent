@@ -28,7 +28,7 @@ async def reset_lineage(tmp_path, monkeypatch):
     authority._schedule = lambda ref: None
     owner = SessionActor('uid:1000', 'default', frozenset({'session:create', 'session:read', 'session:submit',
                                                         'session:control'}), 'native')
-    ref = create_local_session(authority, owner, {'request_id': 'r', 'source': 'gui', 'cwd': str(tmp_path),
+    ref = create_local_session(authority, owner, {'request_id': 'r', 'source': 'tui', 'cwd': str(tmp_path),
                                                   'model': 'fixture', 'toolsets': []})
     authority.db.append_message(ref.session_id, 'user', 'before reset')
     row = authority.db.get_session(ref.session_id)

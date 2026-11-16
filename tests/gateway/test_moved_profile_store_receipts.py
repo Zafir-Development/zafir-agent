@@ -36,7 +36,7 @@ def authority_for(tmp_path, monkeypatch):
 def _create(authority, request_id):
     from gateway.session_local import create_local_session
     actor = SessionActor('owner', authority.profile_id, _CAPS, 'socket')
-    params = {'request_id': request_id, 'source': 'gui', 'cwd': '/', 'model': 'frozen', 'toolsets': []}
+    params = {'request_id': request_id, 'source': 'tui', 'cwd': '/', 'model': 'frozen', 'toolsets': []}
     return create_local_session(authority, actor, params)
 
 

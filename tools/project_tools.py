@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Project tools — the agent's INTENTIONAL handle on first-class Projects (per-profile
-``projects.db``, the desktop sidebar's named workspaces). Creating/switching is an explicit
-tool call, never a side effect of ``cd``. GUI-only: the `project` toolset stays off
-``_HERMES_CORE_TOOLS``; the desktop/TUI gateway folds it in and wires
-``set_project_workspace_callback`` so the live session's cwd and sidebar follow. A live
+``projects.db``, the TUI's named workspaces). Creating/switching is an explicit
+tool call, never a side effect of ``cd``. Client-only: the `project` toolset stays off
+``_HERMES_CORE_TOOLS``; the local (TUI) gateway folds it in and wires
+``set_project_workspace_callback`` so the live session's cwd follows. A live
 session create/switch re-anchors only that session; it must not move the profile-global
-Desktop selection shared by concurrent chats."""
+active project shared by concurrent chats."""
 
 import json
 import os
@@ -13,8 +13,8 @@ from typing import Callable, Optional
 
 from tools.registry import registry
 
-# Set by the GUI gateway: ``(task_id, primary_path, project_name)`` re-anchors that session's
-# workspace. ``None`` in CLI/messaging — the DB write still happens, nothing to move.
+# Set by the local (TUI) gateway: ``(task_id, primary_path, project_name)`` re-anchors that
+# session's workspace. ``None`` in CLI/messaging — the DB write still happens, nothing to move.
 _workspace_callback: Optional[Callable[[str, str, str], None]] = None
 
 
@@ -33,7 +33,7 @@ def _primary_path(proj) -> Optional[str]:
 
 
 def _moves_session(task_id: Optional[str], path: Optional[str]) -> bool:
-    """True when a live GUI session's workspace will follow the project — ``_apply_workspace``'s gate."""
+    """True when a live client session's workspace will follow the project — ``_apply_workspace``'s gate."""
     return bool(_workspace_callback and task_id and path)
 
 
@@ -72,9 +72,9 @@ def _activated(proj, task_id: Optional[str]) -> str:
 
 
 def _calling_session_project_id(conn, task_id: Optional[str]) -> tuple[bool, Optional[str]]:
-    """``(scoped, project_id)`` for the calling session. The GUI gateway registers each session's
-    workspace (``cwd_source``) in the terminal override table; a caller it never registered (CLI,
-    scripts) is unscoped and falls back to the profile-global pointer."""
+    """``(scoped, project_id)`` for the calling session. The local (TUI) gateway registers each
+    session's workspace (``cwd_source``) in the terminal override table; a caller it never registered
+    (CLI, scripts) is unscoped and falls back to the profile-global pointer."""
     from hermes_cli import projects_db as pdb
     from tools.terminal_tool import resolve_task_overrides
     overrides = resolve_task_overrides(task_id) if task_id else {}
@@ -115,14 +115,14 @@ def project_create(name: str, path: Optional[str] = None, task_id: Optional[str]
             existing = pdb.find_by_primary_path(conn, folder) if folder else None
             if existing is not None:
                 # Idempotent create: the folder already belongs to a project. Reusing it beats minting
-                # a duplicate — duplicated projects render N identical sidebar subtrees (#75820).
+                # a duplicate — duplicated projects list N identical entries (#75820).
                 proj = existing
             else:
                 pid = pdb.create_project(conn, name=name, folders=[folder] if folder else [], primary_path=folder or None)
                 proj = pdb.get_project(conn, pid)
             # A live session that moves owns its workspace, so it leaves the profile-global pointer
-            # alone (a background chat would otherwise redirect the sidebar). Anything that can't
-            # move — CLI/messaging, a pathless project — switches through the pointer instead.
+            # alone (a background chat would otherwise redirect the active project). Anything that
+            # can't move — CLI/messaging, a pathless project — switches through the pointer instead.
             if proj is not None and not _moves_session(task_id, _primary_path(proj)):
                 pdb.set_active(conn, proj.id)
     except ValueError as exc:
@@ -158,18 +158,17 @@ def _handle_project(args, **kw):
     return action(args, kw.get("task_id"))
 
 
-# One action enum instead of three tools: each re-taught "desktop Projects" (244 -> ~145 tok).
-# Consolidated (#95681, maintainer-directed): project_list/create/switch each re-taught "desktop Projects
-# (named workspaces)"; one action enum says it once (244 -> ~145 tok).
+# One action enum instead of three tools: "Projects (named workspaces)" is taught once
+# (244 -> ~145 tok; #95681, maintainer-directed).
 registry.register(
     name="desktop_project",
     toolset="project",
     schema={
         "name": "desktop_project",
         "description": (
-            "Create or switch desktop Projects (named workspaces). create: one and switch "
+            "Create or switch Projects (named workspaces). create: one and switch "
             "this chat into it — pass path to anchor it to a repo/folder (the "
-            "chat's workspace moves there, the sidebar follows). switch: move "
+            "chat's workspace moves there). switch: move "
             "this chat into an existing project by name/slug/id — the "
             "intentional way to move the session, not `cd`. list: all projects + which one this chat is in."
         ),

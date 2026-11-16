@@ -55,7 +55,7 @@ def test_ordinary_daemon_slash_skill_uses_durable_fifo(tmp_path):
             async with connect(desc['api_origin'].replace('http:', 'ws:') + '/api/ws'):
                 pass
         async with websocket(home, desc) as ws:
-            created = await rpc(ws, 'session.create', request_id='slash', source='gui', toolsets=[])
+            created = await rpc(ws, 'session.create', request_id='slash', source='tui', toolsets=[])
             sid = created['result']['session_id']
 
             async def command(method='slash.exec', **params):

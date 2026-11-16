@@ -105,7 +105,7 @@ async def test_deleted_local_session_leaves_nothing_on_the_local_adapter(tmp_pat
 
     runner, authority, db = await _owner(tmp_path, monkeypatch)
     try:
-        refs = [create_local_session(authority, _viewer(), dict(request_id=f"r{i}", source="gui", model="fixture",
+        refs = [create_local_session(authority, _viewer(), dict(request_id=f"r{i}", source='tui', model="fixture",
                                                                 toolsets=[])) for i in range(2)]
         kept, deleted = (authority.sessions[ref.session_id] for ref in refs)
         adapter = runner._delivery_adapter_for(kept.source)

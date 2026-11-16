@@ -27,7 +27,7 @@ async def probe():
     command = shlex.quote(sys.executable) + ' -c ' + shlex.quote('import time; time.sleep(60)')
     try:
         async with connect(ws_url(api), subprotocols=subprotocols(runner, subject='owner')) as ws:
-            sid = (await rpc(ws, 'session.create', request_id='desktop', source='gui', toolsets=[]))['result']['session_id']
+            sid = (await rpc(ws, 'session.create', request_id='desktop', source='tui', toolsets=[]))['result']['session_id']
             route = authority.sessions[sid].route
             for task, key in [(sid, route), (sid, route), ('foreign', 'agent:main:telegram:dm:1')]:
                 processes.append(process_registry.spawn_local(command, cwd=str(home), task_id=task, owner_task_id=task,

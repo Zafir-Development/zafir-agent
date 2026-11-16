@@ -1480,10 +1480,8 @@ describe('createGatewayEventHandler', () => {
     expect(getOverlayState().approval).toMatchObject({ choices: ['once', 'deny'], smartDenied: true })
   })
 
-  it('declines the requests a terminal cannot answer so the channel fails them fast', () => {
-    for (const method of ['preview.act', 'window.read', 'tour', 'mcp.setup', 'terminal.read']) {
-      expect(serverRequest(method, {}).handled).toBe(false)
-    }
+  it('declines a request it has no card for so the channel fails it fast', () => {
+    expect(serverRequest('vendor.future_prompt', {}).handled).toBe(false)
   })
 
   it('still surfaces terminal turn failures as errors', () => {

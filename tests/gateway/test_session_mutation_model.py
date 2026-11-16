@@ -204,7 +204,7 @@ def test_desktop_pick_resolves_a_provider_added_after_the_session_and_freezes_on
                     return status and status[0] == 'terminal'
                 await async_wait_until(terminal, timeout=30, what=f'{text} terminal')
                 return await call('session.resume', session_id=sid)
-            sid = (await call('session.create', source='gui', request_id='owner', toolsets=[]))['session_id']
+            sid = (await call('session.create', source='tui', request_id='owner', toolsets=[]))['session_id']
             before = await turn(sid, 'BEFORE_PICK')
             frozen_before = json.loads(receipt(sid)['config_json'])
             # The user adds the endpoint while the session exists (the Desktop menu then lists it).

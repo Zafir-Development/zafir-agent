@@ -135,8 +135,8 @@ def _core_tool_names() -> frozenset[str]:
         return frozenset()
 
 
-# Session-gated GUI toolsets: off ``_HERMES_CORE_TOOLS`` so non-GUI clients never pay
-# their schema; once enabled they stay direct unless the deferral list names them.
+# Client-surface toolsets: off ``_HERMES_CORE_TOOLS`` so other clients never pay their
+# schema; once enabled they stay direct unless the deferral list names them.
 _DIRECT_SURFACE_TOOLSETS = CLIENT_SURFACE_TOOLSETS | TOOLSET_SESSION_PLATFORMS.keys()
 
 # Event-triggered tools deferred BY DEFAULT (a catalog stub suffices). Keep the curated
@@ -552,15 +552,15 @@ def scoped_deferrable_names(tool_defs: list[dict[str, Any]]) -> frozenset[str]:
 
 
 def out_of_scope_reason(name: str) -> Optional[str]:
-    """Fail-fast reason for a registered session-gated GUI tool outside this session's
+    """Fail-fast reason for a registered client-surface tool outside this session's
     scope (#120413). The generic scope block ("not available ... Use tool_search") sends
     the model on a round-trip tool_search can never satisfy — the tool is not in this
     session's catalog at all. Name the missing surface instead. None for anything else
     (the generic message still applies). Fail-open: never raises."""
     try:
         if _registry_toolset(name) in _DIRECT_SURFACE_TOOLSETS:
-            return (f"'{name}' needs a desktop-app session with a GUI surface (preview/terminal panes). "
-                    "This session has none: use it only from the Hermes desktop app, not via tool_search.")
+            return (f"'{name}' needs a TUI session with the Projects surface. "
+                    "This session has none: that client adds the tool, not tool_search.")
     except Exception:
         pass
     return None

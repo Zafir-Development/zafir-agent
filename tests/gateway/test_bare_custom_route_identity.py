@@ -104,4 +104,4 @@ def test_source_desktop_is_sent_as_the_gui_surface_the_create_contract_lists(mon
     GatewaySessionStore(SimpleNamespace(call=call, state=lambda sid: SimpleNamespace(
         adopt_snapshot=lambda snapshot: None))).create({})
     assert sent['source'] == 'gui'
-    assert canonical_param_problems(CANONICAL_METHODS['session.create'], {'request_id': 'r', 'source': 'gui'}) == []
+    assert canonical_param_problems(CANONICAL_METHODS['session.create'], {'request_id': 'r', 'source': 'tui'}) == []

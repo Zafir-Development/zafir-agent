@@ -181,7 +181,7 @@ def _local_input_device_ready() -> bool:
 
 
 def wake_surface_enabled(surface: str, cfg: Optional[dict[str, Any]] = None) -> bool:
-    """Should ``surface`` (cli/tui/gui) host the listener? True when enabled and the configured
+    """Should ``surface`` (cli/tui) host the listener? True when enabled and the configured
     surface is ``auto`` or this one; ``auto`` only makes it eligible — the lock admits one claimant."""
     cfg = cfg if cfg is not None else load_wake_word_config()
     want = str(_get(cfg, "surface")).strip().lower() or "auto"

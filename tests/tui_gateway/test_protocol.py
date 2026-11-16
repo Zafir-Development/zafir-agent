@@ -431,13 +431,13 @@ def _not_shown(req):
 
 
 def test_window_owned_request_refuses_at_once_when_no_window_shows_the_session(server):
-    """#119333: every attached window says it does not show the session → preview.read resolves with the
-    distinct not-shown refusal now, instead of the agent waiting out the 45s bridge deadline."""
+    """#119333: every attached window declines → the distinct not-shown refusal now, not a deadline wait."""
     from tui_gateway import server_requests
 
     windows = _two_window_session(server, "s-none")
     box = {}
-    thread = threading.Thread(target=lambda: box.setdefault("r", server._ask("preview.read", "s-none", {}, timeout=30)),
+    thread = threading.Thread(target=lambda: box.setdefault(
+        "r", server._ask("sudo", "s-none", {"command": "ls"}, timeout=30)),
                               daemon=True)
     thread.start()
     req = _wait_open(server_requests, windows=windows)
@@ -454,13 +454,13 @@ def test_window_owned_request_refuses_at_once_when_no_window_shows_the_session(s
 
 
 def test_window_owned_request_decline_does_not_beat_the_owner_window(server):
-    """#113348 stays fixed: one bystander window declining leaves the request open for the window that
-    shows the session, and its answer is the result."""
+    """#113348: one bystander decline leaves the request open for the showing window, whose answer wins."""
     from tui_gateway import server_requests
 
     bystander, owner = _two_window_session(server, "s-own")
     box = {}
-    thread = threading.Thread(target=lambda: box.setdefault("r", server._ask("preview.read", "s-own", {}, timeout=5)),
+    thread = threading.Thread(target=lambda: box.setdefault(
+        "r", server._ask("sudo", "s-own", {"command": "ls"}, timeout=5)),
                               daemon=True)
     thread.start()
     req = _wait_open(server_requests, windows=(bystander, owner))
@@ -468,9 +468,9 @@ def test_window_owned_request_decline_does_not_beat_the_owner_window(server):
     # An unattributed decline (proxied / relayed frame) is not a window's vote either.
     assert server_requests.resolve_response(_not_shown(req)) is True
     assert thread.is_alive() and [r["id"] for r in server_requests.open_requests("s-own")] == [req.id]
-    server.dispatch({"jsonrpc": "2.0", "id": req.id, "result": {"value": '{"text": "page"}'}}, owner)
+    server.dispatch({"jsonrpc": "2.0", "id": req.id, "result": {"value": "hunter2"}}, owner)
     thread.join(timeout=2)
-    assert box["r"] == '{"text": "page"}'
+    assert box["r"] == "hunter2"
 
 
 def test_client_capabilities_advertises_counting_not_shown_declines(server):
@@ -485,7 +485,7 @@ def test_client_capabilities_advertises_counting_not_shown_declines(server):
     assert response["result"]["declines_not_shown"] is True
 
 
-@pytest.mark.parametrize("method", ["secret", "sudo", "terminal.read", "tour"])
+@pytest.mark.parametrize("method", ["sudo", "vault.code"])
 def test_server_request_timeout_emits_one_request_cancel(capture, method):
     from tui_gateway import server_requests
     _server, buf = capture
@@ -2037,7 +2037,7 @@ def test_session_create_idempotency_key_dedupes_retry(server, monkeypatch):
 
     params = {
         "cols": 96,
-        "source": "desktop",
+        "source": 'tui',
         "messages": [{"role": "user", "content": "branch me"}],
         "parent_session_id": "parent-1",
         "idempotency_key": "branch-retry-abc",
@@ -2059,8 +2059,8 @@ def test_session_create_no_idempotency_key_creates_distinct_sessions(server, mon
     """Without an idempotency_key, repeated creates keep the historic behavior."""
     _stub_session_create_dependencies(server, monkeypatch)
 
-    first = server.handle_request({"id": "c1", "method": "session.create", "params": {"cols": 96, "source": "desktop"}})
-    second = server.handle_request({"id": "c2", "method": "session.create", "params": {"cols": 96, "source": "desktop"}})
+    first = server.handle_request({"id": "c1", "method": "session.create", "params": {"cols": 96, "source": 'tui'}})
+    second = server.handle_request({"id": "c2", "method": "session.create", "params": {"cols": 96, "source": 'tui'}})
 
     assert "error" not in first and "error" not in second
     assert first["result"]["session_id"] != second["result"]["session_id"]
@@ -2074,7 +2074,7 @@ def test_session_create_idempotency_key_expires_with_session(server, monkeypatch
 
     first = server.handle_request(
         {"id": "c1", "method": "session.create",
-         "params": {"cols": 96, "source": "desktop", "idempotency_key": "branch-retry-xyz"}}
+         "params": {"cols": 96, "source": 'tui', "idempotency_key": "branch-retry-xyz"}}
     )
     first_sid = first["result"]["session_id"]
 
@@ -2082,7 +2082,7 @@ def test_session_create_idempotency_key_expires_with_session(server, monkeypatch
 
     second = server.handle_request(
         {"id": "c2", "method": "session.create",
-         "params": {"cols": 96, "source": "desktop", "idempotency_key": "branch-retry-xyz"}}
+         "params": {"cols": 96, "source": 'tui', "idempotency_key": "branch-retry-xyz"}}
     )
     assert "error" not in second
     assert second["result"]["session_id"] != first_sid

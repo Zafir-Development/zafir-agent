@@ -581,9 +581,11 @@ def test_normalize_mcp_input_schema_still_repairs_declared_objects():
 def test_builtin_tool_without_required_gets_empty_required_list():
     """Object nodes that never had ``required`` are coerced to ``required: []`` (#56123):
     strict OpenAI-compatible backends read a missing key as ``null`` and 400 the request."""
-    from tools.read_window_tool import READ_WINDOW_BELOW_SCHEMA
+    from tools.clarify_tool import CLARIFY_SCHEMA
 
-    tools = [{"type": "function", "function": copy.deepcopy(READ_WINDOW_BELOW_SCHEMA)}]
+    schema = copy.deepcopy(CLARIFY_SCHEMA)
+    schema["parameters"].pop("required", None)  # the pre-#56123 shape every schema shipped with
+    tools = [{"type": "function", "function": schema}]
     params = sanitize_tool_schemas(tools)[0]["function"]["parameters"]
     assert params["required"] == []
     nested = sanitize_tool_schemas([_tool("t", {

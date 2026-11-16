@@ -36,7 +36,7 @@ async def test_lazy_session_info_reports_frozen_reasoning_and_tier(tmp_path, mon
         assert 'result' in reply, reply
         return reply['result']
 
-    created = await call('session.create', request_id='cold', source='gui', cwd=str(tmp_path))
+    created = await call('session.create', request_id='cold', source='tui', cwd=str(tmp_path))
     sid = created['session_id']
     for info in (created['info'], await call('session.info', session_id=sid),
                  (await call('session.resume', session_id=sid))['info']):
@@ -44,5 +44,5 @@ async def test_lazy_session_info_reports_frozen_reasoning_and_tier(tmp_path, mon
         assert (info['reasoning_effort'], info['reasoning_effort_wire']) == ('high', 'high'), info
         # A priority tier never reaches a custom endpoint, so the session must not claim Fast there.
         assert (info['service_tier'], info['fast']) == ('priority', False), info
-    off = await call('session.create', request_id='off', source='gui', cwd=str(tmp_path), reasoning='none')
+    off = await call('session.create', request_id='off', source='tui', cwd=str(tmp_path), reasoning='none')
     assert (off['info']['reasoning_effort'], off['info']['reasoning_effort_wire']) == ('none', '')

@@ -42,7 +42,7 @@ def probe(tmp_path):
             for name in ('safe', 'reset', 'unknown', 'tampered'):
                 cwd = home / name
                 cwd.mkdir()
-                params[name] = dict(request_id=name, source='gui', cwd=str(cwd), model='frozen-' + name, toolsets=[])
+                params[name] = dict(request_id=name, source='tui', cwd=str(cwd), model='frozen-' + name, toolsets=[])
                 created = await rpc(ws, 'session.create', **params[name])
                 assert 'result' in created, created
                 sessions[name] = created['result']['session_id']

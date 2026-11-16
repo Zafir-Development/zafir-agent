@@ -24,7 +24,7 @@ from tui_gateway.ws_legacy_fallback import dispatch_legacy, legacy_fallback_allo
 
 _log = logging.getLogger(__name__)
 
-# Scale-to-zero: tell the (separate) gateway process a dashboard/desktop/TUI client is attached via
+# Scale-to-zero: tell the (separate) gateway process a TUI client is attached via
 # the mtime of a marker file it reads in its idle predicate (gateway/scale_to_zero.py). Clients ping
 # every 15s; one write per 5s per process is plenty.
 _SESSION_CLIENT_TOUCH_MIN_INTERVAL_S = 5.0
@@ -150,7 +150,6 @@ class WSTransport:
         #: for legacy-token/stdio. RPC params can never populate it: sole identity authority for relay authorship
         #: and for the ``user_id`` the agent is built with (``server._session_auth_user_id``).
         self.auth_identity = auth_identity
-        self.desktop_local = False
         #: The served profile home whose skin this peer follows (None = the launch home); see change_watcher.
         self.skin_home: str | None = None
         self._closed = False
@@ -385,17 +384,27 @@ def _authority_connection(ws: Any, transport: WSTransport, auth_identity: dict |
     return AuthorityConnection(authority, transport, auth_identity or {}, operator=operator)
 
 
+def _serves_local_host(transport: WSTransport) -> bool:
+    """Whether this socket is a client on THIS machine: it redeemed a native ticket, which only this
+    machine's private control socket mints (``run_api`` stamps ``native_bootstrap``). The remaining
+    clients (CLI/TUI, ``hermes gateway attach``) are all such local clients, so every request and the
+    threads it hands off to are marked as work for one (``serving_local_host``)."""
+    identity = getattr(transport, "auth_identity", None)
+    return (isinstance(identity, dict) and identity.get("provider") == "local"
+            and identity.get("native_bootstrap") is True)
+
+
 async def _dispatch_request(authority_connection: Any, req: Any, req_method: Any, transport: WSTransport) -> Any:
-    """One request through the authority when attached, else the legacy dispatcher. A request from the
-    local Desktop runs as work for it (the welcome trial and onboarding key on that), and so do the
-    threads it hands off to: ``to_thread`` and the legacy pool copy this context."""
+    """One request through the authority when attached, else the legacy dispatcher. A request from a
+    natively ticketed client runs as work for a local host (the welcome trial keys on that), and so do
+    the threads it hands off to: ``to_thread`` and the legacy pool copy this context."""
     from hermes_cli.process_identity import serving_local_host
     from tui_gateway.server_requests import resolve_pinned_response
     if authority_connection is not None and resolve_pinned_response(req, transport):
-        # The answer to a request a sidecar RPC sent back to THIS socket (vault.preview.fill's page
-        # scripts); the authority's own registry never holds those ids.
+        # The answer to a request a sidecar RPC sent back to THIS socket; the authority's own registry
+        # never holds those ids.
         return None
-    with serving_local_host(getattr(transport, "desktop_local", False)):
+    with serving_local_host(_serves_local_host(transport)):
         if authority_connection is None:
             return await asyncio.to_thread(server.dispatch, req, transport)
         resp = await authority_connection.dispatch(req)
@@ -671,7 +680,7 @@ async def handle_ws(ws: Any, *, auth_identity: dict | None = None, subprotocol: 
             server.register_live_transport(transport)
         # Cross-backend liveness: a heartbeat row lets the startup orphan sweep tell "live but idle
         # backend" from "truly orphaned". Idempotent and once-per-process, like the orphan sweep (the
-        # desktop app and web dashboard reach the agent via this sidecar, not entry.main()).
+        # TUI reaches the agent via this sidecar, not entry.main()).
         _start_backend_liveness()
         if not ready_ok:
             disconnect_reason = "ready_send_failed"

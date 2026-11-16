@@ -22,7 +22,7 @@ async def test_service_tier_choices_use_the_sessions_model_route_and_account(
     store, _, _, owner = _owner(tmp_path / 'owner', monkeypatch, {'model': {'default': 'fixture'}})
     try:
         created = await owner.dispatch({'id': 'create', 'method': 'session.create', 'params': {
-            'request_id': 'create', 'source': 'gui', 'cwd': str(tmp_path), 'toolsets': [],
+            'request_id': 'create', 'source': 'tui', 'cwd': str(tmp_path), 'toolsets': [],
             'model': model, 'provider': provider, 'base_url': base_url,
         }})
         sid = created['result']['session_id']

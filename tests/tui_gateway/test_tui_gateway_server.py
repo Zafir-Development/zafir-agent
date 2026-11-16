@@ -2491,17 +2491,6 @@ def test_load_enabled_toolsets_honors_disabled_project_on_configured_fallback(
     assert "project" not in result
 
 
-def test_with_session_toolsets_keeps_desktop_ui_when_project_disabled(monkeypatch):
-    """#54433: a disabled name is subtracted from the client-surface fold-in, but
-    ``desktop_ui`` — the client's own control surface — survives the subtraction."""
-    monkeypatch.setattr(server, "_load_disabled_toolsets", lambda: ["project"])
-
-    assert server._with_session_toolsets(["memory"], "desktop") == ["memory", "catalog", "desktop_ui"]
-    # Nothing disabled: the fold-in keeps every client-surface toolset.
-    monkeypatch.setattr(server, "_load_disabled_toolsets", lambda: None)
-    assert server._with_session_toolsets(["memory"], "desktop") == ["memory", "catalog", "desktop_ui", "project"]
-
-
 def test_load_enabled_toolsets_rejects_disabled_mcp_env(monkeypatch, capsys):
     monkeypatch.setenv("HERMES_TUI_TOOLSETS", "mcp-off")
     monkeypatch.setitem(
@@ -12176,10 +12165,7 @@ def test_commands_catalog_includes_plugin_commands(monkeypatch):
         {"id": "1", "method": "commands.catalog", "params": {}}
     )
 
-    assert resp["result"]["commands"]["/lcm"] == {
-        "argument_mode": "text",
-        "desktop": None,
-    }
+    assert resp["result"]["commands"]["/lcm"] == {"argument_mode": "text"}
     pairs = dict(resp["result"]["pairs"])
     assert "/lcm" in pairs
     plugin_cat = next(
@@ -16454,7 +16440,7 @@ def test_session_create_persists_seeded_branch_child(monkeypatch):
             "method": "session.create",
             "params": {
                 "cols": 96,
-                "source": "desktop",
+                "source": 'tui',
                 "parent_session_id": "20260823_084113_6de211",
                 "messages": seeded,
             },
@@ -16568,7 +16554,7 @@ def test_session_create_branch_seed_failure_does_not_break_create(monkeypatch):
             "id": "1",
             "method": "session.create",
             "params": {
-                "source": "desktop",
+                "source": 'tui',
                 "parent_session_id": "parent-1",
                 "messages": [{"role": "user", "content": "seed"}],
             },
@@ -16630,7 +16616,7 @@ def test_session_create_seed_failure_after_row_compensates(monkeypatch):
             "id": "1",
             "method": "session.create",
             "params": {
-                "source": "desktop",
+                "source": 'tui',
                 "parent_session_id": "parent-1",
                 "title": "My Branch",
                 "messages": [{"role": "user", "content": "seed"}],
@@ -16702,7 +16688,7 @@ def test_session_create_seed_disk_full_keeps_row_for_retry(monkeypatch):
                 "id": "1",
                 "method": "session.create",
                 "params": {
-                    "source": "desktop",
+                    "source": 'tui',
                     "parent_session_id": "parent-1",
                     "messages": [{"role": "user", "content": "seed"}],
                 },

@@ -36,7 +36,7 @@ def _owner(home, monkeypatch, config):
 async def _create(owner, authority, request_id, cwd, **extra):
     from gateway.session_policy import policy_for_source
     response = await owner.dispatch({'id': request_id, 'method': 'session.create', 'params': dict(
-        request_id=request_id, source='gui', cwd=str(cwd), toolsets=[], model='m', **extra)})
+        request_id=request_id, source='tui', cwd=str(cwd), toolsets=[], model='m', **extra)})
     if 'error' in response:
         return response['error']['data']['reason']
     live = authority.sessions[response['result']['session_id']]

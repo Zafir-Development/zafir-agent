@@ -96,8 +96,8 @@ class TestClassification:
         for name in BRIDGE_TOOL_NAMES:
             assert not is_deferrable_tool_name(name)
 
-    def test_gui_surface_tools_never_defer(self):
-        """Session-gated GUI tools stay direct and stay off the global core list."""
+    def test_client_surface_tools_never_defer(self):
+        """Session-gated client-surface tools (``project``) stay direct and off the global core list."""
         from tools.registry import discover_builtin_tools, registry
         from tools.tool_search import _DIRECT_SURFACE_TOOLSETS, is_deferrable_tool_name
         from toolsets import _HERMES_CORE_TOOLS
@@ -111,16 +111,16 @@ class TestClassification:
             assert name not in _HERMES_CORE_TOOLS
 
 
-    def test_defer_override_restores_legacy_direct_gui(self):
+    def test_defer_override_restores_the_everything_eager_legacy(self):
         """tools.tool_search.defer: [] restores the everything-eager legacy:
-        GUI tools alone no longer activate the bridge."""
+        non-bridge tools alone no longer activate the bridge."""
         from tools.registry import discover_builtin_tools
         from tools.tool_search import ToolSearchConfig, assemble_tool_defs
 
         discover_builtin_tools()
-        names = {"read_window_below", "set_theme", "project_list"}
+        names = {"project_list", "session_search", "browser_exec"}
         assembled = assemble_tool_defs(
-            [_td(name, f"GUI {name}") for name in names],
+            [_td(name, f"deferred {name}") for name in names],
             context_length=200_000,
             config=ToolSearchConfig.from_raw({"enabled": "on", "defer": []}),
         )

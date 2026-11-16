@@ -281,12 +281,14 @@ def test_room_grant_fails_closed_for_tamper_expiry_and_permission():
         verify_room_grant(SECRET, token[:-1] + "A", dispatch, now=105)
 
 
-def test_local_catalog_is_honest_for_app_managed_process(monkeypatch):
+def test_local_catalog_is_not_biased_by_the_host_env(monkeypatch):
+    """The hosted-room catalog describes this process, not how it was launched: the Desktop env
+    marker no longer downgrades it, so a self-advertised local process stays honest."""
     from gateway.hosted_room_peer import local_catalog_mapping
 
     monkeypatch.setenv("HERMES_DESKTOP", "1")
     catalog = local_catalog_mapping(target_profile="default", installation_id="install-desktop")
-    assert catalog["persistent_process"] is False
+    assert catalog["persistent_process"] is True
     assert catalog["link_modes"] == ["direct"]
 
 

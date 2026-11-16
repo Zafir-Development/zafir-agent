@@ -265,9 +265,6 @@ async def write_mutation(authority, ref, params, editor_servers, *, principal_id
             # state.db or a contended writer lock never stalls other clients (main 1769024ca3b).
             commit = partial(mutate_runtime_session, authority.db, **fields,
                              _prepared=prepared, _authorize_write=authorize_write)
-            if operation == 'delete':
-                from gateway.session_onboarding import ending_run_on_delete
-                commit = partial(ending_run_on_delete, authority.db, ref.session_id, commit)
             try:
                 result = await asyncio.to_thread(commit)
             finally:

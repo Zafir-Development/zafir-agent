@@ -185,70 +185,12 @@ def test_the_token_seam_refuses_an_inference_token_to_a_guest_without_the_trial(
     assert not [r for r in portal.token_requests if r["body"].get("purpose") != "connectors"]
 
 
-def _root_run():
-    from hermes_cli.config_effective import load_user_config_effective
-    from hermes_constants import get_default_hermes_root
-
-    section = load_user_config_effective(get_default_hermes_root() / "config.yaml").get("onboarding") or {}
-    return section.get("run")
-
-
 def _relaunch():
     from hermes_cli import free_tier_bootstrap
 
     install_state.probe.cache_clear()
     free_tier_bootstrap.reset_for_tests()
     free_tier_bootstrap.run_bootstrap(announce=False)
-
-
-@pytest.mark.parametrize("used", [False, True], ids=["fresh", "used"])
-def test_the_first_desktop_boot_records_that_onboarding_is_due(portal, monkeypatch, used):
-    from hermes_cli.onboarding_run import set_run
-
-    as_local_desktop_backend(monkeypatch)
-    if used:
-        install_state.mark_machine_used()
-    _relaunch()
-    assert _root_run() is (None if used else True)
-
-    if not used:  # once: a run that ended is not made due again by a later boot
-        set_run(False)
-        _relaunch()
-        assert _root_run() is False
-
-
-def test_a_missed_first_launch_stays_due_and_keeps_the_trial(portal, monkeypatch):
-    from hermes_cli.onboarding_run import should_run
-    from hermes_constants import get_hermes_home
-
-    as_local_desktop_backend(monkeypatch)
-    _relaunch()                                         # first boot; the app never opened onboarding
-    _chat(get_hermes_home() / "state.db", "anthropic/claude")   # then the user chatted
-    install_state.probe.cache_clear()
-
-    assert install_state.probe().existing
-    assert should_run() is True
-    assert welcome_trial.claim_blocker() is None
-    assert welcome_trial.claim_welcome_trial() is not None
-    assert welcome_trial.claim_blocker() == "a Nous identity exists"
-
-
-def test_a_claim_cut_off_before_its_marker_write_never_claims_twice(portal, monkeypatch):
-    as_local_desktop_backend(monkeypatch)
-    _relaunch()                                         # first boot: due, the trial reserved
-    mark = install_state.mark_machine_used
-
-    def die():
-        raise RuntimeError("the process died here")
-    monkeypatch.setattr(install_state, "mark_machine_used", die)  # the stamped guest is saved, then the crash
-    with pytest.raises(RuntimeError):
-        welcome_trial.claim_welcome_trial()
-    monkeypatch.setattr(install_state, "mark_machine_used", mark)
-    _relaunch()
-    anon_auth.clear_dead_guest("anon_credential_dead")   # the claimed guest is reaped later
-
-    assert welcome_trial.claim_welcome_trial() is None
-    assert portal.creates() == 1
 
 
 def test_two_installs_claiming_at_once_mint_one_trial(portal, monkeypatch, tmp_path):

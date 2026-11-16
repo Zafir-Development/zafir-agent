@@ -114,9 +114,9 @@ async def probe(release, started):
     receipt, viewers = {}, []
     try:
         owner, peer, foreign = viewers[:] = [await viewer(a) for a in ('owner', 'peer_operator', 'foreign_viewer')]
-        sid = (await owner.rpc('session.create', request_id='live-parent', source='gui',
+        sid = (await owner.rpc('session.create', request_id='live-parent', source='tui',
                                toolsets=['terminal', 'delegation']))['session_id']
-        other = (await foreign.rpc('session.create', request_id='live-other', source='gui', toolsets=[]))['session_id']
+        other = (await foreign.rpc('session.create', request_id='live-other', source='tui', toolsets=[]))['session_id']
         await owner.rpc('session.resume', session_id=sid)
         await peer.rpc('session.resume', session_id=sid)
         await foreign.rpc('session.resume', session_id=other)

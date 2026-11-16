@@ -148,7 +148,7 @@ def test_capabilities_open_shared_durable_run_store_without_test_injection(
         store.close()
 
 
-def test_app_managed_catalog_and_self_advertised_endpoint_are_consistent(
+def test_local_catalog_and_self_advertised_endpoint_are_consistent(
     home, monkeypatch
 ):
     monkeypatch.setenv("API_SERVER_KEY", "gateway-api-key-1234567890")
@@ -167,7 +167,7 @@ def test_app_managed_catalog_and_self_advertised_endpoint_are_consistent(
             },
         )
     )
-    assert capability["persistent_process"] is False
+    assert capability["persistent_process"] is True
     assert capability["room_link"]["catalog"] == invitation["catalog"]
     assert capability["room_link"]["endpoint"] == {
         "available": True,

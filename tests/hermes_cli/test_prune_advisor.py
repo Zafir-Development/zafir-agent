@@ -110,14 +110,14 @@ def test_only_a_settled_question_may_withdraw_the_notice(home, monkeypatch):
 
 
 def test_local_notice_is_neither_re_asked_after_an_answer_nor_spent_on_nobody(home, monkeypatch):
-    """Desktop/Ink path: an answer given while the estimate runs suppresses the publish, and a
+    """Local-viewer path: an answer given while the estimate runs suppresses the publish, and a
     notice no viewer received releases its claim so the next window still asks."""
     import asyncio
     from types import SimpleNamespace
     from gateway import run_housekeeping_disk as rhd
     from gateway.config import Platform
     from gateway.session_events import SessionEvents
-    monkeypatch.setattr("gateway.session_policy.policy_for_source", lambda *_: SimpleNamespace(source="gui"))
+    monkeypatch.setattr("gateway.session_policy.policy_for_source", lambda *_: SimpleNamespace(source="tui"))
     _disk(monkeypatch, free_gb=1)
     events = SessionEvents()  # no viewer attached: publish delivers to nobody
     live = SimpleNamespace(source=SimpleNamespace(platform=Platform.LOCAL), event_stream=events)

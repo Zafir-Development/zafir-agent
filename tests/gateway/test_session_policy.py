@@ -14,15 +14,13 @@ def test_policy_selects_surface_and_isolates_cwd(tmp_path):
     cfg = {'platform_toolsets': {'cli': ['terminal']}}
     before = dict(os.environ)
     policies = []
-    for source in ('cli', 'tui', 'gui'):
+    for source in ('cli', 'tui'):
         cwd = tmp_path / source
         cwd.mkdir()
         policies.append(build_policy({'source': source, 'cwd': str(cwd), 'model': source}, cfg))
-    assert policies[2].platform == 'desktop'
-    assert 'desktop_ui' in policies[2].toolsets
-    assert all('desktop_ui' not in p.toolsets for p in policies[:2])
-    # Platform-gated toolsets (catalog) ride on the Desktop surface only, like the native TUI factory.
-    assert 'catalog' in policies[2].toolsets and all('catalog' not in p.toolsets for p in policies[:2])
+    assert [p.platform for p in policies] == ['cli', 'tui']
+    # No renderer-only toolset rides on a surviving surface.
+    assert all(not ({'desktop_ui', 'catalog'} & set(p.toolsets)) for p in policies)
     cfg['platform_toolsets']['cli'].clear()
     assert 'terminal' in policies[0].toolsets
 
@@ -35,7 +33,7 @@ def test_policy_selects_surface_and_isolates_cwd(tmp_path):
     assert dict(os.environ) == before
     for params in ({'source': 'cron'}, {'toolsets': ['not-a-toolset']}, {'cwd': '.'},
                    {'provider': 12}, {'skills': 'x'}, {'skills': []}, {'pass_session_id': 1},
-                   {'toolsets': ['desktop_ui'], 'source': 'cli'}):
+                   {'toolsets': ['not-a-toolset'], 'source': 'cli'}):
         with pytest.raises(RuntimeStoreError, match='invalid_params'):
             build_policy(params, {})
 
@@ -181,8 +179,8 @@ def test_provider_change_drops_the_old_providers_context_window(tmp_path):
     assert alias.config()['model']['context_length'] == 8192
 
 def test_provider_pick_over_auto_template_sends_its_key_to_its_own_endpoint(tmp_path, monkeypatch):
-    """#139018: the install template (`provider: auto` + OpenRouter base_url) plus a Desktop
-    Google AI Studio pick resolved provider=gemini against openrouter.ai, so the Google key went
+    """#139018: the install template (`provider: auto` + OpenRouter base_url) plus a Google
+    AI Studio pick resolved provider=gemini against openrouter.ai, so the Google key went
     to OpenRouter (401). The frozen route must resolve to Google's own endpoint."""
     from gateway.session_policy import build_policy
     from hermes_cli.runtime_provider import frozen_runtime_config, resolve_runtime_provider
@@ -190,7 +188,7 @@ def test_provider_pick_over_auto_template_sends_its_key_to_its_own_endpoint(tmp_
     monkeypatch.setenv('OPENROUTER_API_KEY', 'sk-openrouter')
     cfg = {'model': {'default': 'anthropic/claude-opus-4.6', 'provider': 'auto',
                      'base_url': 'https://openrouter.ai/api/v1'}}
-    policy = build_policy(dict(cwd=str(tmp_path), source='gui', model='gemini-flash-latest', provider='gemini'), cfg)
+    policy = build_policy(dict(cwd=str(tmp_path), source='tui', model='gemini-flash-latest', provider='gemini'), cfg)
     with frozen_runtime_config(policy.config()):
         runtime = resolve_runtime_provider(requested='gemini', target_model='gemini-flash-latest')
     assert (runtime['provider'], runtime['api_key']) == ('gemini', 'sk-google')
@@ -509,6 +507,21 @@ def test_run_budget_passes_the_session_create_contract():
     assert canonical_param_problems(contract, {'request_id': 'r', 'source': 'cli', 'run_budget': 120.0}) == []
     declared = set(contract.params.model_fields)
     assert CREATE_FIELDS <= declared | {'request_id'}, CREATE_FIELDS - declared
+
+
+def test_a_new_gui_source_is_refused_while_stored_gui_rows_stay_readable():
+    """The Desktop app no longer creates sessions: a new ``gui``/``desktop`` launch request is
+    refused by the validation path, but rows an earlier build stored keep their historical
+    ``created_source`` (they stay readable and resumable as data)."""
+    from gateway.session_policy import build_policy, created_surface
+    from hermes_state_runtime import RuntimeStoreError
+
+    for source in ('gui', 'desktop'):
+        with pytest.raises(RuntimeStoreError, match='invalid_params'):
+            build_policy({'source': source}, {})
+    assert created_surface('gui') == 'desktop'
+    assert created_surface('desktop') == 'desktop'
+    assert created_surface('tui') == 'tui'
 
 
 def test_verbose_is_a_frozen_launch_option(tmp_path):

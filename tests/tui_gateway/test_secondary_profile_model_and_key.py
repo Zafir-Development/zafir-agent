@@ -56,9 +56,9 @@ def test_session_create_for_a_profile_reports_and_persists_its_own_model(homes, 
     known = set(server._sessions)
     try:
         worker_resp = server.handle_request(
-            {"id": "1", "method": "session.create", "params": {"profile": "worker", "source": "desktop"}})
+            {"id": "1", "method": "session.create", "params": {"profile": "worker", "source": 'tui'}})
         launch_resp = server.handle_request(
-            {"id": "2", "method": "session.create", "params": {"source": "desktop"}})
+            {"id": "2", "method": "session.create", "params": {"source": 'tui'}})
         assert worker_resp["result"]["info"]["model"] == "worker-model"
         assert launch_resp["result"]["info"]["model"] == "launch-model"
         worker_session = server._sessions[worker_resp["result"]["session_id"]]

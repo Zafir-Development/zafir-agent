@@ -122,7 +122,7 @@ fields; callers may initialize a provider without an agent or a session database
 | Keyword | Meaning |
 |---|---|
 | `hermes_home` | Active profile's storage directory. |
-| `platform` | Session surface, such as `cli`, `gui`, `acp`, or `telegram`. |
+| `platform` | Session surface, such as `cli`, `tui`, `acp`, or `telegram`. |
 | `session_title` | Stored session title, when available. A display label is not necessarily a user-selected identity. |
 | `session_title_source` | Stored title provenance, when available: `derived`, `llm`, or `user`. Automatic sources must not be mistaken for explicit identity overrides; missing provenance retains a provider's legacy behavior. Shared constants live in `hermes_state_common.py`. |
 | `cwd` | Non-empty logical workspace supplied as `AIAgent(cwd=...)`, available before provider initialization. Omitted for `None` or an empty string. |

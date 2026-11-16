@@ -1,6 +1,6 @@
 """Has this OS user already used Hermes on this computer?
 
-The welcome trial goes only to a first install, once per OS user, so ``onboarding.start``
+The welcome trial goes only to a first install, once per OS user, so the trial claim
 asks this before it claims one. The answer is about the OS user, not the active profile: it looks at
 every Hermes root the machine names (default roots, channel and package roots, the roots gateway
 services and the ``hermes`` launcher point at) and at a marker file no Hermes setting can move.
@@ -97,7 +97,7 @@ def probe() -> InstallState:
     for root in candidate_roots(places):
         if finding := root_evidence(root, places):
             if finding.evidence is not Evidence.UNREADABLE:  # doubt blocks the trial, never marks
-                _write_marker({}, answer_moved=False)  # this probe is the answer; nothing to recompute
+                _write_marker({})  # this probe is the answer
             return InstallState((finding,))
     return InstallState(())
 
@@ -146,7 +146,7 @@ def trial_reserved() -> bool:
     return any(_read_marker(marker) == _TRIAL_RESERVED for marker in machine_places().markers)
 
 
-def _write_marker(content: dict[str, str], *, answer_moved: bool = True) -> None:
+def _write_marker(content: dict[str, str]) -> None:
     places = machine_places()
     if places.markers:
         from utils import atomic_json_write
@@ -155,10 +155,6 @@ def _write_marker(content: dict[str, str], *, answer_moved: bool = True) -> None
         marker.parent.mkdir(parents=True, exist_ok=True)
         atomic_json_write(marker, content)  # unique temp name: two backends may mark at once
     probe.cache_clear()
-    if answer_moved:
-        from hermes_cli import onboarding_due
-
-        onboarding_due.invalidate()
 
 
 def _read_marker(marker: Path) -> Any:

@@ -1,7 +1,8 @@
 # Trimming Hermes to its core: CLI + TUI + gateway
 
-**Status:** planning. Nothing in this branch has been deleted yet.
-**Branch:** `trim-core-surfaces`, based on `master` (`b309d5015f`). Baseline measurements were taken at
+**Status:** Steps 1–5 are present in the locally reviewed tree
+`removal-step-5-desktop-cli@0866ca73f6`; Step 6 is planned, not implemented.
+**Project branch:** originally `trim-core-surfaces`, based on `master` (`b309d5015f`). Baseline measurements were taken at
 `8d7061f1a7`, the last code commit; `b309d5015f` adds only `history/` docs.
 **Purpose:** remove every product surface we do not intend to ship and keep only the agent core,
 the classic CLI, the TUI, and the messaging gateway (Telegram first).
@@ -30,6 +31,7 @@ published documentation site.
 | [01-inventory-and-impact.md](01-inventory-and-impact.md) | What each surface is, measured inventory, what is deleted vs refactored, functional impact, risks |
 | [02-removal-plan.md](02-removal-plan.md) | Step-by-step, PR-sized removal sequence with verification gates and done criteria |
 | [03-optimization.md](03-optimization.md) | Baseline vs expected end state, what actually gets faster/smaller, what does not |
+| [step-6-removal-plan.md](step-6-removal-plan.md) | Stage 6 implementation plan based on Steps 0–5, shared-code boundaries, verification and history gates |
 
 ## Target end state
 

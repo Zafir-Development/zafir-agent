@@ -33,7 +33,7 @@ def _owner(tmp_path, monkeypatch, handle):
     owner = AuthorityConnection(authority, object(), {'user_id': 'human'})
     start = tmp_path / 'project-a'
     start.mkdir()
-    ref = create_local_session(authority, owner.actor, dict(request_id='m', source='gui', cwd=str(start),
+    ref = create_local_session(authority, owner.actor, dict(request_id='m', source='tui', cwd=str(start),
                                                             model='frozen', toolsets=[], reasoning='low'))
     return store, db, authority, owner, ref
 

@@ -23,7 +23,7 @@ from .registry import event, method
 class ConnectionTargetKind(WireEnum):
     connector = "connector"
     mcp = "mcp"
-    # ``manage_catalog`` rows: a catalog plugin (may bring MCP tools and/or skills) or a skill.
+    # Other rows: a catalog plugin (may bring MCP tools and/or skills) or a skill.
     plugin = "plugin"
     skill = "skill"
 

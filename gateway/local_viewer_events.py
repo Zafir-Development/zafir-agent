@@ -1,4 +1,4 @@
-"""Turn events a local viewer (the classic CLI, TUI, Desktop) reads from the canonical stream.
+"""Turn events a local viewer (the classic CLI, TUI) reads from the canonical stream.
 
 The classic CLI rendered every agent callback in process: the tool-generating line, the
 kawaii thinking text, reasoning, MoA references, hearts, and every status line the agent printed
@@ -7,28 +7,63 @@ callbacks is projected as an execution event (generation-fenced through
 ``TurnRunner._publish_execution``) and only for a local viewer's turn: a messaging route never
 installs them, so its agent behaves exactly as before.
 
+The connector card rides the same path: ``connection.request`` is published on the turn that
+opened the operation, and each later change of an operation is published as ``connection.update``
+on the session that owns it (looked up by its session key, the route); the card answers through
+``connection.respond`` (``gateway/session_connections.py``).
+
 The cached agent is shared across turns. ``wire`` installs the sinks for one turn and returns the
 previous values; ``restore`` puts them back when the turn's ``run_conversation`` returns.
 """
 from __future__ import annotations
 
 import logging
+import threading
 import time
-
-from gateway import local_desktop_ui
 
 logger = logging.getLogger(__name__)
 
 # Attributes ``wire`` may overwrite on the cached agent for one local-viewer turn.
 _TURN_ATTRS = ("tool_gen_callback", "_print_fn", "thinking_callback", "reaction_callback", "reasoning_callback",
-               *local_desktop_ui.CALLBACK_ATTRS)
-# Private key in ``wire``'s return value: the desktop window bridge registration ``restore`` releases.
-_DESKTOP_UI_TOKEN = "__desktop_ui_token__"
+               "connection_callback")
 # MoA facade progress (agent/moa_loop._RELAY_EVENTS) -> the payload tui_gateway/tool_progress emits.
 _MOA_KEYS = {"moa.reference": {"moa_index": "index", "moa_count": "count"},
              "moa.progress": {"moa_refs_done": "refs_done", "moa_refs_total": "refs_total"},
              "moa.phase": {"moa_phase": "phase", "moa_refs_done": "refs_done", "moa_refs_total": "refs_total"},
              "moa.aggregating": {}}
+
+# Process ``session_key`` -> (authority, canonical session id) of the session that last ran a turn with it.
+# The connector card and its tool run outlive the turn that opened them, so ``connection.update`` is
+# addressed by the session key the operation carries rather than by the turn.
+_connection_routes: dict[str, tuple] = {}
+_connection_routes_lock = threading.Lock()
+
+
+def _install_connection_hook() -> None:
+    """Route ``connection.update`` for an operation opened by one of our turns to the session that owns it
+    (same session key and profile); any other operation goes to the hook this one wraps (the sidecar's,
+    for its own sessions). Re-wraps whenever another hook replaced it, so install order does not matter."""
+    from tools.connectors.operation import ConnectionOperation
+    previous = ConnectionOperation.on_change
+    if getattr(previous, "_local_viewer_events", False):
+        return
+
+    def on_change(operation, change, snapshot):
+        from hermes_constants import hermes_home_key
+        with _connection_routes_lock:
+            route = _connection_routes.get(operation.session_key)
+        live = route[0].sessions.get(route[1]) if route is not None else None
+        if live is None or hermes_home_key(route[0].profile_id) != operation.profile_key:
+            if previous is not None:
+                previous(operation, change, snapshot)
+            return
+        from tui_gateway.connector_payload import connector_ui_payload
+        payload = {**snapshot, "settled": snapshot.get("settled_at") is not None, **(change or {}),
+                   "owner": {"type": "session", "session_id": route[1]}}
+        live.event_stream.publish(route[1], connector_ui_payload(payload), event_type="connection.update")
+
+    on_change._local_viewer_events = True
+    ConnectionOperation.on_change = staticmethod(on_change)
 
 
 def wire(turn, agent) -> dict:
@@ -52,13 +87,22 @@ def wire(turn, agent) -> dict:
         # session's display so /reasoning show|hide applies mid-turn.
         agent.reasoning_callback = lambda text: (
             publish("reasoning.delta", {"text": str(text or "")}) if show_reasoning(turn) else None)
-    # The desktop window bridges (preview/terminal/window reads, preview actions, desktop_ui events).
-    previous[_DESKTOP_UI_TOKEN] = local_desktop_ui.wire(turn, agent)
+    if owner is not None:
+        _install_connection_hook()
+        process_key = str(getattr(turn._ctx, "session_key", "") or "")
+        if process_key:
+            with _connection_routes_lock:
+                _connection_routes[process_key] = (owner[0], owner[1])
+
+        def connection_callback(payload):
+            # Fire-and-forget: the tool thread waits on its own operation; the card answers by op_id.
+            publish("connection.request", dict(payload or {}))
+        agent.connection_callback = connection_callback
     return previous
 
 
 # Launch sources whose viewer never sets the session flag; main's TUI gateway defaulted it from config.
-_CONFIG_DEFAULT_SOURCES = frozenset({"tui", "gui"})
+_CONFIG_DEFAULT_SOURCES = frozenset({"tui"})
 
 
 def show_reasoning(turn) -> bool:
@@ -79,7 +123,7 @@ def _config_default_launch() -> bool:
 
 
 def launch_shows_reasoning(policy, authority) -> bool:
-    """An unset session flag: ``display.show_reasoning`` for an Ink or Desktop launch, else off."""
+    """An unset session flag: ``display.show_reasoning`` for an Ink TUI launch, else off."""
     if getattr(policy, "source", None) not in _CONFIG_DEFAULT_SOURCES:
         return False
     from gateway.display_config import local_display_config
@@ -164,9 +208,6 @@ def publish_progress(turn, event_type, name, preview, kwargs) -> None:
 def restore(agent, previous: dict | None) -> None:
     if not previous:
         return
-    token = previous.pop(_DESKTOP_UI_TOKEN, None)
-    if token is not None:
-        local_desktop_ui.release(token)
     for name, value in previous.items():
         setattr(agent, name, value)
 

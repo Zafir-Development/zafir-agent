@@ -3,7 +3,7 @@
 // tests/tui_gateway/contracts/test_generated.py fails when this file is stale.
 /* eslint-disable */
 // ── Types ──
-/** Any method the desktop may route to a named profile (``requestGatewayForProfile`` adds ``profile``). */
+/** Any method a client may route to a named profile (the caller adds ``profile``). */
 export interface ProfileParams {
   profile?: string | null
 }
@@ -1915,7 +1915,6 @@ export interface GatewayCapabilitiesResult {
 }
 export interface ClientCapabilitiesParams {
   server_requests?: boolean
-  desktop_local?: boolean
 }
 export interface ClientCapabilitiesResult {
   server_requests: string[]
@@ -2184,45 +2183,6 @@ export interface ProfilesGetAssetResult {
   size?: number | null
   data?: string | null
 }
-/** ``assume_fresh``: the unpackaged desktop's ``--fresh-install`` launch; the backend treats this machine as one that never used Hermes. Packaged builds never send it. */
-export interface OnboardingStateParams {
-  assume_fresh?: boolean
-}
-/** ``run``: onboarding opens on this launch (root config ``onboarding.run``, else a machine that never used Hermes). ``eligible``: this is the desktop's local backend and the welcome trial or a configured provider can carry the first chat. ``session_id``: the stored id of the onboarding chat still in progress, so a relaunch reopens it; ``run_id``: that run's id, which ``onboarding.ended`` names. */
-export interface OnboardingRunStateResult {
-  run: boolean
-  eligible: boolean
-  session_id?: string | null
-  run_id?: string | null
-}
-/** ``mark_profile_offered`` also latches ``onboarding.seen.profile_build_offered`` in the root config, so the first chat after onboarding gets the plain intro instead of the profile offer. */
-export interface OnboardingSetRunParams {
-  run: boolean
-  mark_profile_offered?: boolean
-}
-/** ``rerun``: start a new onboarding chat even when one is in progress (Settings, Run onboarding again; it never claims the welcome trial). ``fresh_launch``: the app's once-per-launch start; a run the app was closed on does not count, so its chat is deleted and the run starts over. ``facts_source``: whether the backend runs on the user's own computer. ``locale``: the desktop's UI language, preferred over the backend OS locale. ``assume_fresh``: as on ``onboarding.state``. A new run on a first install claims the welcome trial before its chat exists; a failed claim is error 5079 and leaves no guest and no chat. A claim that is blocked (another install took the trial) with no trial or provider to run on is error 5080 and opens no chat. */
-export interface OnboardingStartParams {
-  rerun?: boolean
-  fresh_launch?: boolean
-  assume_fresh?: boolean
-  facts_source?: OnboardingFactsSource
-  locale?: string | null
-}
-export type OnboardingFactsSource = 'local' | 'remote'
-/** ``session_id`` is the runtime id the client attaches to; ``resumed`` is true when an onboarding chat already in progress was reopened instead of a new one started. ``run_id`` names the run in ``onboarding.ended``. */
-export interface OnboardingStartResult {
-  session_id: string
-  stored_session_id: string
-  resumed: boolean
-  run_id: string
-}
-export interface OnboardingSkipParams {
-  session_id: string
-  profile?: string | null
-}
-export interface OnboardingSkipResult {
-  skipped: boolean
-}
 export interface VaultListResult {
   items?: VaultItem[]
 }
@@ -2268,20 +2228,6 @@ export interface VaultUnlockParams {
 export interface VaultUnlockResult {
   name: string
   unlocked?: boolean
-}
-/** ``target`` is the opaque binding the renderer minted for one in-app browser tab. */
-export interface VaultPreviewFillParams {
-  profile?: string | null
-  handle: string
-  target: string
-}
-/** Counts and the page origin only: never a secret. */
-export interface VaultPreviewFillResult {
-  success: boolean
-  filled_fields?: number | null
-  origin?: string | null
-  error?: string | null
-  error_type?: string | null
 }
 export interface VaultLockParams {
   profile?: string | null
@@ -2887,13 +2833,6 @@ export interface SideAgentParams {
 export interface TaskIdResult {
   task_id: string
 }
-export interface PreviewRestartParams {
-  session_id: string
-  profile?: string | null
-  url: string
-  cwd?: string | null
-  context?: string | null
-}
 export interface ClarifyLockParams {
   request_id: string
   question_id: string
@@ -2988,7 +2927,7 @@ export interface VoiceTtsParams {
 export interface VoiceTtsResult {
   status: string
 }
-/** ``surface`` names the caller ("tui" | "gui"); ``persist`` is the explicit gesture that also flips ``wake_word.enabled`` on; ``client_capture`` asks for PCM streamed via wake.feed. */
+/** ``surface`` names the caller ("tui"); ``persist`` is the explicit gesture that also flips ``wake_word.enabled`` on; ``client_capture`` asks for PCM streamed via wake.feed. */
 export interface WakeStartParams {
   surface?: string | null
   persist?: boolean | null
@@ -5011,7 +4950,7 @@ export interface CanonicalGroupsPeerRegisterParams {
 export interface CanonicalCreateParams {
   profile?: string | null
   request_id?: string | null
-  source?: 'cli' | 'tui' | 'gui' | 'acp' | 'tool' | 'oneshot'
+  source?: 'cli' | 'tui' | 'acp' | 'tool' | 'oneshot'
   cwd?: string | null
   row_cwd?: string | null
   model?: string | null
@@ -5484,66 +5423,6 @@ export interface ClarifyResult {
   answers?: Record<string, string | null> | null
   outcome?: 'submitted' | 'timed_out' | 'cancelled' | null
 }
-/** ``card`` is the beat's data (``agent/onboarding_flow.py::BEATS``): name, theme, connectors and plugins have their own shape; layout, tour and build carry ``options``. ``tool_call_id`` is the setup_beat call the card belongs to: only that transcript row draws it. */
-export interface SetupBeatRequestParams {
-  session_id: string
-  beat: SetupBeat
-  question?: string | null
-  tool_call_id?: string | null
-  card: SetupNameCard | SetupThemeCard | SetupOptionsCard | SetupConnectorsCard | SetupPluginsCard
-}
-export type SetupBeat = 'name' | 'theme' | 'layout' | 'connectors' | 'plugins' | 'tour' | 'build'
-export interface SetupNameCard {
-  suggested?: string | null
-}
-export interface SetupThemeCard {
-  picker: string
-}
-export interface SetupOptionsCard {
-  options: SetupOption[]
-}
-export interface SetupOption {
-  id: string
-  label: string
-}
-export interface SetupConnectorsCard {
-  suggested: string[]
-}
-export interface SetupPluginsCard {
-  plugins: string[]
-}
-/** ``answer`` holds the shown beat's picks; ids must be one of the card's options (the backend rejects any other answer). ``said`` is composer text typed while the name card waited: the name. ``wrote_instead``: the user sent a message instead of answering; the backend ends the turn and the client sends that message as the next one. A response with none of these, or none within 300 s, closes the card unanswered. */
-export interface SetupBeatResult {
-  answer?: SetupNameAnswer | SetupThemeAnswer | SetupLayoutAnswer | SetupConnectorsAnswer | SetupPluginsAnswer | SetupTourAnswer | SetupBuildAnswer | null
-  said?: string | null
-  wrote_instead?: boolean
-}
-export interface SetupNameAnswer {
-  name: string
-}
-export interface SetupThemeAnswer {
-  accent?: string | null
-  mode?: string | null
-}
-export interface SetupLayoutAnswer {
-  layout: string
-}
-export interface SetupConnectorsAnswer {
-  connected: string[]
-  newly_connected?: string[]
-}
-export interface SetupPluginsAnswer {
-  installed: string[]
-  label?: string | null
-}
-export interface SetupTourAnswer {
-  tour: string
-  label?: string | null
-}
-export interface SetupBuildAnswer {
-  build: string
-  label?: string | null
-}
 /** ``tui_gateway/server.py::_approval_request_payload`` — the command is redacted server-side. */
 export interface ApprovalRequestParams {
   session_id: string
@@ -5591,83 +5470,6 @@ export interface VaultCodeRequestParams {
   session_id: string
   site?: string | null
   hint?: string | null
-}
-export interface ReadRangeRequestParams {
-  session_id: string
-  start?: number | null
-  count?: number | null
-}
-export interface EmptyRequestParams {
-  session_id: string
-}
-/** ``tools/drive_preview_tool.py`` and ``tools/annotate_preview_tool.py`` field sets. */
-export interface PreviewActRequestParams {
-  session_id: string
-  action: string
-  ref?: string | null
-  selector?: string | null
-  text?: string | null
-  key?: string | null
-  submit?: boolean | null
-  full?: boolean | null
-  to?: string | null
-  amount?: number | null
-  max?: number | null
-  allow_shortcut?: boolean | null
-  vault?: PreviewVaultOperation | null
-}
-/** Internal vault transport, never arguments exposed to the model. */
-export interface PreviewVaultOperation {
-  operation: 'open' | 'evaluate' | 'close'
-  target?: string | null
-  expression?: string | null
-}
-/** ``tools/tour_tool.py`` field set. */
-export interface TourRequestParams {
-  session_id: string
-  action: string
-  surface?: string | null
-  selector?: string | null
-  title?: string | null
-  text?: string | null
-  side?: string | null
-  steps?: TourStep[] | null
-  step_index?: number | null
-  preset?: TourPreset | null
-}
-export interface TourStep {
-  selector?: string | null
-  title?: string | null
-  text?: string | null
-  side?: string | null
-  [key: string]: unknown
-}
-/** Which built-in tour ``start`` without steps runs. */
-export type TourPreset = 'quick' | 'full'
-/** ``tools/set_theme_tool.py`` values; accent is a swatch id, ``theme`` or ``#rrggbb``. */
-export interface ThemeApplyRequestParams {
-  session_id: string
-  accent?: string | null
-  mode?: ThemeMode | null
-  layout?: string | null
-}
-export type ThemeMode = 'light' | 'dark' | 'system'
-export interface ThemePickRequestParams {
-  session_id: string
-  picker: ThemePicker
-}
-export type ThemePicker = 'accent' | 'layout'
-/** ``picked`` once the user chose (already applied); ``cancelled`` when the card was dismissed. A response with neither is a cancel. */
-export interface ThemePickResult {
-  picked?: ThemeValues | null
-  said?: string | null
-  cancelled?: boolean | null
-}
-/** What the renderer applied. ``accent`` is a swatch id, ``custom:#rrggbb``, or null for the theme's own. */
-export interface ThemeValues {
-  accent?: string | null
-  mode?: ThemeMode | null
-  layout?: string | null
 }
 export interface DisplayInstallSudoParams {
   session_id: string
@@ -5737,13 +5539,6 @@ export interface GatewayReadyPayload {
   heartbeat?: boolean | null
   session_authority?: boolean | null
 }
-/** ``agent/onboarding_record.py::_transition``: the run ``run_id`` stopped being in progress. ``stored_session_id`` is its chat at the compression tip. ``done``: the first-task card was answered; ``skipped``: Skip setup; ``replaced``: a rerun opened a new run; ``deleted``: its chat was deleted. */
-export interface OnboardingEndedPayload {
-  run_id: string
-  stored_session_id: string
-  outcome: OnboardingOutcome
-}
-export type OnboardingOutcome = 'done' | 'skipped' | 'replaced' | 'deleted'
 /** ``hermes_cli/free_tier_bootstrap.py::SetupRecord.as_payload``. */
 export interface SetupReadyPayload {
   provider_configured: boolean
@@ -5984,13 +5779,6 @@ export interface NotificationShowPayload {
 export interface NotificationClearPayload {
   key: string
 }
-/** ``tools/tip_tool.py``. */
-export interface TipShowPayload {
-  selector: string
-  text: string
-  title?: string | null
-  side?: string | null
-}
 /** ``server._hydrate_resume_history``. */
 export interface SessionResumeProgressPayload {
   phase: string
@@ -6026,12 +5814,6 @@ export interface SideAgentCompletePayload {
   task_id: string
   text: string
   question?: string | null
-}
-/** ``methods_prompt`` restart body + ``agent_callbacks._preview_restart_callbacks``. */
-export interface PreviewRestartProgressPayload {
-  task_id: string
-  text: string
-  level?: string | null
 }
 /** ``tool_progress._progress_subagent`` — every ``subagent.*`` frame; identity fields are optional because older emitters omit them and the TUI spawn tree falls back to flat rendering. */
 export interface SubagentEventPayload {
@@ -6086,34 +5868,6 @@ export interface MoaPhasePayload {
   refs_done?: number | null
   refs_total?: number | null
   aggregator?: string | null
-}
-/** ``tools/open_preview_tool.py``. */
-export interface PreviewOpenPayload {
-  url: string
-  label?: string
-}
-/** ``tools/preview_tool.py`` / ``tools/close_preview_tool.py``; ``url`` '' closes every tab. */
-export interface PreviewClosePayload {
-  url?: string
-}
-/** ``tools/focus_pane_tool.py``. */
-export interface PaneRevealPayload {
-  pane: string
-  [key: string]: unknown
-}
-/** ``tools/react_to_message_tool.py``. */
-export interface MessageReactionPayload {
-  row_id: number
-  reactions: MessageReaction[]
-  role: string
-}
-/** ``session_notifications`` process_registry.on_output. */
-export interface TerminalOutputPayload {
-  process_id: string
-  chunk: string
-}
-export interface TerminalClosePayload {
-  process_id: string
 }
 /** ``methods_browser`` announce(); ``level``: info | warn | error. */
 export interface BrowserProgressPayload {
@@ -6401,14 +6155,6 @@ export interface RpcMethods {
   'model.options': { params: ModelOptionsParams; result: ModelOptionsResult }
   /** Save an API key for a provider and return its refreshed inventory row. */
   'model.save_key': { params: ModelSaveKeyParams; result: ModelSaveKeyResult }
-  /** Write onboarding.run in the root profile's config.yaml; answers the new state. */
-  'onboarding.set_run': { params: OnboardingSetRunParams; result: OnboardingRunStateResult }
-  /** Skip setup: end the session's onboarding run and close the card that waits. */
-  'onboarding.skip': { params: OnboardingSkipParams; result: OnboardingSkipResult }
-  /** Open the onboarding chat in the default profile: create it, write its run record and play the opening. */
-  'onboarding.start': { params: OnboardingStartParams; result: OnboardingStartResult }
-  /** Whether desktop first-run onboarding is due, and the chat in progress; reads the root profile's config. */
-  'onboarding.state': { params: OnboardingStateParams; result: OnboardingRunStateResult }
   /** Spill a large paste to a file and hand back the inline placeholder. */
   'paste.collapse': { params: PasteCollapseParams; result: PasteCollapseResult }
   /** Render a PDF's pages to PNG and queue them as images for the next turn. */
@@ -6451,8 +6197,6 @@ export interface RpcMethods {
   'plugins.list': { params: PluginsListParams; result: PluginsListResult }
   /** Plugins Hub backend: list installed plugins, toggle, git-install, re-pin a catalog install, or remove a user install. */
   'plugins.manage': { params: PluginsManageParams; result: PluginsManageResult }
-  /** Spawn a hidden agent that brings the desktop preview's dev server back up. */
-  'preview.restart': { params: PreviewRestartParams; result: TaskIdResult }
   /** Kill one background process the caller's session owns and return its output snapshot. */
   'process.kill': { params: ProcessKillParams; result: ProcessKillResult }
   /** Background processes owned by the caller's session (desktop status stack poll). */
@@ -6653,8 +6397,6 @@ export interface RpcMethods {
   'vault.list': { params: ProfileParams; result: VaultListResult }
   /** Forget a manager's session token (every manager when no name is given). */
   'vault.lock': { params: VaultLockParams; result: VaultLockResult }
-  /** Fill a saved login into the in-app browser tab the renderer pinned (never submits). */
-  'vault.preview.fill': { params: VaultPreviewFillParams; result: VaultPreviewFillResult }
   /** Remove a local vault item by id. */
   'vault.remove': { params: VaultRemoveParams; result: VaultRemoveResult }
   /** Enable or disable an external password manager (disabling also locks it). */
@@ -6800,10 +6542,6 @@ export const RPC_METHODS = [
   'model.disconnect',
   'model.options',
   'model.save_key',
-  'onboarding.set_run',
-  'onboarding.skip',
-  'onboarding.start',
-  'onboarding.state',
   'paste.collapse',
   'pdf.attach',
   'pet.cancel',
@@ -6825,7 +6563,6 @@ export const RPC_METHODS = [
   'plugins.catalog.lookup',
   'plugins.list',
   'plugins.manage',
-  'preview.restart',
   'process.kill',
   'process.list',
   'process.stop',
@@ -6926,7 +6663,6 @@ export const RPC_METHODS = [
   'vault.add',
   'vault.list',
   'vault.lock',
-  'vault.preview.fill',
   'vault.remove',
   'vault.source.set',
   'vault.sources',
@@ -7105,59 +6841,33 @@ export interface ServerRequestMap {
   clarify: { params: ClarifyRequestParams; result: ClarifyResult }
   /** Masked sudo password for the Bot Screen package install; app-level (empty session). */
   'display.install.sudo': { params: DisplayInstallSudoParams; result: ValueResult }
-  /** Click / type / scroll / annotate inside the in-app browser preview. */
-  'preview.act': { params: PreviewActRequestParams; result: ValueResult }
-  /** Read the in-app browser preview's text (JSON text answer). */
-  'preview.read': { params: ReadRangeRequestParams; result: ValueResult }
   /** Masked value for a named env var (skills / setup flows). */
   secret: { params: SecretRequestParams; result: ValueResult }
-  /** The onboarding chat's card for one beat; blocks setup_beat until answered (300 s). */
-  setup_beat: { params: SetupBeatRequestParams; result: SetupBeatResult }
   /** Masked sudo password for the terminal tool. */
   sudo: { params: SudoRequestParams; result: ValueResult }
-  /** Read the visible in-app terminal buffer (JSON text answer). */
-  'terminal.read': { params: ReadRangeRequestParams; result: ValueResult }
-  /** Apply set_theme values in the window showing the session (JSON text answer). */
-  'theme.apply': { params: ThemeApplyRequestParams; result: ValueResult }
-  /** Show an accent or layout picker card in the chat and wait for the pick. */
-  'theme.pick': { params: ThemePickRequestParams; result: ThemePickResult }
-  /** Drive a guided tour highlight in the desktop renderer. */
-  tour: { params: TourRequestParams; result: ValueResult }
   /** A one-time / 2FA code the user reads from their device. */
   'vault.code': { params: VaultCodeRequestParams; result: ValueResult }
   /** Save a login for a site the agent is about to fill; the answer is JSON {identifier, password}. */
   'vault.save_login': { params: VaultSaveLoginRequestParams; result: ValueResult }
   /** Master password to unlock an external password manager for this session. */
   'vault.unlock_prompt': { params: VaultUnlockRequestParams; result: ValueResult }
-  /** Enumerate the native window below the app (JSON text answer). */
-  'window.read': { params: EmptyRequestParams; result: ValueResult }
 }
 export type ServerRequestMethod = keyof ServerRequestMap
 export const SERVER_REQUEST_METHODS = [
   'approval',
   'clarify',
   'display.install.sudo',
-  'preview.act',
-  'preview.read',
   'secret',
-  'setup_beat',
   'sudo',
-  'terminal.read',
-  'theme.apply',
-  'theme.pick',
-  'tour',
   'vault.code',
   'vault.save_login',
-  'vault.unlock_prompt',
-  'window.read'
+  'vault.unlock_prompt'
 ] as const satisfies readonly ServerRequestMethod[]
 
 // ── Notifications (`event` frames) ──
 export interface BackendGatewayEventMap {
   /** A status line the agent printed during a local viewer's turn. */
   'agent.print': AgentPrintPayload
-  /** Output chunk from an agent-owned background process. */
-  'agent.terminal.output': TerminalOutputPayload
   /** Pending gateway approvals were dropped by interrupt/reap/teardown; the wait resolved as deny (not a user refusal). */
   'approval.cancelled': ApprovalCancelledPayload
   /** A /background side agent finished. */
@@ -7196,8 +6906,6 @@ export interface BackendGatewayEventMap {
   'message.delta': MessageDeltaPayload
   /** Interim assistant commentary (text beside tool calls) sealed as its own segment. */
   'message.interim': MessageInterimPayload
-  /** The agent reacted to a message; paint it live. */
-  'message.reaction': MessageReactionPayload
   /** A turn began streaming; an automation turn carries its async-result card. */
   'message.start': MessageStartPayload
   /** The MoA aggregator started. */
@@ -7214,12 +6922,8 @@ export interface BackendGatewayEventMap {
   'notification.clear': NotificationClearPayload
   /** Show / replace a keyed out-of-band notice (toast or status bar). */
   'notification.show': NotificationShowPayload
-  /** A first-run onboarding run ended; sent to every connected window. */
-  'onboarding.ended': OnboardingEndedPayload
   /** Pairing state moved; refetch pairing. */
   'pairing.changed': ChangeSignalPayload
-  /** Focus / reveal a named desktop pane. */
-  'pane.reveal': PaneRevealPayload
   /** The active pet / its spritesheet changed (watcher). */
   'pet.changed': PetChangedPayload
   /** Pet base-draft generation progress. */
@@ -7228,14 +6932,6 @@ export interface BackendGatewayEventMap {
   'pet.hatch.progress': PetHatchProgressPayload
   /** gateway_state.json moved; refetch platform status. */
   'platforms.changed': ChangeSignalPayload
-  /** Close the preview pane or one tab. */
-  'preview.close': PreviewClosePayload
-  /** Open a URL / file in the desktop preview pane. */
-  'preview.open': PreviewOpenPayload
-  /** The hidden preview-restart agent finished. */
-  'preview.restart.complete': SideAgentCompletePayload
-  /** Progress line from the preview-restart agent. */
-  'preview.restart.progress': PreviewRestartProgressPayload
   /** projects.db moved; refetch the project list + tree. */
   'projects.changed': ChangeSignalPayload
   /** Affection reaction detected in the user's message (hearts etc.). */
@@ -7262,7 +6958,7 @@ export interface BackendGatewayEventMap {
   'session.usage': SessionUsagePayload
   /** state.db moved; refetch the session list. */
   'sessions.changed': ChangeSignalPayload
-  /** The free-tier bootstrap finished (broadcast); the desktop's setup gate reads the record. */
+  /** The free-tier bootstrap finished (broadcast); a client's setup gate reads the record. */
   'setup.ready': SetupReadyPayload
   /** A skill root moved (installed/removed elsewhere); refetch commands.catalog from the gateway. */
   'skills.changed': ChangeSignalPayload
@@ -7282,12 +6978,8 @@ export interface BackendGatewayEventMap {
   'subagent.thinking': SubagentEventPayload
   /** A child called a tool. */
   'subagent.tool': SubagentEventPayload
-  /** An agent-owned background process closed. */
-  'terminal.close': TerminalClosePayload
   /** Legacy thinking-text chunk (thinking_callback). */
   'thinking.delta': StreamDeltaPayload
-  /** Point at a desktop element with a one-line tip bubble. */
-  'tip.show': TipShowPayload
   /** Full todo snapshot after a todo tool ran. */
   'todo.updated': TodoUpdatedPayload
   /** A tool call finished: parsed result, summary, optional diff / todo snapshot. */
@@ -7314,7 +7006,6 @@ export interface BackendGatewayEventMap {
 export type BackendGatewayEventName = keyof BackendGatewayEventMap
 export const GATEWAY_EVENT_TYPES = [
   'agent.print',
-  'agent.terminal.output',
   'approval.cancelled',
   'background.complete',
   'billing.step_up.verification',
@@ -7334,7 +7025,6 @@ export const GATEWAY_EVENT_TYPES = [
   'message.complete',
   'message.delta',
   'message.interim',
-  'message.reaction',
   'message.start',
   'moa.aggregating',
   'moa.phase',
@@ -7343,17 +7033,11 @@ export const GATEWAY_EVENT_TYPES = [
   'notice',
   'notification.clear',
   'notification.show',
-  'onboarding.ended',
   'pairing.changed',
-  'pane.reveal',
   'pet.changed',
   'pet.generate.progress',
   'pet.hatch.progress',
   'platforms.changed',
-  'preview.close',
-  'preview.open',
-  'preview.restart.complete',
-  'preview.restart.progress',
   'projects.changed',
   'reaction',
   'reasoning.available',
@@ -7377,9 +7061,7 @@ export const GATEWAY_EVENT_TYPES = [
   'subagent.start',
   'subagent.thinking',
   'subagent.tool',
-  'terminal.close',
   'thinking.delta',
-  'tip.show',
   'todo.updated',
   'tool.complete',
   'tool.generating',

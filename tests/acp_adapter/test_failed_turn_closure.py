@@ -429,7 +429,7 @@ def test_failed_turn_boundary_keeps_the_error_card_for_rehydration(tmp_path, mon
 
 
 def test_failed_turn_after_a_tool_row_is_closed_with_its_error_card(tmp_path, monkeypatch):
-    """A turn that fails after a tool already ran (an onboarding beat answered, then the provider
+    """A turn that fails after a tool already ran (a clarify card answered, then the provider
     429s) leaves a ``tool`` row as the durable tail. It is as open as a bare user tail: without the
     boundary a client reopening the session has no error card to draw for the turn."""
     from types import SimpleNamespace
@@ -442,12 +442,12 @@ def test_failed_turn_after_a_tool_row_is_closed_with_its_error_card(tmp_path, mo
     db = SessionDB(tmp_path / "state.db")
     sid = "s1"
     db.create_session(session_id=sid, source="tui", model="m")
-    call = {"id": "call_setup_beat_name", "type": "function",
-            "function": {"name": "setup_beat", "arguments": '{"beat":"name"}'}}
+    call = {"id": "call_clarify_answer", "type": "function",
+            "function": {"name": "clarify", "arguments": '{"questions":[{"question":"Name?"}]}'}}
     messages = [
         {"role": "user", "content": "opening"},
         {"role": "assistant", "content": "Hi!", "tool_calls": [call]},
-        {"role": "tool", "tool_call_id": call["id"], "content": '{"answer":{"name":"Austin"}}'},
+        {"role": "tool", "tool_call_id": call["id"], "content": '{"answers":{"q0":"Austin"}}'},
     ]
     db.append_message(sid, "user", "opening")
     db.append_message(sid, "assistant", "Hi!", tool_calls=[call])

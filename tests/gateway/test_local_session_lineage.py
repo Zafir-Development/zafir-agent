@@ -25,7 +25,7 @@ async def test_local_lineage_transitions_preserve_owner_or_roll_back(tmp_path, m
     first = runner()
     authority = await initialize_session_authority(first, profile_id='fixture', instance_id='first')
     actor = SessionActor('owner', 'fixture', frozenset({'session:create', 'session:read'}), 'socket')
-    params = dict(request_id='lineage', source='gui', cwd=str(tmp_path), model='frozen', toolsets=[])
+    params = dict(request_id='lineage', source='tui', cwd=str(tmp_path), model='frozen', toolsets=[])
     ref = create_local_session(authority, actor, params)
     db = authority.db
     live = authority.sessions[ref.session_id]

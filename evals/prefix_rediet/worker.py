@@ -36,8 +36,8 @@ for var in list(os.environ):
 os.environ.pop("HERMES_PROFILE", None)
 
 HARNESS = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(HARNESS, "..", "core_tool_deferral"))
-from sandbox import isolate_host
+sys.path.insert(0, os.path.join(HARNESS, ".."))
+from host_sandbox import isolate_host
 
 tmp_root = tempfile.mkdtemp(prefix=f"prd-{ARM}-{TASK_ID}-")
 hermes_home = os.path.join(tmp_root, ".hermes")

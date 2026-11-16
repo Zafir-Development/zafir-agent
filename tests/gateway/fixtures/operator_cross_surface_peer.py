@@ -87,7 +87,7 @@ async def probe(peer, creator):
         for field, value in (('operator', True), ('operator_scope', str(home)),
                              ('capabilities', ['session:operator'])):
             await rpc(viewer, 'session.create', error='invalid_params',
-                      request_id='unsupported-' + field, source='gui', **{field: value})
+                      request_id='unsupported-' + field, source='tui', **{field: value})
 
         attached = await rpc(viewer, 'session.resume', session_id=sid)
         assert attached['stored_session_id'] == sid

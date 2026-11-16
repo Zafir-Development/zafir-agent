@@ -337,10 +337,9 @@ class GatewayTurnMixin(GatewayBackgroundMixin, GatewayTurnPrepareMixin, GatewayT
         (``multiplex_profiles`` off) still binds once a hosted room has flipped the process-wide
         credential guard — see ``_standalone_launch_scope``."""
         from gateway.run import _profile_runtime_scope
-        from gateway.session_policy import local_desktop_turn
         home = self._profile_scope_key_for_source(source)
-        return local_desktop_turn(self, source, _profile_runtime_scope(home) if home is not None
-                                  else self._standalone_launch_scope())
+        return (_profile_runtime_scope(home) if home is not None
+                else self._standalone_launch_scope())
 
     def _profile_scope_key_for_source(self, source: SessionSource) -> Optional[Path]:
         """Profile home ``_profile_scope_for_source`` binds for ``source``, or ``None`` when it falls

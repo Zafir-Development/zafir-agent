@@ -1,7 +1,7 @@
-"""Per-turn client surface (floating HUD, live voice) carried through canonical admission.
+"""Per-turn client surface (live voice) carried through canonical admission.
 
 A surface is a fact about ONE turn, never about the session: the same session alternates
-between the app window, the HUD and a spoken delegation. It is committed with the admission
+between the plain composer and a spoken delegation. It is committed with the admission
 row and reaches the model as a note on the user message (api_content sidecar), so the
 persisted user row stays the words the user typed and the frozen system prefix is untouched.
 """
@@ -10,7 +10,7 @@ from contextvars import ContextVar
 
 from hermes_state_runtime import RuntimeStoreError
 
-SURFACES = frozenset({'hud', 'voice-live'})
+SURFACES = frozenset({'voice-live'})
 _VOICE_CONTEXT_LIMIT = 6000
 _SUBMIT_FIELDS = ('surface', 'voice_context', 'interrupted', 'voice_turn')
 _surface_turn = ContextVar('surface_turn', default=None)
@@ -54,22 +54,17 @@ def restore_surface(committed):
     return committed
 
 
-def _hud_note(committed, valid_tool_names):
-    from agent.prompt_builder import hud_surface_note
-    return hud_surface_note(valid_tool_names)
-
-
 def _voice_live_note(committed, valid_tool_names):
     from tools.voice_live import voice_live_turn_note
     return voice_live_turn_note(committed.get('voice_context') or '')
 
 
-_SURFACE_NOTES = {'hud': _hud_note, 'voice-live': _voice_live_note}
+_SURFACE_NOTES = {'voice-live': _voice_live_note}
 
 
 def surface_note(committed, valid_tool_names=None):
-    """The model-bound note for a committed surface (``""`` for the plain app window): barge-in
-    first, then the HUD read-the-window-below prior or the spoken-delegation contract."""
+    """The model-bound note for a committed surface (``""`` for the plain composer): barge-in
+    first, then the spoken-delegation contract."""
     notes = []
     if committed.get('interrupted'):
         from tools.tts_streaming import SPEECH_INTERRUPTED_NOTE

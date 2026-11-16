@@ -133,7 +133,7 @@ def probe(tmp_path):
     async def first(desc, proc):
         async with websocket(home, desc) as ws:
             for name in ('safe', 'unknown', 'tampered', 'missing', 'corrupt'):
-                params[name] = dict(request_id=name, source='gui' if name == 'safe' else 'tui', cwd=str(home), model='frozen-' + name, toolsets=[])
+                params[name] = dict(request_id=name, source='tui', cwd=str(home), model='frozen-' + name, toolsets=[])
                 result = await rpc(ws, 'session.create', **params[name])
                 assert 'result' in result, result
                 sessions[name] = result['result']['session_id']

@@ -35,7 +35,7 @@ async def test_operators_share_local_sessions_without_reassigning_receipts(tmp_p
 
     monkeypatch.setattr('gateway.session_finite.execute_finite_admission', execute)
     for owner, peer in ((native, remote), (remote, native)):
-        ref = create_local_session(authority, owner, {'request_id': owner.subject, 'source': 'gui',
+        ref = create_local_session(authority, owner, {'request_id': owner.subject, 'source': 'tui',
             'cwd': str(tmp_path), 'model': 'fixture', 'toolsets': []})
         authority.db.append_message(ref.session_id, 'user', 'retained history')
         snapshot = await authority.attach(peer, ref)
@@ -90,7 +90,7 @@ async def test_identity_fields_cannot_grant_operator_or_first_claim(tmp_path, mo
                              _cached_agent_for=lambda route: None, _adapter_for_source=lambda source: None)
     authority = await initialize_session_authority(runner, profile_id=str(tmp_path), instance_id='fixture')
     owner = SessionActor('owner', str(tmp_path), frozenset({'session:create'}), 'owner')
-    ref = create_local_session(authority, owner, {'request_id': 'owner', 'source': 'gui',
+    ref = create_local_session(authority, owner, {'request_id': 'owner', 'source': 'tui',
         'cwd': str(tmp_path), 'model': 'fixture', 'toolsets': []})
     identity = {'user_id': 'other', 'provider': 'local', 'operator': True,
                 'profile_id': str(tmp_path), 'instance_id': 'fixture', 'native_bootstrap': True,

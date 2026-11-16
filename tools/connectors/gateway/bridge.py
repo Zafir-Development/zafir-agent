@@ -233,8 +233,6 @@ def _execute_with_files(client: Any, planned: Sequence[Any], task_id: Optional[s
 
     A call whose file input is refused or fails to stage gets that error as its result and is never
     executed; its siblings still run."""
-    from tools.connectors.gateway.client import return_to_args
-
     results: list[Optional[dict[str, Any]]] = [None] * len(planned)
     runnable: list[tuple[int, Any]] = []
     for slot, plan in enumerate(planned):
@@ -244,9 +242,7 @@ def _execute_with_files(client: Any, planned: Sequence[Any], task_id: Optional[s
             logger.warning("Connector %s file input refused (%s): %s", plan.name, exc.code, exc)
             results[slot] = exc.result()
     if runnable:
-        # A CONNECTION_REQUIRED link minted by this call is the user's next click, so the call names
-        # the surface that browser should come back to.
-        remote = client.execute([plan for _, plan in runnable], **return_to_args())
+        remote = client.execute([plan for _, plan in runnable])
         for (slot, _), result in zip(runnable, remote or ()):
             results[slot] = save_outputs(client, result)
     return results

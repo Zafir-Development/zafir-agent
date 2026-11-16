@@ -156,7 +156,7 @@ async def test_cron_writes_stay_refused_on_a_viewer_connection_and_reads_list_al
         pause_job(create_job('ping', 'every 2h', name='parked')['id'])
     finally:
         reset_hermes_home_override(token)
-    for source in ('cli', 'tui', 'gui', 'acp'):
+    for source in ('cli', 'tui', 'acp'):
         sid = (await owner.call('session.create', request_id=source, source=source,
                                 cwd=str(owner.workdir)))['session_id']
         assert 'parked' in await _exec(owner, sid, 'cron list -a'), source
@@ -216,9 +216,11 @@ async def test_concurrent_cron_runs_never_wait_on_the_pool_their_jobs_need(owner
 @pytest.mark.asyncio
 async def test_other_surfaces_keep_the_gateway_handlers(owner):
     from gateway.session_tui_reads import tui_read
-    for source in ('cli', 'gui', 'acp'):
+    for source in ('cli', 'acp'):
         policy = SimpleNamespace(source=source)
         assert tui_read(policy, 'status', '') is None and tui_read(policy, 'context', '') is None
+    tui = SimpleNamespace(source='tui')
+    assert tui_read(tui, 'status', '') is not None and tui_read(tui, 'context', '') is not None
     assert tui_read(None, 'status', '') is None
 
 

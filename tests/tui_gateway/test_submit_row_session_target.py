@@ -38,7 +38,7 @@ def _desktop_session(monkeypatch, db):
     monkeypatch.setattr(server, "_schedule_session_cap_enforcement", lambda: None)
     monkeypatch.setattr(server, "_register_session_cwd", lambda _session: None)
     resp = server.handle_request(
-        {"id": "c", "method": "session.create", "params": {"cols": 96, "source": "desktop"}})
+        {"id": "c", "method": "session.create", "params": {"cols": 96, "source": 'tui'}})
     assert "result" in resp, resp
     return resp["result"]["session_id"], resp["result"]["stored_session_id"]
 

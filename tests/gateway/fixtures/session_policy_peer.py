@@ -82,7 +82,7 @@ async def probe(peer):
     before = dict(os.environ)
     config_before = Path(os.environ['HERMES_HOME'], 'config.yaml').read_bytes()
     try:
-        for source in ('cli', 'tui', 'gui'):
+        for source in ('cli', 'tui'):
             ws = await connect()
             sockets.append(ws)
             cwd = Path(os.environ['HERMES_HOME'], source)
@@ -120,10 +120,10 @@ async def probe(peer):
             await async_wait_until(lambda: authority.sessions[sid].task is not None, timeout=30,
                                    what='the admitted turn to be scheduled')
             await asyncio.wait_for(authority.sessions[sid].task, 40)
-        for source, sid, ws in zip(('cli', 'tui', 'gui'), sessions, sockets):
+        for source, sid, ws in zip(('cli', 'tui'), sessions, sockets):
             agent = authority.agent(SessionRef(authority.profile_id, sid))
             assert agent is not None, (source, list(runner._agent_cache), peer.requests, await rpc(ws, 'session.resume', session_id=sid))
-            assert agent.platform == {'cli': 'cli', 'tui': 'tui', 'gui': 'desktop'}[source], vars(agent).get('platform')
+            assert agent.platform == {'cli': 'cli', 'tui': 'tui'}[source], vars(agent).get('platform')
             cwd = Path(os.environ['HERMES_HOME'], source)
             requests = [r for r in peer.requests if r.get('model') == 'policy-' + source]
             tool_results = [m for r in requests for m in r['messages'] if m['role'] == 'tool']
@@ -140,11 +140,6 @@ async def probe(peer):
             assert all((('Session ID: ' + stored) in text) == (source == 'tui') for text in systems), (source, systems)
             names = {t['function']['name'] for t in requests[0]['tools']}
             assert 'terminal' in names
-            assert ('desktop_ui' in agent.enabled_toolsets) == (source == 'gui')
-            from toolsets import resolve_toolset
-            desktop_names = resolve_toolset('desktop_ui')
-            surface_on_wire = any(name in json.dumps(requests[0]['tools']) for name in desktop_names)
-            assert surface_on_wire == (source == 'gui'), (source, desktop_names, names)
             await ws.close()
             reconnected = await connect()
             sockets.append(reconnected)
@@ -153,7 +148,7 @@ async def probe(peer):
             assert authority.agent(SessionRef(authority.profile_id, sid)) is agent
         assert Path(os.environ['HERMES_HOME'], 'config.yaml').read_bytes() == config_before
         assert {k: os.environ.get(k) for k in ('HERMES_DESKTOP', 'TERMINAL_CWD', 'HERMES_TUI_TOOLSETS')} == {k: before.get(k) for k in ('HERMES_DESKTOP', 'TERMINAL_CWD', 'HERMES_TUI_TOOLSETS')}
-        Path(os.environ['HERMES_HOME'], 'policy-receipt.json').write_text(json.dumps({'sources': ['cli', 'tui', 'gui'], 'requests': len(peer.requests), 'cwd_effects': True, 'same_agents': True, 'no_spill': True}))
+        Path(os.environ['HERMES_HOME'], 'policy-receipt.json').write_text(json.dumps({'sources': ['cli', 'tui'], 'requests': len(peer.requests), 'cwd_effects': True, 'same_agents': True, 'no_spill': True}))
     finally:
         for ws in sockets:
             await ws.close()
@@ -163,7 +158,7 @@ async def probe(peer):
 def main():
     peer = ThreadingHTTPServer(('127.0.0.1', 0), Peer)
     peer.requests = []
-    peer.first_round = threading.Barrier(3)
+    peer.first_round = threading.Barrier(2)
     threading.Thread(target=peer.serve_forever, daemon=True).start()
     url = f'http://127.0.0.1:{peer.server_port}/v1'
     os.environ.update(OPENAI_API_KEY='loopback-only', OPENAI_BASE_URL=url)

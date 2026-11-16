@@ -444,15 +444,10 @@ _VAULT_INPUT_TOOL_HINT = "the browser's input tool"
 def _rewrite_browser_vault(td: dict[str, Any], available: set) -> Optional[dict[str, Any]]:
     """Name the concrete input tool for typing the login identifier (`fill_input` inside browser_exec code).
     Resolved here because the two live in different toolsets."""
-    preview = "drive_preview" in available
-    if "browser_exec" in available:
-        concrete = "`fill_input` inside browser_exec" + (
-            " (or drive_preview action=type on the in-app browser)" if preview else "")
-    elif preview:
-        concrete = "drive_preview action=type"
-    else:
+    if "browser_exec" not in available:
         return td
     fn = td["function"]
+    concrete = "`fill_input` inside browser_exec"
     return _fn_def({**fn, "description": fn.get("description", "").replace(_VAULT_INPUT_TOOL_HINT, concrete)})
 
 
@@ -468,10 +463,7 @@ def _rewrite_input_tool_for_vault(td: dict[str, Any], available: set) -> Optiona
     if "browser_vault" not in available:
         return td
     fn = td["function"]
-    note = _VAULT_NO_PASSWORD_NOTE
-    if fn["name"] == "drive_preview":
-        note += " For this in-app page pass target=preview (the default when no managed browser page is open)."
-    return _fn_def({**fn, "description": fn.get("description", "") + note})
+    return _fn_def({**fn, "description": fn.get("description", "") + _VAULT_NO_PASSWORD_NOTE})
 
 
 def _compose_rewriters(*fns):
@@ -491,7 +483,6 @@ _DYNAMIC_SCHEMA_REWRITERS = {
     "browser_cdp": _rewrite_browser_cdp,
     "browser_exec": _compose_rewriters(_rewrite_browser_exec, _rewrite_browser_exec_vision, _rewrite_input_tool_for_vault),
     "browser_vault": _rewrite_browser_vault,
-    "drive_preview": _rewrite_input_tool_for_vault,
     "delegate_task": _rewrite_delegate_task,
 }
 
@@ -632,7 +623,6 @@ _AGENT_LOOP_TOOLS = {"todo_list", "memory", "session_search", "delegate_task"}
 # prompts keep working); schemas advertise only new names.
 _LEGACY_TOOL_ALIASES = {
     **dict.fromkeys(TODO_LEGACY_ALIASES, TODO_SCHEMA["name"]), "cronjob": "cronjob_manage", "process": "process_manage",
-    "tour": "gui_tour", "tip": "show_tip",
 }
 _READ_SEARCH_TOOLS = {"read_file", "search_files"}
 
@@ -761,7 +751,7 @@ def _dispatch_bridge_tool(function_name: str, function_args: dict[str, Any],
         return None, (underlying_name, underlying_args)
     # Defense in depth: resolve_underlying_call only checks the global
     # registry; also require membership in the session-scoped catalog.
-    # Session-gated GUI tools fail fast with their real reason (#120413):
+    # Client-surface tools fail fast with their real reason (#120413):
     # tool_search can never surface them in this session.
     if underlying_name not in ts.scoped_deferrable_names(current_defs):
         return tool_error(ts.scope_block_reason(underlying_name)), None

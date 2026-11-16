@@ -130,7 +130,7 @@ async def test_a_refused_receipt_names_its_failing_check_in_the_log(tmp_path, mo
 
     served, db, secondary = await _served_authority(tmp_path, monkeypatch, 'first')
     actor = SessionActor('owner', str(secondary), frozenset({'session:create', 'session:read'}), 'socket')
-    ref = create_local_session(served, actor, {'request_id': damage, 'source': 'gui',
+    ref = create_local_session(served, actor, {'request_id': damage, 'source': 'tui',
                                                'cwd': str(tmp_path), 'model': 'frozen', 'toolsets': []})
     _RECEIPT_DAMAGE[damage](db, ref.session_id)
 

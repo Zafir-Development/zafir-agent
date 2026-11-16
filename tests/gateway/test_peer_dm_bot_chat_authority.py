@@ -40,7 +40,7 @@ async def peer(tmp_path, monkeypatch):
                              _evict_cached_agent=lambda route: None)
     authority = await initialize_session_authority(runner, profile_id='default', instance_id='fixture')
     owner = SessionActor('uid:1000', 'default', frozenset({'session:create', 'session:read', 'session:submit'}), 'native')
-    chat = create_local_session(authority, owner, {'request_id': 'bot', 'source': 'gui', 'cwd': str(tmp_path),
+    chat = create_local_session(authority, owner, {'request_id': 'bot', 'source': 'tui', 'cwd': str(tmp_path),
                                                     'model': 'fixture', 'toolsets': []})
     title_new_session(authority, chat, 'Bot Chat')
     authority.db.create_session('scratch', 'api_server')

@@ -31,7 +31,7 @@ async def _local_session(tmp_path, monkeypatch):
     authority = await initialize_session_authority(runner, profile_id='fixture', instance_id='first')
     actor = SessionActor('owner', 'fixture', frozenset({'session:create', 'session:read', 'session:control'}), 'sock')
     ref = session_local.create_local_session(authority, actor, dict(
-        request_id='resume', source='gui', cwd=str(tmp_path), model='frozen', toolsets=[]))
+        request_id='resume', source='tui', cwd=str(tmp_path), model='frozen', toolsets=[]))
     return authority, actor, ref, local_receipt(authority.db, ref.session_id)['entry']['session_id']
 
 

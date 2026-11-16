@@ -13,7 +13,7 @@ from tests.gateway.test_session_follow_profile_config import _create, _owner, _r
 async def _create_bot_chat(owner, authority, home, request_id, **extra):
     """Desktop's Bot Chat create: no toolsets param (the surface's own selection)."""
     response = await owner.dispatch({'id': request_id, 'method': 'session.create', 'params': dict(
-        request_id=request_id, source='gui', cwd=str(home), follow_profile_config=True, **extra)})
+        request_id=request_id, source='tui', cwd=str(home), follow_profile_config=True, **extra)})
     assert 'result' in response, response
     return authority.sessions[response['result']['session_id']]
 
@@ -183,7 +183,7 @@ async def test_a_later_reasoning_command_replaces_the_pick_after_a_restart(home,
     try:
         follow = await _create_bot_chat(owner, authority, home, 'follow')
         created = await owner.dispatch({'id': 'c', 'method': 'session.create', 'params': {
-            'request_id': 'frozen', 'source': 'gui', 'cwd': str(home)}})
+            'request_id': 'frozen', 'source': 'tui', 'cwd': str(home)}})
         sids = [await _pick_reasoning(owner, authority, live, 'high')
                 for live in (follow, authority.sessions[created['result']['session_id']])]
         for sid in sids:

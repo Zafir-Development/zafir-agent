@@ -239,7 +239,7 @@ class SessionParams(Params):
 
 
 class ProfileParams(Params):
-    """Any method the desktop may route to a named profile (``requestGatewayForProfile`` adds ``profile``)."""
+    """Any method a client may route to a named profile (the caller adds ``profile``)."""
 
     profile: str | None = None
 

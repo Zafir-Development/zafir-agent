@@ -76,7 +76,7 @@ describe('/wake slash command', () => {
 
   it('/wake on prints the reason when the gateway refuses', async () => {
     const { run, sys } = buildCtx({
-      'wake.start': { owner_surface: 'gui', reason: 'owned', started: false }
+      'wake.start': { owner_surface: 'tui', reason: 'owned', started: false }
     })
 
     await run('on')
@@ -84,7 +84,7 @@ describe('/wake slash command', () => {
     const out = printed(sys)
     expect(out).toContain(t('slashCmd.wake.notStarted', ''))
     expect(out).toContain(t('slashCmd.wake.reason.owned'))
-    expect(out).toContain(t('slashCmd.wake.ownedBy', 'gui'))
+    expect(out).toContain(t('slashCmd.wake.ownedBy', 'tui'))
   })
 
   it('/wake on surfaces the hint when unavailable', async () => {
@@ -168,7 +168,7 @@ describe('/wake slash command', () => {
         available: true,
         listening: false,
         owned_by_caller: false,
-        owner_surface: 'gui',
+        owner_surface: 'tui',
         phrase: 'hey hermes'
       }
     })
@@ -176,7 +176,7 @@ describe('/wake slash command', () => {
     await run('status')
 
     const out = printed(sys)
-    expect(out).toContain(t('slashCmd.wake.offOwnedBy', 'gui', ''))
+    expect(out).toContain(t('slashCmd.wake.offOwnedBy', 'tui', ''))
   })
 
   it('status surfaces the hint when the wake word is unavailable', async () => {

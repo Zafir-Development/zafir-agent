@@ -39,7 +39,7 @@ async def probe():
             return True
 
     async with connect(ws_url(api), subprotocols=subprotocols(runner, subject='owner')) as ws:
-        created = await rpc(ws, 'session.create', request_id='controls-owner', source='gui', toolsets=[])
+        created = await rpc(ws, 'session.create', request_id='controls-owner', source='tui', toolsets=[])
         sid = created['result']['session_id']
         live = authority.sessions[sid]
         parent, other_parent = Agent(), Agent()

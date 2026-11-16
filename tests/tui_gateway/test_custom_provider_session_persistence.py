@@ -688,7 +688,7 @@ class TestFollowProfileConfigRuntimeOverrides:
         known = set(server._sessions)
         try:
             resp = server.handle_request({"id": "1", "method": "session.create", "params": {
-                "cols": 80, "source": "desktop", "profile": "b", "model": "zai/glm-5.1", "provider": "zai",
+                "cols": 80, "source": 'tui', "profile": "b", "model": "zai/glm-5.1", "provider": "zai",
                 "follow_profile_config": True}})
             assert "error" not in resp, resp
             session = server._sessions[resp["result"]["session_id"]]

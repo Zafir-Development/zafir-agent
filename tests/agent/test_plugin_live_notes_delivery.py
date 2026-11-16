@@ -1,6 +1,6 @@
 """A plugin that goes live while a turn runs is told to the model in that turn, once.
 
-Onboarding is one long turn: the plugins card blocks inside ``setup_beat`` while the user installs. In
+One turn can be long: a human-input card blocks while the user installs a plugin. In
 a live run the go-live notice waited for the next user message and arrived six minutes after the
 install, after the model had already failed to use the plugin. The notice now rides the next tool
 result (a new row, so the cached prefix is untouched); the next user message carries only what no
